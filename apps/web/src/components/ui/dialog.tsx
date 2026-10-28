@@ -29,7 +29,9 @@ export function ConfirmDialog({
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variant="danger" onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
         </div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
+import { OrgRowActions } from '@/components/org-actions';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type OrgList = {
@@ -20,7 +21,18 @@ type OrgList = {
     code: string;
     name: string;
     status: string;
-    vendor?: { approvalStatus: string; matchingEligible: boolean };
+    industry?: string | null;
+    country?: string | null;
+    region?: string | null;
+    website?: string | null;
+    address?: string | null;
+    vendor?: {
+      displayName?: string | null;
+      approvalStatus: string;
+      matchingEligible: boolean;
+      categories?: string[];
+      capabilities?: string[];
+    };
   }>;
   total: number;
   page: number;
@@ -41,8 +53,10 @@ export default function VendorsPage() {
     categories: 'manufacturing',
   });
 
+  const queryKey = ['vendors', page] as const;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['vendors', page],
+    queryKey,
     queryFn: () =>
       apiFetch<OrgList>(
         `/organizations?type=VENDOR&page=${page}&pageSize=${PAGE_SIZE}`,
@@ -93,7 +107,7 @@ export default function VendorsPage() {
       <PageHeader
         eyebrow="Organizations"
         title="Vendors"
-        description="Onboard vendors, approve eligibility, and track matching readiness."
+        description="Create, view, edit, approve, and archive vendor organizations."
       />
 
       <Card>
@@ -152,7 +166,7 @@ export default function VendorsPage() {
                   <TH>Name</TH>
                   <TH>Approval</TH>
                   <TH>Eligible</TH>
-                  <TH />
+                  <TH className="text-right">Actions</TH>
                 </TR>
               </THead>
               <TBody>
@@ -178,16 +192,23 @@ export default function VendorsPage() {
                         {org.vendor?.matchingEligible ? 'Yes' : 'No'}
                       </Badge>
                     </TD>
-                    <TD className="text-right">
-                      {org.vendor?.approvalStatus !== 'APPROVED' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => approve.mutate(org.id)}
-                        >
-                          Approve
-                        </Button>
-                      )}
+                    <TD>
+                      <div className="flex flex-col items-end gap-2">
+                        {org.vendor?.approvalStatus !== 'APPROVED' && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => approve.mutate(org.id)}
+                          >
+                            Approve
+                          </Button>
+                        )}
+                        <OrgRowActions
+                          org={org}
+                          kind="vendor"
+                          queryKey={[...queryKey]}
+                        />
+                      </div>
                     </TD>
                   </TR>
                 ))}

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
+import { OrgRowActions } from '@/components/org-actions';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type OrgList = {
@@ -21,6 +22,10 @@ type OrgList = {
     name: string;
     status: string;
     industry: string | null;
+    country?: string | null;
+    region?: string | null;
+    website?: string | null;
+    address?: string | null;
   }>;
   total: number;
   page: number;
@@ -41,8 +46,10 @@ export default function CompaniesPage() {
     region: 'EU',
   });
 
+  const queryKey = ['companies', page] as const;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['companies', page],
+    queryKey,
     queryFn: () =>
       apiFetch<OrgList>(
         `/organizations?type=COMPANY&page=${page}&pageSize=${PAGE_SIZE}`,
@@ -86,7 +93,7 @@ export default function CompaniesPage() {
       <PageHeader
         eyebrow="Organizations"
         title="Companies"
-        description="Create and manage company organizations for matching."
+        description="Create, view, edit, and archive company organizations."
       />
 
       <Card>
@@ -150,6 +157,7 @@ export default function CompaniesPage() {
                   <TH>Name</TH>
                   <TH>Industry</TH>
                   <TH>Status</TH>
+                  <TH className="text-right">Actions</TH>
                 </TR>
               </THead>
               <TBody>
@@ -160,6 +168,13 @@ export default function CompaniesPage() {
                     <TD>{org.industry ?? '—'}</TD>
                     <TD>
                       <Badge variant={statusTone(org.status)}>{org.status}</Badge>
+                    </TD>
+                    <TD>
+                      <OrgRowActions
+                        org={org}
+                        kind="company"
+                        queryKey={[...queryKey]}
+                      />
                     </TD>
                   </TR>
                 ))}

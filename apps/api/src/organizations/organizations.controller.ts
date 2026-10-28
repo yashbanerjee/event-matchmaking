@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -82,6 +84,35 @@ export class OrganizationsController {
   @RequirePermissions(PERMISSIONS.ORGS_READ)
   get(@Param('id') id: string) {
     return this.orgs.get(id);
+  }
+
+  @Patch(':id')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      name?: string;
+      industry?: string | null;
+      country?: string | null;
+      region?: string | null;
+      website?: string | null;
+      address?: string | null;
+      timeZone?: string;
+      status?: string;
+      displayName?: string;
+      categories?: string[];
+      capabilities?: string[];
+    },
+  ) {
+    return this.orgs.update(user, id, body);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.orgs.remove(user, id);
   }
 
   @Post('vendors/:id/approve')
