@@ -249,9 +249,30 @@ export class MatchmakingService {
         slotCount: config.slotCount,
       });
 
-      const scheduled = scheduleGreedy(eligible, slots, {
-        maxMeetingsPerParticipant: config.maxMeetingsPerParticipant,
-      });
+      const dayStart = slots[0]?.startsAt;
+      const dayEnd = slots[slots.length - 1]?.endsAt;
+      const existingOccupancy =
+        dayStart && dayEnd
+          ? await this.prisma.meetingOccupancy.findMany({
+              where: {
+                startsAt: { lt: dayEnd },
+                endsAt: { gt: dayStart },
+              },
+            })
+          : [];
+
+      const scheduled = scheduleGreedy(
+        eligible,
+        slots,
+        {
+          maxMeetingsPerParticipant: config.maxMeetingsPerParticipant,
+        },
+        existingOccupancy.map((row) => ({
+          participantId: row.participantKey.replace(/^org:/, ''),
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+        })),
+      );
 
       await this.prisma.$transaction(async (tx) => {
         const schedule = await tx.scheduleVersion.create({

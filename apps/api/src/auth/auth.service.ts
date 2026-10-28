@@ -71,7 +71,7 @@ export class AuthService {
     const input = registerFromInvitationSchema.parse(raw);
     const tokenHash = hashToken(input.token);
 
-    return this.prisma.$transaction(async (tx) => {
+    const registered = await this.prisma.$transaction(async (tx) => {
       const invitation = await tx.invitation.findUnique({
         where: { tokenHash },
       });
@@ -162,26 +162,31 @@ export class AuthService {
         },
       });
 
-      await this.audit.record({
-        actorId: user.id,
-        action: 'auth.register_invitation',
-        entityType: 'Invitation',
-        entityId: invitation.id,
-        outcome: 'SUCCESS',
-      });
-
-      const tokens = await this.issueTokens(user.id, user.email);
-      return {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: input.firstName,
-          lastName: input.lastName,
-        },
-      };
+      return { user, invitationId: invitation.id };
     });
+
+    await this.audit.record({
+      actorId: registered.user.id,
+      action: 'auth.register_invitation',
+      entityType: 'Invitation',
+      entityId: registered.invitationId,
+      outcome: 'SUCCESS',
+    });
+
+    const tokens = await this.issueTokens(
+      registered.user.id,
+      registered.user.email,
+    );
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: registered.user.id,
+        email: registered.user.email,
+        firstName: input.firstName,
+        lastName: input.lastName,
+      },
+    };
   }
 
   async refresh(refreshToken: string) {

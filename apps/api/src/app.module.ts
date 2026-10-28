@@ -6,6 +6,7 @@ import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuditModule } from './audit/audit.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { InvitationsModule } from './invitations/invitations.module';
@@ -14,6 +15,12 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { FormsModule } from './forms/forms.module';
 import { MeetingsModule } from './meetings/meetings.module';
+import { DocumentsModule } from './documents/documents.module';
+import { ReportsModule } from './reports/reports.module';
+import { JobsModule } from './jobs/jobs.module';
+import { UsersModule } from './users/users.module';
+import { SettingsModule } from './settings/settings.module';
+import { OpsModule } from './ops/ops.module';
 
 @Module({
   imports: [
@@ -41,6 +48,7 @@ import { MeetingsModule } from './meetings/meetings.module';
     PrismaModule,
     AuditModule,
     MessagingModule,
+    IntegrationsModule,
     AuthModule,
     HealthModule,
     InvitationsModule,
@@ -49,6 +57,12 @@ import { MeetingsModule } from './meetings/meetings.module';
     MatchmakingModule,
     FormsModule,
     MeetingsModule,
+    DocumentsModule,
+    ReportsModule,
+    JobsModule,
+    UsersModule,
+    SettingsModule,
+    OpsModule,
   ],
   providers: [
     {

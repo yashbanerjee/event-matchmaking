@@ -10,11 +10,22 @@ const NAV = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/companies', label: 'Companies' },
   { href: '/admin/vendors', label: 'Vendors' },
+  { href: '/admin/users', label: 'Users' },
   { href: '/admin/invitations', label: 'Invitations' },
+  { href: '/admin/workflows', label: 'Onboarding Workflows' },
   { href: '/admin/forms', label: 'Form Builder' },
+  { href: '/admin/profiles', label: 'Profiles' },
   { href: '/admin/matchmaking', label: 'Matchmaking' },
+  { href: '/admin/schedules', label: 'Schedule Management' },
   { href: '/admin/meetings', label: 'Meetings' },
+  { href: '/admin/feedback', label: 'Feedback' },
+  { href: '/admin/follow-ups', label: 'Follow-ups' },
+  { href: '/admin/reports', label: 'Reports' },
+  { href: '/admin/notifications', label: 'Notifications' },
   { href: '/admin/jobs', label: 'Background Jobs' },
+  { href: '/admin/integrations', label: 'Integration Health' },
+  { href: '/admin/audit', label: 'Audit Logs' },
+  { href: '/admin/settings', label: 'System Settings' },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -22,8 +33,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen grid grid-cols-[240px_1fr]">
-      <aside className="bg-[var(--sidebar)] text-[var(--sidebar-fg)] p-4 flex flex-col gap-6">
+    <div className="min-h-screen grid grid-cols-[260px_1fr]">
+      <aside className="bg-[var(--sidebar)] text-[var(--sidebar-fg)] p-4 flex flex-col gap-6 overflow-y-auto">
         <div>
           <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
             Platform
@@ -37,14 +48,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               href={item.href}
               className={cn(
                 'rounded-md px-3 py-2 text-sm hover:bg-white/10',
-                pathname === item.href && 'bg-white/15',
+                (pathname === item.href ||
+                  (item.href !== '/admin' && pathname.startsWith(item.href))) &&
+                  'bg-white/15',
               )}
             >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="mt-auto">
+        <div className="mt-auto pt-4">
           <Button
             variant="outline"
             className="w-full border-slate-600 text-slate-100"
@@ -57,7 +70,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       </aside>
-      <main className="p-8">{children}</main>
+      <main className="p-8 overflow-auto">{children}</main>
     </div>
   );
 }

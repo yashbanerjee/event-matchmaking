@@ -42,6 +42,11 @@ export function scheduleGreedy(
   candidates: CandidateAssignment[],
   slots: ScheduleSlot[],
   limits: SchedulerLimits,
+  initialOccupied: Array<{
+    participantId: string;
+    startsAt: Date;
+    endsAt: Date;
+  }> = [],
 ): SchedulerResult {
   const usableSlots = slots.filter((s) => !s.isBreak);
   const sorted = [...candidates].sort((a, b) => b.score - a.score);
@@ -53,6 +58,12 @@ export function scheduleGreedy(
   const companyCounts = new Map<string, number>();
   const vendorCounts = new Map<string, number>();
   const occupied = new Map<string, { startsAt: Date; endsAt: Date }[]>();
+
+  for (const row of initialOccupied) {
+    const windows = occupied.get(row.participantId) ?? [];
+    windows.push({ startsAt: row.startsAt, endsAt: row.endsAt });
+    occupied.set(row.participantId, windows);
+  }
 
   const isFree = (participantId: string, start: Date, end: Date): boolean => {
     const windows = occupied.get(participantId) ?? [];

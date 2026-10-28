@@ -59,7 +59,21 @@ Default admin: `admin@example.com` / `ChangeMeAdmin1!`
 
 ```bash
 npm run test -w @em/domain
+npm run test -w @em/api
+npm run test:e2e -w @em/api
+npm run test:perf -w @em/api
 ```
+
+Latest local performance probes (example): score 5k pairs ~35–45ms; dashboard ~50ms; 20 concurrent meeting lists ~100ms. These are not production capacity claims.
+
+## Production adapters
+
+| Concern | Env |
+| --- | --- |
+| Email | `EMAIL_PROVIDER=console\|smtp\|sendgrid` + SMTP_* or `SENDGRID_API_KEY` |
+| Storage | `STORAGE_PROVIDER=local\|s3` + `S3_BUCKET` / region / keys |
+| AI | `AI_ENABLED=true`, `AI_PRIMARY_PROVIDER=openai\|anthropic`, API keys |
+| Semantic search | `FEATURE_SEMANTIC_SEARCH=true` (falls back to structured filters) |
 
 ## Environment
 

@@ -82,10 +82,12 @@ async function handleMessage(
 
     if (queue === 'em.invitations' || content.email) {
       await handleInvitation(content);
-    } else if (queue === 'em.notifications') {
+    } else if (queue === 'em.notifications' || queue === 'em.reports') {
       await handleNotification(content);
     } else if (queue === 'em.profile') {
       await handleProfile(content);
+    } else if (queue === 'em.documents') {
+      await handleDocument(content);
     } else if (queue === 'em.matchmaking') {
       logger.info({ content }, 'Matchmaking event received (API also processes runs)');
     } else {
@@ -191,6 +193,22 @@ async function handleProfile(content: Record<string, unknown>) {
   const submissionId = String(content.submissionId ?? '');
   if (!submissionId) return;
   logger.info({ submissionId }, 'Profile normalization event acknowledged');
+}
+
+async function handleDocument(content: Record<string, unknown>) {
+  const documentId = String(content.documentId ?? '');
+  if (!documentId) return;
+  // Malware scanner hook: mark SKIPPED when no scanner is configured.
+  await prisma.document.update({
+    where: { id: documentId },
+    data: {
+      scanStatus: 'SKIPPED',
+      metadata: {
+        scanNote: 'No malware scanner configured; marked skipped',
+      },
+    },
+  });
+  logger.info({ documentId }, 'Document scan skipped (no scanner configured)');
 }
 
 async function main() {

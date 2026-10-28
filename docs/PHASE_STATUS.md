@@ -38,17 +38,23 @@
 - AI provider interface with null/disabled fallback
 - Encrypted backup/restore scripts
 
-## Phase 6 — Analytics & production readiness (partial)
+## Phase 6 — Analytics & production readiness
 
 - Admin dashboard metrics from live DB
-- Participant portal
+- Full admin navigation (19 sections) + shadcn-style UI kit
+- Reports summary + CSV exports + async report enqueue
+- Email adapters: console / SMTP / SendGrid
+- Storage adapters: local / S3 (signed URLs)
+- AI providers: OpenAI + Anthropic with circuit breaker + schema validation
+- Semantic search with structured fallback
+- Lifecycle e2e + performance probes
 - Architecture + runbook documentation
-- Remaining: broader e2e suite, performance report artifacts, full shadcn component library polish
 
-## Known limitations
+## Known limitations / external setup
 
-- PostgreSQL exclusion constraint SQL should be applied after schema sync (see `prisma/sql/001_meeting_occupancy_exclusion.sql`).
-- Email provider defaults to console/worker logging; configure SMTP/SendGrid for production.
-- Object storage defaults to local filesystem adapter path (S3 config present, adapter wiring next).
-- Semantic search and advanced AI providers are stubs behind feature flags.
+- PostgreSQL exclusion constraint SQL should be applied after schema sync (`prisma/sql/001_meeting_occupancy_exclusion.sql`).
+- Set `EMAIL_PROVIDER=smtp|sendgrid` and credentials for production mail.
+- Set `STORAGE_PROVIDER=s3` plus bucket/region/keys for object storage.
+- Set `AI_ENABLED=true`, provider keys, and optionally `FEATURE_SEMANTIC_SEARCH=true`.
 - Bulk invitation CSV import UI not yet built (API pattern ready via invitations module).
+- Malware scanning marks documents `PENDING`/`SKIPPED` until a scanner is configured.
