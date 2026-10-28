@@ -21,6 +21,7 @@ type OrgList = {
     code: string;
     name: string;
     status: string;
+    contactEmail?: string | null;
     industry: string | null;
     country?: string | null;
     region?: string | null;
@@ -64,6 +65,7 @@ export default function CompaniesPage() {
       (org) =>
         org.name.toLowerCase().includes(q) ||
         org.code.toLowerCase().includes(q) ||
+        (org.contactEmail ?? '').toLowerCase().includes(q) ||
         (org.industry ?? '').toLowerCase().includes(q),
     );
   }, [data?.items, search]);
@@ -155,6 +157,7 @@ export default function CompaniesPage() {
                 <TR>
                   <TH>Code</TH>
                   <TH>Name</TH>
+                  <TH>Email</TH>
                   <TH>Industry</TH>
                   <TH>Status</TH>
                   <TH className="text-right">Actions</TH>
@@ -165,6 +168,9 @@ export default function CompaniesPage() {
                   <TR key={org.id} className="hover:bg-slate-50/80">
                     <TD className="font-mono text-xs">{org.code}</TD>
                     <TD className="font-medium">{org.name}</TD>
+                    <TD className="text-[var(--muted)]">
+                      {org.contactEmail ?? '—'}
+                    </TD>
                     <TD>{org.industry ?? '—'}</TD>
                     <TD>
                       <Badge variant={statusTone(org.status)}>{org.status}</Badge>

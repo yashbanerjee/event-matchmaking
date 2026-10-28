@@ -8,6 +8,7 @@ import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { statusTone } from '@/lib/status';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination';
@@ -100,31 +101,33 @@ export default function FormsPage() {
         }
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          className="max-w-sm"
-          placeholder="Search forms…"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setPage(1);
-          }}
-        />
-      </div>
+      <Card>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold">Directory</h2>
+          <Input
+            className="max-w-xs"
+            placeholder="Search forms…"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
 
-      {forms.isLoading ? (
-        <p className="text-sm text-[var(--muted)]">Loading forms…</p>
-      ) : pageItems.length === 0 ? (
-        <div className="space-y-4">
+        {forms.isLoading ? (
+          <p className="text-sm text-[var(--muted)]">Loading forms…</p>
+        ) : null}
+
+        {!forms.isLoading && pageItems.length === 0 ? (
           <EmptyState
             title="No forms yet"
             description="Create a draft form, then design fields on the canvas."
           />
-          <Button onClick={() => setOpen(true)}>New form</Button>
-        </div>
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+        ) : null}
+
+        {!forms.isLoading && pageItems.length > 0 ? (
+          <>
             <Table>
               <THead>
                 <TR>
@@ -140,7 +143,7 @@ export default function FormsPage() {
                   const latest = form.versions[0];
                   const status = latest?.status ?? 'DRAFT';
                   return (
-                    <TR key={form.id}>
+                    <TR key={form.id} className="hover:bg-slate-50/80">
                       <TD>
                         <Link
                           className="font-medium underline decoration-[var(--border)] underline-offset-4 hover:decoration-[var(--accent)]"
@@ -185,15 +188,15 @@ export default function FormsPage() {
                 })}
               </TBody>
             </Table>
-          </div>
-          <Pagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={total}
-            onPageChange={setPage}
-          />
-        </>
-      )}
+            <Pagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onPageChange={setPage}
+            />
+          </>
+        ) : null}
+      </Card>
 
       <Modal
         open={open}

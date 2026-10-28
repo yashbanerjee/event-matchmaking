@@ -355,6 +355,18 @@ export class OrganizationsService {
         include: {
           company: true,
           vendor: true,
+          invitations: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { email: true, status: true },
+          },
+          members: {
+            take: 1,
+            orderBy: { joinedAt: 'asc' },
+            include: {
+              user: { select: { email: true } },
+            },
+          },
           formSubmissions: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -373,6 +385,10 @@ export class OrganizationsService {
     return {
       items: items.map((item) => ({
         ...item,
+        contactEmail:
+          item.invitations[0]?.email ??
+          item.members[0]?.user.email ??
+          null,
         latestSubmission: item.formSubmissions[0] ?? null,
         workflowStatus: item.vendor?.approvalStatus ?? item.status,
       })),
