@@ -54,6 +54,28 @@ export function PortalShell({
                   : 'text-[var(--foreground)] hover:bg-[var(--card-elevated)]',
               )}
             >
+              Home
+            </Link>
+            <Link
+              href="/portal/requests"
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium',
+                pathname?.startsWith('/portal/requests')
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent-hover)]'
+                  : 'text-[var(--foreground)] hover:bg-[var(--card-elevated)]',
+              )}
+            >
+              Requests
+            </Link>
+            <Link
+              href="/portal/meetings"
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium',
+                pathname?.startsWith('/portal/meetings')
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent-hover)]'
+                  : 'text-[var(--foreground)] hover:bg-[var(--card-elevated)]',
+              )}
+            >
               Meetings
             </Link>
             {email ? (

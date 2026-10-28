@@ -1,7 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@em/shared';
-import { RequirePermissions } from '../common/decorators';
+import {
+  CurrentUser,
+  RequirePermissions,
+  type AuthUser,
+} from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { UsersService } from './users.service';
@@ -25,5 +29,19 @@ export class UsersController {
       pageSize: pageSize ? Number(pageSize) : 20,
       q,
     });
+  }
+
+  @Post('me/push-subscriptions')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  registerPush(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      endpoint: string;
+      keys: { p256dh: string; auth: string };
+      userAgent?: string;
+    },
+  ) {
+    return this.users.registerPush(user, body);
   }
 }

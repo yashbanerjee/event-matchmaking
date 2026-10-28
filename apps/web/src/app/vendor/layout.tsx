@@ -7,6 +7,7 @@ import { VendorShell } from '@/components/vendor-shell';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
+import { ensurePushSubscription } from '@/lib/push-subscribe';
 
 export default function VendorLayout({
   children,
@@ -22,6 +23,7 @@ export default function VendorLayout({
       return;
     }
     setReady(true);
+    void ensurePushSubscription();
   }, [router]);
 
   const me = useQuery({

@@ -12,6 +12,7 @@ import { Button } from './ui/button';
 const NAV_ITEMS = [
   { href: '/vendor', label: 'Overview', exact: true },
   { href: '/vendor/forms', label: 'Forms' },
+  { href: '/vendor/requests', label: 'Requests' },
   { href: '/vendor/meetings', label: 'Meetings' },
 ];
 

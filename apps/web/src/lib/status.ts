@@ -15,6 +15,8 @@ export function statusTone(status: string): BadgeVariant {
       'PUBLISHED',
       'VERIFIED',
       'APPROVED',
+      'SCHEDULED',
+      'INTEREST_ACCEPTED',
     ].includes(s)
   ) {
     return 'success';
@@ -37,7 +39,18 @@ export function statusTone(status: string): BadgeVariant {
   ) {
     return 'warning';
   }
-  if (['FAILED', 'CANCELLED', 'REVOKED', 'EXPIRED', 'DEAD_LETTERED', 'NO_SHOW', 'REJECTED'].includes(s)) {
+  if (
+    [
+      'FAILED',
+      'CANCELLED',
+      'REVOKED',
+      'EXPIRED',
+      'DEAD_LETTERED',
+      'NO_SHOW',
+      'REJECTED',
+      'DECLINED',
+    ].includes(s)
+  ) {
     return 'danger';
   }
   return 'secondary';

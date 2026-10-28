@@ -130,6 +130,15 @@ enum MeetingMode {
   HYBRID
 }
 
+enum MeetingRequestStatus {
+  PENDING
+  INTEREST_ACCEPTED
+  AWAITING_CONFIRMATION
+  SCHEDULED
+  DECLINED
+  CANCELLED
+}
+
 enum ConfirmationStatus {
   PENDING
   CONFIRMED
@@ -207,9 +216,26 @@ model User {
   followUpsCreated      FollowUpAction[]       @relation("FollowUpCreator")
   auditLogs             AuditLog[]
   passwordResetTokens   PasswordResetToken[]
+  pushSubscriptions     PushSubscription[]
 
   @@index([status])
   @@map("users")
+}
+
+model PushSubscription {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model Role {
@@ -323,6 +349,8 @@ model Organization {
   documents           Document[]
   meetingsAsCompany   Meeting[]            @relation("MeetingCompany")
   meetingsAsVendor    Meeting[]            @relation("MeetingVendor")
+  meetingRequestsSent     MeetingRequest[] @relation("MeetingRequestFrom")
+  meetingRequestsReceived MeetingRequest[] @relation("MeetingRequestTo")
   feedbacks           MeetingFeedback[]
   followUps           FollowUpAction[]
   availabilityWindows AvailabilityWindow[]
@@ -705,6 +733,53 @@ model Match {
   @@map("matches")
 }
 
+// ─── Places (on-site tables / rooms) ─────────────────────────────────────────
+
+model Place {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  code        String   @unique
+  description String?
+  capacity    Int?
+  location    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  meetings        Meeting[]
+  meetingRequests MeetingRequest[]
+
+  @@index([isActive, name])
+  @@map("places")
+}
+
+model MeetingRequest {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromOrgId        String               @db.Uuid
+  toOrgId          String               @db.Uuid
+  requestedById    String               @db.Uuid
+  status           MeetingRequestStatus @default(PENDING)
+  message          String?
+  proposedStartsAt DateTime?
+  proposedEndsAt   DateTime?
+  proposedByOrgId  String?              @db.Uuid
+  placeId          String?              @db.Uuid
+  meetingId        String?              @unique @db.Uuid
+  declineReason    String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  fromOrg Organization @relation("MeetingRequestFrom", fields: [fromOrgId], references: [id], onDelete: Cascade)
+  toOrg   Organization @relation("MeetingRequestTo", fields: [toOrgId], references: [id], onDelete: Cascade)
+  place   Place?       @relation(fields: [placeId], references: [id])
+  meeting Meeting?     @relation(fields: [meetingId], references: [id])
+
+  @@index([fromOrgId, status])
+  @@index([toOrgId, status])
+  @@index([status, createdAt])
+  @@map("meeting_requests")
+}
+
 // ─── Scheduling ──────────────────────────────────────────────────────────────
 
 model ScheduleVersion {
@@ -747,9 +822,10 @@ model MeetingSlot {
 
 model Meeting {
   id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  scheduleVersionId String        @db.Uuid
+  scheduleVersionId String?       @db.Uuid
   slotId            String?       @db.Uuid
   matchId           String?       @unique @db.Uuid
+  placeId           String?       @db.Uuid
   companyOrgId      String        @db.Uuid
   vendorOrgId       String        @db.Uuid
   startsAt          DateTime
@@ -768,9 +844,10 @@ model Meeting {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  scheduleVersion ScheduleVersion         @relation(fields: [scheduleVersionId], references: [id])
+  scheduleVersion ScheduleVersion?        @relation(fields: [scheduleVersionId], references: [id])
   slot            MeetingSlot?            @relation(fields: [slotId], references: [id])
   match           Match?                  @relation(fields: [matchId], references: [id])
+  place           Place?                  @relation(fields: [placeId], references: [id])
   companyOrg      Organization            @relation("MeetingCompany", fields: [companyOrgId], references: [id])
   vendorOrg       Organization            @relation("MeetingVendor", fields: [vendorOrgId], references: [id])
   participants    MeetingParticipant[]
@@ -779,11 +856,13 @@ model Meeting {
   feedbacks       MeetingFeedback[]
   followUps       FollowUpAction[]
   rescheduleHistory MeetingReschedule[]
+  meetingRequest  MeetingRequest?
 
   @@index([companyOrgId, startsAt])
   @@index([vendorOrgId, startsAt])
   @@index([status, startsAt])
   @@index([scheduleVersionId])
+  @@index([placeId, startsAt, endsAt])
   @@map("meetings")
 }
 

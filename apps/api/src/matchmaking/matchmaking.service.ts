@@ -869,7 +869,7 @@ export class MatchmakingService {
     });
 
     if (
-      meeting.scheduleVersion.status === 'PUBLISHED' &&
+      meeting.scheduleVersion?.status === 'PUBLISHED' &&
       (timeChanged || partiesChanged)
     ) {
       void this.notifyMeetingParties(updated.id, 'updated', reason).catch(

@@ -218,8 +218,6 @@ export default function CompaniesPage() {
             ? form.phoneCountryCode
             : undefined,
           industry: form.industry.trim() || undefined,
-          formId: form.formId || undefined,
-          formVersionId: form.formVersionId || undefined,
         }),
       }),
     onSuccess: () => {
@@ -297,8 +295,6 @@ export default function CompaniesPage() {
     mutationFn: async () => {
       const rows = parseCsv(csvText).map((row) => ({
         ...row,
-        formId: form.formId || undefined,
-        formVersionId: form.formVersionId || undefined,
         industry: form.industry || undefined,
       }));
       let succeeded = 0;
@@ -568,39 +564,44 @@ export default function CompaniesPage() {
             </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Select form{!form.sendInvitation ? ' (required)' : ' link'}
-            </label>
-            <select
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
-              value={
-                form.formId ? `${form.formId}::${form.formVersionId}` : ''
-              }
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!value) {
-                  setForm({ ...form, formId: '', formVersionId: '' });
-                  return;
+          {!form.sendInvitation ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Select form (required)
+              </label>
+              <select
+                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+                value={
+                  form.formId ? `${form.formId}::${form.formVersionId}` : ''
                 }
-                const [formId, formVersionId] = value.split('::');
-                setForm({
-                  ...form,
-                  formId: formId ?? '',
-                  formVersionId: formVersionId ?? '',
-                });
-              }}
-            >
-              <option value="">
-                {form.sendInvitation ? 'No form (invite only)' : 'Select form'}
-              </option>
-              {publishedForms.map((f) => (
-                <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
-                  {f.name} (v{f.version})
-                </option>
-              ))}
-            </select>
-          </div>
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) {
+                    setForm({ ...form, formId: '', formVersionId: '' });
+                    return;
+                  }
+                  const [formId, formVersionId] = value.split('::');
+                  setForm({
+                    ...form,
+                    formId: formId ?? '',
+                    formVersionId: formVersionId ?? '',
+                  });
+                }}
+              >
+                <option value="">Select form</option>
+                {publishedForms.map((f) => (
+                  <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
+                    {f.name} (v{f.version})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--muted)]">
+              Invitation email goes to the company contact. They complete
+              registration and any assigned onboarding forms from their portal.
+            </p>
+          )}
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
@@ -735,37 +736,10 @@ export default function CompaniesPage() {
         }
       >
         <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Optional form for all rows
-            </label>
-            <select
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
-              value={
-                form.formId ? `${form.formId}::${form.formVersionId}` : ''
-              }
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!value) {
-                  setForm({ ...form, formId: '', formVersionId: '' });
-                  return;
-                }
-                const [formId, formVersionId] = value.split('::');
-                setForm({
-                  ...form,
-                  formId: formId ?? '',
-                  formVersionId: formVersionId ?? '',
-                });
-              }}
-            >
-              <option value="">No form</option>
-              {publishedForms.map((f) => (
-                <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
-                  {f.name} (v{f.version})
-                </option>
-              ))}
-            </select>
-          </div>
+          <p className="text-sm text-[var(--muted)]">
+            Each row receives an invitation email. Onboarding forms are assigned
+            automatically from published company forms.
+          </p>
           <textarea
             className="min-h-48 w-full rounded-xl border border-[var(--border)] bg-white p-3 font-mono text-xs"
             value={csvText}

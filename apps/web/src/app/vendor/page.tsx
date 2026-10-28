@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import { RecommendationsPanel } from '@/components/recommendations-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -28,6 +29,14 @@ type Meeting = {
 };
 
 export default function VendorOverviewPage() {
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: () =>
+      apiFetch<{ organizationIds: string[] }>('/auth/me', {
+        token: getAccessToken(),
+      }),
+  });
+
   const onboarding = useQuery({
     queryKey: ['portal-onboarding'],
     queryFn: () => fetchOnboarding(),
@@ -75,7 +84,13 @@ export default function VendorOverviewPage() {
       <PageHeader
         eyebrow="Vendor workspace"
         title="Overview"
-        description="Track form progress, submission dates, and meeting statuses in one place."
+        description="Recommended companies from your preferences, plus forms and meeting status."
+      />
+
+      <RecommendationsPanel
+        fromOrgId={me.data?.organizationIds?.[0]}
+        title="Recommended companies"
+        description="Matched from your categories, capabilities, and operating regions."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

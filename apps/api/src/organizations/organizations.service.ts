@@ -91,8 +91,12 @@ export class OrganizationsService {
       industry?: string;
     },
   ) {
+    // Company invite emails go to the contact only — no form-link selection.
+    // Forms are assigned via published form sync / onboarding, same as vendors after invite.
     return this.inviteOrganization(actor, {
       ...input,
+      formId: undefined,
+      formVersionId: undefined,
       type: OrganizationType.COMPANY,
       roleCode: 'COMPANY_USER',
       industry: input.industry,
