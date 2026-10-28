@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const loginSchema = z.object({
   email: z.string().email().max(320),
-  password: z.string().min(12).max(128),
+  // Login accepts the stored password as-is; strength rules apply only at registration.
+  password: z.string().min(1).max(128),
 });
 
 export const registerFromInvitationSchema = z.object({

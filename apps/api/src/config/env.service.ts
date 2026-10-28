@@ -17,11 +17,16 @@ export class EnvService {
   }
 
   get corsOrigins() {
-    return this.config
+    const normalize = (value: string) => value.trim().replace(/\/+$/, '');
+    const fromList = this.config
       .get('CORS_ORIGINS', { infer: true })
       .split(',')
-      .map((o) => o.trim())
+      .map(normalize)
       .filter(Boolean);
+    const appUrl = normalize(
+      this.config.get('APP_URL', { infer: true }) ?? '',
+    );
+    return [...new Set([...fromList, ...(appUrl ? [appUrl] : [])])];
   }
 
   get databaseUrl() {
