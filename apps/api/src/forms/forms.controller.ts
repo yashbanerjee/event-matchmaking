@@ -1,14 +1,17 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FieldType } from '@prisma/client';
-import { PERMISSIONS } from '@em/shared';
+import { PERMISSIONS, type FormSchemaDefinition } from '@em/shared';
 import { FormsService } from './forms.service';
 import {
   CurrentUser,
@@ -31,7 +34,7 @@ export class FormsController {
     @CurrentUser() user: AuthUser,
     @Body()
     body: {
-      code: string;
+      code?: string;
       name: string;
       description?: string;
       targetType?: 'COMPANY' | 'VENDOR' | 'PLATFORM';
@@ -45,6 +48,7 @@ export class FormsController {
         displayOrder?: number;
         options?: unknown[];
       }>;
+      schema?: FormSchemaDefinition;
     },
   ) {
     return this.forms.createForm(user, body);
@@ -54,24 +58,6 @@ export class FormsController {
   @RequirePermissions(PERMISSIONS.FORMS_READ)
   list() {
     return this.forms.list();
-  }
-
-  @Get(':id')
-  @RequirePermissions(PERMISSIONS.FORMS_READ)
-  get(@Param('id') id: string) {
-    return this.forms.get(id);
-  }
-
-  @Post(':id/publish')
-  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
-  publish(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.forms.publishVersion(user, id);
-  }
-
-  @Post(':id/new-version')
-  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
-  newVersion(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.forms.duplicateAsNewVersion(user, id);
   }
 
   @Post('assignments')
@@ -101,5 +87,69 @@ export class FormsController {
     },
   ) {
     return this.forms.submit(user, body);
+  }
+
+  @Get(':id')
+  @RequirePermissions(PERMISSIONS.FORMS_READ)
+  get(@Param('id') id: string) {
+    return this.forms.get(id);
+  }
+
+  @Patch(':id')
+  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      name?: string;
+      description?: string | null;
+      targetType?: 'COMPANY' | 'VENDOR' | 'PLATFORM' | null;
+      isTemplate?: boolean;
+      fields?: Array<{
+        fieldKey: string;
+        label: string;
+        description?: string;
+        fieldType: FieldType;
+        required?: boolean;
+        displayOrder?: number;
+        options?: unknown[];
+      }>;
+    },
+  ) {
+    return this.forms.updateForm(user, id, body);
+  }
+
+  @Put(':id/draft')
+  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
+  saveDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      name?: string;
+      description?: string;
+      schema: FormSchemaDefinition;
+    },
+  ) {
+    return this.forms.saveDraft(user, id, body);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.forms.removeForm(user, id);
+  }
+
+  @Post(':id/publish')
+  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
+  publish(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.forms.publishVersion(user, id);
+  }
+
+  @Post(':id/new-version')
+  @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
+  newVersion(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.forms.duplicateAsNewVersion(user, id);
   }
 }

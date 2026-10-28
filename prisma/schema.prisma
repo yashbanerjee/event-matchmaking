@@ -468,6 +468,7 @@ model FormVersion {
   version     Int
   status      FormStatus @default(DRAFT)
   schemaHash  String?
+  schemaJson  Json?
   publishedAt DateTime?
   createdAt   DateTime   @default(now())
 

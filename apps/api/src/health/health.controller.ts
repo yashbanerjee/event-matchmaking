@@ -67,8 +67,9 @@ export class HealthController {
       status: this.env.aiEnabled ? 'configured' : 'disabled',
     };
 
-    const criticalDown =
-      checks.postgres?.status !== 'up' || checks.redis?.status !== 'up';
+    // Postgres is required. Redis/RabbitMQ can be degraded without blocking
+    // HTTP API readiness (JWT auth does not depend on Redis).
+    const criticalDown = checks.postgres?.status !== 'up';
 
     return {
       status: criticalDown ? 'not_ready' : 'ready',
