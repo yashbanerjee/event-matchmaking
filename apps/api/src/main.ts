@@ -40,8 +40,9 @@ async function bootstrap() {
   }
 
   app.enableShutdownHooks();
-  await app.listen(env.apiPort);
-  logger.log(`API listening on :${env.apiPort}`);
+  const port = env.apiPort;
+  await app.listen(port, '0.0.0.0');
+  logger.log(`API listening on :${port}`);
 }
 
 bootstrap().catch((err) => {

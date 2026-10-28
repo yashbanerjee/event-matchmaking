@@ -1,0 +1,12 @@
+# Default service config (API). For worker/web use infra/railway/*.toml
+# in each Railway service's "Config as code" path setting.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/docker/Dockerfile.api"
+
+[deploy]
+healthcheckPath = "/api/v1/health/live"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

@@ -130,11 +130,13 @@ async function main() {
     update: {},
   });
 
-  const passwordHash = await bcrypt.hash('ChangeMeAdmin1!', 12);
+  const adminEmail = process.env.ADMIN_EMAIL ?? 'info@vedha.ae';
+  const adminPassword = process.env.ADMIN_PASSWORD ?? 'Vedha1002';
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@example.com' },
+    where: { email: adminEmail },
     create: {
-      email: 'admin@example.com',
+      email: adminEmail,
       passwordHash,
       firstName: 'Super',
       lastName: 'Admin',
@@ -312,7 +314,7 @@ async function main() {
     },
   });
 
-  console.log('Seed complete. Login: admin@example.com / ChangeMeAdmin1!');
+  console.log(`Seed complete. Login: ${adminEmail}`);
 }
 
 main()

@@ -5,8 +5,10 @@ export const envSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
   APP_NAME: z.string().default('event-matchmaking'),
-  APP_URL: z.string().url(),
-  API_URL: z.string().url(),
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  API_URL: z.string().url().default('http://localhost:4000'),
+  // Railway injects PORT; API_PORT remains for local/dev.
+  PORT: z.coerce.number().int().positive().optional(),
   API_PORT: z.coerce.number().int().positive().default(4000),
   LOG_LEVEL: z.string().default('info'),
   DATABASE_URL: z.string().min(1),

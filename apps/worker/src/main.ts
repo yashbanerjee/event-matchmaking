@@ -1,5 +1,5 @@
 import amqp, { Channel, ConsumeMessage } from 'amqplib';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import pino from 'pino';
 import { z } from 'zod';
 
@@ -156,14 +156,17 @@ async function handleInvitation(content: Record<string, unknown>) {
     },
   });
 
+  const prior = Array.isArray(invitation.deliveryHistory)
+    ? (invitation.deliveryHistory as Prisma.JsonArray)
+    : [];
   await prisma.invitation.update({
     where: { id: invitationId },
     data: {
       status: 'SENT',
       deliveryHistory: [
-        ...((invitation.deliveryHistory as unknown[]) ?? []),
+        ...prior,
         { at: new Date().toISOString(), status: 'SENT', provider: 'console' },
-      ],
+      ] satisfies Prisma.InputJsonValue,
     },
   });
 }

@@ -11,6 +11,8 @@ export class EnvService {
   }
 
   get apiPort() {
+    const railwayPort = this.config.get('PORT', { infer: true });
+    if (railwayPort) return railwayPort;
     return this.config.get('API_PORT', { infer: true });
   }
 
