@@ -64,6 +64,50 @@ export class OrganizationsController {
     return this.orgs.createVendor(user, body);
   }
 
+  @Post('vendors/invite')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  inviteVendor(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId?: string;
+      formVersionId?: string;
+      code?: string;
+    },
+  ) {
+    return this.orgs.inviteVendor(user, body);
+  }
+
+  @Post('vendors/import-csv')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  importVendorsCsv(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      rows: Array<{
+        name: string;
+        email: string;
+        phone?: string;
+        phoneCountryCode?: string;
+        formId?: string;
+        formVersionId?: string;
+        code?: string;
+      }>;
+    },
+  ) {
+    return this.orgs.inviteVendorsCsv(user, body.rows ?? []);
+  }
+
+  @Post('vendors/:id/approve')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  approve(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.orgs.approveVendor(user, id);
+  }
+
   @Get()
   @RequirePermissions(PERMISSIONS.ORGS_READ)
   list(
@@ -115,9 +159,4 @@ export class OrganizationsController {
     return this.orgs.remove(user, id);
   }
 
-  @Post('vendors/:id/approve')
-  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
-  approve(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.orgs.approveVendor(user, id);
-  }
 }
