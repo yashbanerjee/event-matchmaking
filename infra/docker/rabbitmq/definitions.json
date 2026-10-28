@@ -1,0 +1,152 @@
+{
+  "vhosts": [{ "name": "/" }],
+  "users": [],
+  "permissions": [],
+  "exchanges": [
+    {
+      "name": "em.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "em.events.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "em.notifications",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.notifications"
+      }
+    },
+    {
+      "name": "em.invitations",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.invitations"
+      }
+    },
+    {
+      "name": "em.profile",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.profile"
+      }
+    },
+    {
+      "name": "em.matchmaking",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.matchmaking"
+      }
+    },
+    {
+      "name": "em.reports",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.reports"
+      }
+    },
+    {
+      "name": "em.documents",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "em.events.dlx",
+        "x-dead-letter-routing-key": "dlq.documents"
+      }
+    },
+    {
+      "name": "em.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.notifications",
+      "destination_type": "queue",
+      "routing_key": "notification.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.invitations",
+      "destination_type": "queue",
+      "routing_key": "invitation.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.profile",
+      "destination_type": "queue",
+      "routing_key": "profile.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.matchmaking",
+      "destination_type": "queue",
+      "routing_key": "matchmaking.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.reports",
+      "destination_type": "queue",
+      "routing_key": "report.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events",
+      "vhost": "/",
+      "destination": "em.documents",
+      "destination_type": "queue",
+      "routing_key": "document.*",
+      "arguments": {}
+    },
+    {
+      "source": "em.events.dlx",
+      "vhost": "/",
+      "destination": "em.dlq",
+      "destination_type": "queue",
+      "routing_key": "dlq.*",
+      "arguments": {}
+    }
+  ]
+}

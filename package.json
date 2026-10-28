@@ -1,0 +1,47 @@
+{
+  "name": "event-matchmaking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Enterprise company & vendor matchmaking and meeting management platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run start:dev -w @em/api",
+    "dev:worker": "npm run start:dev -w @em/worker",
+    "dev:web": "npm run dev -w @em/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test -w @em/domain && npm run test -w @em/api --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema=prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.13.10",
+    "prettier": "^3.5.3",
+    "prisma": "^6.5.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0",
+    "bcrypt": "^5.1.1"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

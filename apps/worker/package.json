@@ -1,0 +1,25 @@
+{
+  "name": "@em/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "tsx watch src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@em/domain": "*",
+    "@em/shared": "*",
+    "@prisma/client": "^6.5.0",
+    "amqplib": "^0.10.5",
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

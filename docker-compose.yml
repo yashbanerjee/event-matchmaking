@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: em-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: em
+      POSTGRES_PASSWORD: em_secret
+      POSTGRES_DB: event_matchmaking
+    ports:
+      - "5433:5432"
+    volumes:
+      - em_pg_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U em -d event_matchmaking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: em-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - em_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: em-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: em
+      RABBITMQ_DEFAULT_PASS: em_secret
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - em_rabbit_data:/var/lib/rabbitmq
+      - ./infra/docker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: em-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  em_pg_data:
+  em_redis_data:
+  em_rabbit_data:

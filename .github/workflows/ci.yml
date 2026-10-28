@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: em
+          POSTGRES_PASSWORD: em_secret
+          POSTGRES_DB: event_matchmaking
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U em -d event_matchmaking"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      rabbitmq:
+        image: rabbitmq:3.13-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: em
+          RABBITMQ_DEFAULT_PASS: em_secret
+        ports:
+          - 5672:5672
+
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      API_PORT: 4000
+      DATABASE_URL: postgresql://em:em_secret@localhost:5432/event_matchmaking?schema=public
+      # CI service maps container 5432 directly; local compose uses host 5433
+      REDIS_URL: redis://localhost:6379
+      RABBITMQ_URL: amqp://em:em_secret@localhost:5672
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-characters!!
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters!
+      EMAIL_FROM: noreply@example.com
+      AI_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema=prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema=prisma/schema.prisma
+      - run: npm run build -w @em/shared
+      - run: npm run build -w @em/domain
+      - run: npm run test -w @em/domain
+      - run: npm run typecheck -w @em/api --if-present
+      - run: npm run build -w @em/api
+      - run: npm run typecheck -w @em/web --if-present

@@ -1,0 +1,82 @@
+import { ROLES, type RoleCode } from './enums.js';
+
+export const PERMISSIONS = {
+  USERS_MANAGE: 'users:manage',
+  USERS_READ: 'users:read',
+  ADMINS_MANAGE: 'admins:manage',
+  ORGS_MANAGE: 'orgs:manage',
+  ORGS_READ: 'orgs:read',
+  INVITATIONS_MANAGE: 'invitations:manage',
+  FORMS_MANAGE: 'forms:manage',
+  FORMS_READ: 'forms:read',
+  SUBMISSIONS_REVIEW: 'submissions:review',
+  MATCHING_CONFIGURE: 'matching:configure',
+  MATCHING_RUN: 'matching:run',
+  SCHEDULE_PUBLISH: 'schedule:publish',
+  SCHEDULE_OVERRIDE: 'schedule:override',
+  MEETINGS_MANAGE: 'meetings:manage',
+  MEETINGS_READ: 'meetings:read',
+  FEEDBACK_READ_ALL: 'feedback:read_all',
+  FEEDBACK_SUBMIT: 'feedback:submit',
+  JOBS_MANAGE: 'jobs:manage',
+  INTEGRATIONS_MANAGE: 'integrations:manage',
+  AUDIT_READ: 'audit:read',
+  REPORTS_READ: 'reports:read',
+  SETTINGS_MANAGE: 'settings:manage',
+  HEALTH_READ: 'health:read',
+} as const;
+
+export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export const ROLE_PERMISSIONS: Record<RoleCode, PermissionCode[]> = {
+  [ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS),
+  [ROLES.ADMIN]: [
+    PERMISSIONS.USERS_MANAGE,
+    PERMISSIONS.USERS_READ,
+    PERMISSIONS.ORGS_MANAGE,
+    PERMISSIONS.ORGS_READ,
+    PERMISSIONS.INVITATIONS_MANAGE,
+    PERMISSIONS.FORMS_MANAGE,
+    PERMISSIONS.FORMS_READ,
+    PERMISSIONS.SUBMISSIONS_REVIEW,
+    PERMISSIONS.MATCHING_CONFIGURE,
+    PERMISSIONS.MATCHING_RUN,
+    PERMISSIONS.SCHEDULE_PUBLISH,
+    PERMISSIONS.SCHEDULE_OVERRIDE,
+    PERMISSIONS.MEETINGS_MANAGE,
+    PERMISSIONS.MEETINGS_READ,
+    PERMISSIONS.FEEDBACK_READ_ALL,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.HEALTH_READ,
+  ],
+  [ROLES.OPERATIONS_MANAGER]: [
+    PERMISSIONS.ORGS_READ,
+    PERMISSIONS.USERS_READ,
+    PERMISSIONS.MEETINGS_MANAGE,
+    PERMISSIONS.MEETINGS_READ,
+    PERMISSIONS.SCHEDULE_OVERRIDE,
+    PERMISSIONS.JOBS_MANAGE,
+    PERMISSIONS.FEEDBACK_READ_ALL,
+    PERMISSIONS.REPORTS_READ,
+    PERMISSIONS.HEALTH_READ,
+  ],
+  [ROLES.COMPANY_USER]: [
+    PERMISSIONS.ORGS_READ,
+    PERMISSIONS.FORMS_READ,
+    PERMISSIONS.MEETINGS_READ,
+    PERMISSIONS.FEEDBACK_SUBMIT,
+  ],
+  [ROLES.VENDOR_USER]: [
+    PERMISSIONS.ORGS_READ,
+    PERMISSIONS.FORMS_READ,
+    PERMISSIONS.MEETINGS_READ,
+    PERMISSIONS.FEEDBACK_SUBMIT,
+  ],
+};
+
+export function hasPermission(
+  roleCodes: RoleCode[],
+  permission: PermissionCode,
+): boolean {
+  return roleCodes.some((role) => ROLE_PERMISSIONS[role]?.includes(permission));
+}
