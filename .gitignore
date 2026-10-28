@@ -17,5 +17,7 @@ backups/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+# Generated Serwist artifacts (if introduced later)
+apps/web/public/swe-worker*
 prisma/*.db
 prisma/*.db-journal

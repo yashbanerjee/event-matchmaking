@@ -1,6 +1,25 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
+const JOURNEY = [
+  {
+    title: 'Discover',
+    body: 'State your objective in natural language or structured choices — Buy, Sell, Partner, Invest, Find Expertise, Explore.',
+  },
+  {
+    title: 'Match',
+    body: 'See recommended counterparties with clear explanations — built for investor ↔ innovator fit.',
+  },
+  {
+    title: 'Connect',
+    body: 'Send and accept meeting requests with admin control over who can see and contact whom.',
+  },
+  {
+    title: 'Meet',
+    body: 'Confirm when and where — including on-site table or location — from phone, tablet, or desktop.',
+  },
+] as const;
+
 export default function HomePage() {
   return (
     <main className="relative min-h-screen overflow-hidden">
@@ -13,66 +32,72 @@ export default function HomePage() {
         className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(15,118,110,0.28),transparent_68%)] blur-2xl animate-fade"
       />
 
-      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="h-display text-xl font-bold tracking-tight">
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">
+        <div className="h-display truncate text-lg font-bold tracking-tight sm:text-xl">
           Event Matchmaking
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Link href="/login">
-            <Button variant="ghost">Sign in</Button>
+            <Button variant="ghost" size="sm" className="sm:h-10 sm:px-4">
+              Sign in
+            </Button>
           </Link>
           <Link href="/register">
-            <Button>Accept invitation</Button>
+            <Button size="sm" className="sm:h-10 sm:px-4">
+              Join
+            </Button>
           </Link>
         </div>
       </header>
 
-      <section className="relative z-10 mx-auto grid min-h-[78vh] max-w-6xl items-center gap-10 px-6 pb-16 pt-8 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="animate-rise space-y-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent)]">
-            Event Matchmaking
+      <section className="relative z-10 mx-auto grid min-h-[70vh] w-full max-w-6xl items-center gap-10 px-4 pb-16 pt-4 sm:px-6 sm:pt-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="animate-rise space-y-5 sm:space-y-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)] sm:text-xs sm:tracking-[0.28em]">
+            Progressive web app
           </p>
-          <h1 className="max-w-xl text-5xl leading-[1.05] text-[var(--foreground)] md:text-6xl">
-            Company & vendor meetings, orchestrated with clarity.
+          <h1 className="max-w-xl text-4xl leading-[1.08] text-[var(--foreground)] sm:text-5xl md:text-6xl">
+            Find the right people. Turn it into a confirmed meeting.
           </h1>
-          <p className="max-w-lg text-base leading-relaxed text-[var(--muted)] md:text-lg">
-            Invite organizations, run explainable matchmaking, publish schedules,
-            and capture confidential outcomes — one polished workspace for
-            operators and participants.
+          <p className="max-w-lg text-sm leading-relaxed text-[var(--muted)] sm:text-base md:text-lg">
+            An installable conference workspace for discover, match, connect,
+            and meet — including investor–innovator matching, on-site scheduling,
+            and organizer reporting. Works embedded or linked from your event
+            site on mobile, tablet, and desktop.
           </p>
-          <div className="flex flex-wrap gap-3 pt-2">
+          <div className="flex flex-wrap gap-3 pt-1 sm:pt-2">
             <Link href="/login">
-              <Button size="lg">Sign in to workspace</Button>
+              <Button size="lg">Open app</Button>
             </Link>
             <Link href="/register">
               <Button size="lg" variant="outline">
-                Join with invitation
+                Accept invitation
               </Button>
             </Link>
           </div>
         </div>
 
-        <div className="animate-rise glass-panel relative rounded-[1.5rem] p-6 md:p-8" style={{ animationDelay: '120ms' }}>
-          <div className="absolute -left-3 -top-3 rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white">
-            Live ops
+        <div
+          className="animate-rise glass-panel relative rounded-[1.5rem] p-5 sm:p-6 md:p-8"
+          style={{ animationDelay: '120ms' }}
+        >
+          <div className="absolute -left-2 -top-3 rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white sm:-left-3">
+            Journey
           </div>
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div>
-              <p className="text-sm text-[var(--muted)]">Today&apos;s flow</p>
-              <p className="mt-1 h-display text-2xl">Match → Schedule → Confirm</p>
+              <p className="text-sm text-[var(--muted)]">Conference flow</p>
+              <p className="mt-1 h-display text-xl sm:text-2xl">
+                Discover → Match → Connect → Meet
+              </p>
             </div>
             <div className="grid gap-3">
-              {[
-                ['Admin control', 'Invites, forms, scoring, publish'],
-                ['Vendor portal', 'Confirm meetings & confidential feedback'],
-                ['Audit-ready', 'Jobs, notifications, and settings'],
-              ].map(([title, body]) => (
+              {JOURNEY.map((item) => (
                 <div
-                  key={title}
+                  key={item.title}
                   className="rounded-2xl border border-[var(--border)] bg-white/80 px-4 py-3"
                 >
-                  <p className="font-semibold">{title}</p>
-                  <p className="text-sm text-[var(--muted)]">{body}</p>
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="text-sm text-[var(--muted)]">{item.body}</p>
                 </div>
               ))}
             </div>
