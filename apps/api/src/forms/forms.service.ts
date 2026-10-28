@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { FieldType, Prisma } from '@prisma/client';
 import {
+  assertLockedFieldsUnchanged,
   formSchemaDefinition,
   type FormSchemaDefinition,
   type FieldType as BuilderFieldType,
@@ -14,6 +15,8 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
+import { EnvService } from '../config/env.service';
+import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
 export interface FormFieldInput {
@@ -37,6 +40,7 @@ export class FormsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly env: EnvService,
   ) {}
 
   async createForm(
@@ -468,6 +472,16 @@ export class FormsService {
         },
       });
 
+      await tx.vendor.updateMany({
+        where: {
+          organizationId: input.organizationId,
+          approvalStatus: {
+            in: ['INVITED', 'RESEND_FOR_IMPROVEMENTS', 'PENDING'],
+          },
+        },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+
       await this.outbox.enqueue(tx, {
         aggregateType: 'FormSubmission',
         aggregateId: created.id,
@@ -482,6 +496,424 @@ export class FormsService {
     await this.normalizeProfile(submission.id);
 
     return submission;
+  }
+
+  async listSubmissions(params: {
+    organizationId?: string;
+    status?:
+      | 'DRAFT'
+      | 'SUBMITTED'
+      | 'UNDER_REVIEW'
+      | 'APPROVED'
+      | 'REJECTED'
+      | 'NEEDS_INFO';
+  }) {
+    return this.prisma.formSubmission.findMany({
+      where: {
+        ...(params.organizationId
+          ? { organizationId: params.organizationId }
+          : {}),
+        ...(params.status ? { status: params.status } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        organization: { include: { vendor: true } },
+        formVersion: { include: { form: true, fields: true } },
+        corrections: {
+          where: { status: 'OPEN' },
+          include: { fields: true },
+          take: 1,
+        },
+      },
+    });
+  }
+
+  async getSubmission(id: string) {
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id },
+      include: {
+        organization: { include: { vendor: true } },
+        formVersion: { include: { form: true, fields: true } },
+        corrections: {
+          orderBy: { createdAt: 'desc' },
+          include: { fields: true },
+        },
+      },
+    });
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+    const schema = resolveSchema(
+      submission.formVersion.schemaJson,
+      submission.formVersion.fields,
+    );
+    const openCorrection =
+      submission.corrections.find((c) => c.status === 'OPEN') ?? null;
+    return {
+      ...submission,
+      schema,
+      openCorrection,
+    };
+  }
+
+  async startReview(actor: AuthUser, submissionId: string) {
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id: submissionId },
+    });
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+    if (!['SUBMITTED', 'UNDER_REVIEW', 'NEEDS_INFO'].includes(submission.status)) {
+      throw new BadRequestException('Submission cannot enter review');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formSubmission.update({
+        where: { id: submissionId },
+        data: {
+          status: 'UNDER_REVIEW',
+          reviewedAt: new Date(),
+        },
+      });
+      await tx.vendor.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: { approvalStatus: 'IN_REVIEW' },
+      });
+      return next;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'submission.review.start',
+      entityType: 'FormSubmission',
+      entityId: submissionId,
+      outcome: 'SUCCESS',
+    });
+
+    return updated;
+  }
+
+  async approveSubmission(actor: AuthUser, submissionId: string) {
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id: submissionId },
+    });
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formSubmission.update({
+        where: { id: submissionId },
+        data: {
+          status: 'APPROVED',
+          reviewedAt: new Date(),
+        },
+      });
+      await tx.vendor.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          matchingEligible: true,
+        },
+      });
+      await tx.organization.update({
+        where: { id: submission.organizationId },
+        data: { status: 'APPROVED' },
+      });
+      await tx.submissionCorrection.updateMany({
+        where: { submissionId, status: 'OPEN' },
+        data: { status: 'RESOLVED', resolvedAt: new Date() },
+      });
+      return next;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'submission.approve',
+      entityType: 'FormSubmission',
+      entityId: submissionId,
+      outcome: 'SUCCESS',
+    });
+
+    return updated;
+  }
+
+  async requestCorrection(
+    actor: AuthUser,
+    submissionId: string,
+    input: { fields: Array<{ fieldId: string; note: string }> },
+  ) {
+    if (!input.fields?.length) {
+      throw new BadRequestException('Select at least one field to resubmit');
+    }
+    for (const field of input.fields) {
+      if (!field.fieldId || !field.note?.trim()) {
+        throw new BadRequestException(
+          'Each marked field needs a comment for the vendor',
+        );
+      }
+    }
+
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        organization: { include: { vendor: true } },
+        formVersion: { include: { form: true, fields: true } },
+      },
+    });
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+    if (!['SUBMITTED', 'UNDER_REVIEW'].includes(submission.status)) {
+      throw new BadRequestException(
+        'Only submissions waiting for or in review can request improvements',
+      );
+    }
+
+    const schema = resolveSchema(
+      submission.formVersion.schemaJson,
+      submission.formVersion.fields,
+    );
+    const known = new Set(
+      schema.fields
+        .filter((f) => f.type !== 'heading' && f.type !== 'info')
+        .map((f) => f.id),
+    );
+    for (const field of input.fields) {
+      if (!known.has(field.fieldId)) {
+        throw new BadRequestException(
+          'A selected field is not part of this form version',
+        );
+      }
+    }
+
+    const token = generateSecureToken(32);
+    const tokenHash = hashToken(token);
+    const labels = input.fields
+      .map((field, index) => {
+        const match = schema.fields.find((item) => item.id === field.fieldId);
+        return `${index + 1}. ${match?.label ?? field.fieldId}\nComment: ${field.note.trim()}`;
+      })
+      .join('\n\n');
+    const correctionUrl = `${this.env.appUrl}/portal/corrections/${token}`;
+
+    const inviteEmail = await this.prisma.invitation.findFirst({
+      where: { organizationId: submission.organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const email =
+      inviteEmail?.email ??
+      (
+        await this.prisma.organizationMember.findFirst({
+          where: { organizationId: submission.organizationId },
+          include: { user: true },
+        })
+      )?.user.email;
+
+    if (!email) {
+      throw new BadRequestException(
+        'No vendor email found to send the correction link',
+      );
+    }
+
+    const correction = await this.prisma.$transaction(async (tx) => {
+      await tx.submissionCorrection.updateMany({
+        where: { submissionId, status: 'OPEN' },
+        data: { status: 'SUPERSEDED', resolvedAt: new Date() },
+      });
+
+      const created = await tx.submissionCorrection.create({
+        data: {
+          submissionId,
+          requestedById: actor.id,
+          accessTokenHash: tokenHash,
+          fields: {
+            create: input.fields.map((field) => ({
+              fieldId: field.fieldId,
+              note: field.note.trim(),
+            })),
+          },
+        },
+        include: { fields: true },
+      });
+
+      await tx.formSubmission.update({
+        where: { id: submissionId },
+        data: {
+          status: 'NEEDS_INFO',
+          reviewNotes: labels,
+          reviewedAt: new Date(),
+        },
+      });
+
+      await tx.vendor.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: { approvalStatus: 'RESEND_FOR_IMPROVEMENTS' },
+      });
+
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'SubmissionCorrection',
+        aggregateId: created.id,
+        // Reuse invitation routing so existing Rabbit bindings deliver the email.
+        eventType: 'invitation.send',
+        idempotencyKey: `correction.send:${created.id}`,
+        payload: {
+          correctionId: created.id,
+          submissionId,
+          email,
+          organizationName: submission.organization.name,
+          formName: submission.formVersion.form.name,
+          correctionUrl,
+          fieldSummary: labels,
+          fieldCount: input.fields.length,
+          purpose: 'CORRECTION',
+        },
+      });
+
+      return created;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'submission.correction.request',
+      entityType: 'FormSubmission',
+      entityId: submissionId,
+      outcome: 'SUCCESS',
+      after: { fieldCount: input.fields.length },
+    });
+
+    return {
+      correction,
+      correctionUrl,
+      emailQueued: true,
+    };
+  }
+
+  async getCorrectionByToken(token: string) {
+    const tokenHash = hashToken(token);
+    const correction = await this.prisma.submissionCorrection.findFirst({
+      where: { accessTokenHash: tokenHash, status: 'OPEN' },
+      include: {
+        fields: true,
+        submission: {
+          include: {
+            organization: true,
+            formVersion: { include: { form: true, fields: true } },
+          },
+        },
+      },
+    });
+    if (!correction) {
+      throw new NotFoundException('Correction link is invalid or expired');
+    }
+
+    const schema = resolveSchema(
+      correction.submission.formVersion.schemaJson,
+      correction.submission.formVersion.fields,
+    );
+    const editableFieldIds = correction.fields.map((f) => f.fieldId);
+    const notes = correction.fields.map((f) => ({
+      fieldId: f.fieldId,
+      note: f.note,
+    }));
+
+    return {
+      correctionId: correction.id,
+      submissionId: correction.submissionId,
+      organizationName: correction.submission.organization.name,
+      formName: correction.submission.formVersion.form.name,
+      schema,
+      responses: correction.submission.responses as Record<string, unknown>,
+      editableFieldIds,
+      notes,
+    };
+  }
+
+  async resubmitCorrection(
+    token: string,
+    responses: Record<string, unknown>,
+  ) {
+    const tokenHash = hashToken(token);
+    const correction = await this.prisma.submissionCorrection.findFirst({
+      where: { accessTokenHash: tokenHash, status: 'OPEN' },
+      include: {
+        fields: true,
+        submission: {
+          include: {
+            formVersion: { include: { fields: true } },
+          },
+        },
+      },
+    });
+    if (!correction) {
+      throw new NotFoundException('Correction link is invalid or expired');
+    }
+
+    const schema = resolveSchema(
+      correction.submission.formVersion.schemaJson,
+      correction.submission.formVersion.fields,
+    );
+    const editable = new Set(correction.fields.map((f) => f.fieldId));
+    const previous = correction.submission.responses as Record<string, unknown>;
+
+    try {
+      assertLockedFieldsUnchanged({
+        fields: schema.fields,
+        previous,
+        next: responses,
+        editableFieldIds: editable,
+      });
+    } catch {
+      throw new BadRequestException(
+        'Only the fields marked for resubmit can be changed',
+      );
+    }
+
+    const merged = { ...previous, ...responses };
+    for (const fieldId of editable) {
+      const field = schema.fields.find((f) => f.id === fieldId);
+      if (!field) continue;
+      const value = merged[fieldId];
+      if (
+        field.required &&
+        (value === undefined || value === null || value === '')
+      ) {
+        throw new BadRequestException(`${field.label} is required`);
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formSubmission.update({
+        where: { id: correction.submissionId },
+        data: {
+          responses: merged as Prisma.InputJsonValue,
+          status: 'SUBMITTED',
+          submittedAt: new Date(),
+          reviewNotes: null,
+        },
+      });
+      await tx.submissionCorrection.update({
+        where: { id: correction.id },
+        data: { status: 'RESOLVED', resolvedAt: new Date() },
+      });
+      await tx.vendor.updateMany({
+        where: { organizationId: correction.submission.organizationId },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'FormSubmission',
+        aggregateId: next.id,
+        eventType: 'profile.normalize',
+        idempotencyKey: `profile.normalize:${next.id}:resubmit:${Date.now()}`,
+        payload: { submissionId: next.id },
+      });
+      return next;
+    });
+
+    await this.normalizeProfile(updated.id);
+    return { submissionId: updated.id, status: updated.status };
   }
 
   async normalizeProfile(submissionId: string) {

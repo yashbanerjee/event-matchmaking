@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -73,6 +74,50 @@ export class FormsController {
     },
   ) {
     return this.forms.assignForm(user, body);
+  }
+
+  @Get('submissions')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  listSubmissions(
+    @Query('organizationId') organizationId?: string,
+    @Query('status')
+    status?:
+      | 'DRAFT'
+      | 'SUBMITTED'
+      | 'UNDER_REVIEW'
+      | 'APPROVED'
+      | 'REJECTED'
+      | 'NEEDS_INFO',
+  ) {
+    return this.forms.listSubmissions({ organizationId, status });
+  }
+
+  @Get('submissions/:id')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  getSubmission(@Param('id') id: string) {
+    return this.forms.getSubmission(id);
+  }
+
+  @Post('submissions/:id/start-review')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  startReview(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.forms.startReview(user, id);
+  }
+
+  @Post('submissions/:id/approve')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  approveSubmission(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.forms.approveSubmission(user, id);
+  }
+
+  @Post('submissions/:id/corrections')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  requestCorrection(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { fields: Array<{ fieldId: string; note: string }> },
+  ) {
+    return this.forms.requestCorrection(user, id, body);
   }
 
   @Post('submissions')

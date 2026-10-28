@@ -1,10 +1,11 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { statusTone } from '@/lib/status';
+import { formatVendorStatus, statusTone } from '@/lib/status';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ type OrgList = {
     code: string;
     name: string;
     status: string;
+    workflowStatus?: string;
     industry?: string | null;
     country?: string | null;
     region?: string | null;
@@ -34,6 +36,11 @@ type OrgList = {
       categories?: string[];
       capabilities?: string[];
     };
+    latestSubmission?: {
+      id: string;
+      status: string;
+      submittedAt?: string | null;
+    } | null;
   }>;
   total: number;
   page: number;
@@ -92,6 +99,7 @@ function parseCsv(text: string) {
 }
 
 export default function VendorsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -287,23 +295,27 @@ export default function VendorsPage() {
                 <TR>
                   <TH>Code</TH>
                   <TH>Name</TH>
-                  <TH>Approval</TH>
+                  <TH>Status</TH>
                   <TH>Eligible</TH>
                   <TH className="text-right">Actions</TH>
                 </TR>
               </THead>
               <TBody>
-                {filtered.map((org) => (
+                {filtered.map((org) => {
+                  const status =
+                    org.workflowStatus ??
+                    org.vendor?.approvalStatus ??
+                    org.status;
+                  const canReview = Boolean(org.latestSubmission?.id);
+                  const verified =
+                    status === 'VERIFIED' || status === 'APPROVED';
+                  return (
                   <TR key={org.id} className="hover:bg-slate-50/80">
                     <TD className="font-mono text-xs">{org.code}</TD>
                     <TD className="font-medium">{org.name}</TD>
                     <TD>
-                      <Badge
-                        variant={statusTone(
-                          org.vendor?.approvalStatus ?? org.status,
-                        )}
-                      >
-                        {org.vendor?.approvalStatus ?? org.status}
+                      <Badge variant={statusTone(status)}>
+                        {formatVendorStatus(status)}
                       </Badge>
                     </TD>
                     <TD>
@@ -317,13 +329,26 @@ export default function VendorsPage() {
                     </TD>
                     <TD>
                       <div className="flex flex-col items-end gap-2">
-                        {org.vendor?.approvalStatus !== 'APPROVED' && (
+                        {canReview ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              router.push(
+                                `/admin/vendors/${org.id}/review?submissionId=${org.latestSubmission!.id}`,
+                              )
+                            }
+                          >
+                            Review form
+                          </Button>
+                        ) : null}
+                        {!verified && (
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => approve.mutate(org.id)}
                           >
-                            Approve
+                            Mark verified
                           </Button>
                         )}
                         <OrgRowActions
@@ -334,7 +359,8 @@ export default function VendorsPage() {
                       </div>
                     </TD>
                   </TR>
-                ))}
+                  );
+                })}
               </TBody>
             </Table>
             <Pagination

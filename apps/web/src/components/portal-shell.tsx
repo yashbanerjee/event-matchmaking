@@ -17,7 +17,7 @@ export function PortalShell({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="flex w-full items-center justify-between gap-4 p-6 lg:px-8 lg:py-5">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
               Participant portal
@@ -48,7 +48,7 @@ export function PortalShell({
           </div>
         </div>
       </header>
-      <main className="page-shell mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <main className="w-full p-6 lg:p-8">
         {children}
       </main>
     </div>

@@ -156,6 +156,7 @@ export class OrganizationsService {
           displayName: name,
           categories: [],
           capabilities: [],
+          approvalStatus: 'INVITED',
         },
       });
 
@@ -306,6 +307,7 @@ export class OrganizationsService {
           displayName: input.displayName ?? input.name,
           categories: input.categories ?? [],
           capabilities: input.capabilities ?? [],
+          approvalStatus: 'INVITED',
         },
       });
       return created;
@@ -350,12 +352,34 @@ export class OrganizationsService {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { company: true, vendor: true },
+        include: {
+          company: true,
+          vendor: true,
+          formSubmissions: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              status: true,
+              submittedAt: true,
+              formVersionId: true,
+            },
+          },
+        },
       }),
       this.prisma.organization.count({ where }),
     ]);
 
-    return { items, page, pageSize, total };
+    return {
+      items: items.map((item) => ({
+        ...item,
+        latestSubmission: item.formSubmissions[0] ?? null,
+        workflowStatus: item.vendor?.approvalStatus ?? item.status,
+      })),
+      page,
+      pageSize,
+      total,
+    };
   }
 
   async get(id: string) {
@@ -513,8 +537,10 @@ export class OrganizationsService {
       return tx.vendor.update({
         where: { organizationId: id },
         data: {
-          approvalStatus: 'APPROVED',
-          matchingEligible: org.vendor!.onboardingComplete,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          matchingEligible: true,
+          onboardingComplete: true,
         },
       });
     });

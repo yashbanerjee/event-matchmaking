@@ -91,7 +91,7 @@ export default function FormsPage() {
   });
 
   return (
-    <div className="page-shell space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Forms"
         description="Write the questions companies and vendors answer online. Publish a form when it is ready to assign."

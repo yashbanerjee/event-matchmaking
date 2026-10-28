@@ -24,6 +24,7 @@ export function FormRenderer({
   selectedFieldId,
   onSelectField,
   idPrefix,
+  visibleFieldIds,
 }: {
   schema: FormSchemaDefinition;
   values: Record<string, unknown>;
@@ -39,8 +40,11 @@ export function FormRenderer({
   selectedFieldId?: string | null;
   onSelectField?: (fieldId: string) => void;
   idPrefix?: string;
+  /** When set, only these fields are rendered (e.g. correction resubmit). */
+  visibleFieldIds?: string[];
 }) {
   const byId = new Map(schema.fields.map((field) => [field.id, field]));
+  const visible = visibleFieldIds ? new Set(visibleFieldIds) : null;
   const sections = [...schema.sections].sort((a, b) => a.order - b.order);
   return (
     <div className="grid gap-4">
@@ -59,6 +63,7 @@ export function FormRenderer({
             {schema.fields
               .filter((field) => field.sectionId === section.id)
               .sort((a, b) => a.order - b.order)
+              .filter((field) => (visible ? visible.has(field.id) : true))
               .filter((field) => isFieldVisible(field, values, byId))
               .map((field) => (
                 <div

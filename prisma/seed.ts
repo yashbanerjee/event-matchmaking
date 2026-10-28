@@ -257,6 +257,21 @@ async function main() {
     update: {},
   });
 
+  await prisma.emailTemplate.upsert({
+    where: { code_version: { code: 'correction', version: 1 } },
+    create: {
+      code: 'correction',
+      version: 1,
+      subject: 'Please update your form answers',
+      bodyHtml:
+        '<p>Hello,</p><p>Some answers need updates. Open this link and fix only the marked fields:</p><p><a href="{{correctionUrl}}">{{correctionUrl}}</a></p><pre>{{fieldSummary}}</pre>',
+      bodyText:
+        'Some answers need updates. Open {{correctionUrl}} and fix only the marked fields.\n\n{{fieldSummary}}',
+      isActive: true,
+    },
+    update: {},
+  });
+
   const companyOrg = await prisma.organization.upsert({
     where: { code: 'ACME' },
     create: {

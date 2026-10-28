@@ -13,15 +13,13 @@ const NAV_GROUPS = [
       { href: '/admin', label: 'Overview' },
       { href: '/admin/companies', label: 'Companies' },
       { href: '/admin/vendors', label: 'Vendors' },
-      { href: '/admin/users', label: 'Users' },
-      { href: '/admin/invitations', label: 'Invitations' },
     ],
   },
   {
     label: 'Match & meet',
     items: [
-      { href: '/admin/workflows', label: 'Workflows' },
       { href: '/admin/forms', label: 'Forms' },
+      { href: '/admin/workflows', label: 'Workflows' },
       { href: '/admin/profiles', label: 'Profiles' },
       { href: '/admin/matchmaking', label: 'Matchmaking' },
       { href: '/admin/schedules', label: 'Schedules' },
@@ -106,8 +104,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="page-shell min-h-screen px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto max-w-7xl">{children}</div>
+      <main className="min-h-screen p-6 lg:p-8">
+        <div className="w-full">{children}</div>
       </main>
     </div>
   );

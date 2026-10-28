@@ -151,7 +151,7 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="page-shell flex flex-col lg:h-[calc(100dvh-8.25rem)] lg:min-h-0 lg:overflow-hidden">
+    <div className="flex flex-col lg:h-[calc(100dvh-8.25rem)] lg:min-h-0 lg:overflow-hidden">
       <div className="shrink-0">
         <PageHeader
           title={name || 'Form'}

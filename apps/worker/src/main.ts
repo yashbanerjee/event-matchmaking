@@ -110,7 +110,9 @@ async function handleMessage(
   try {
     await recordJob(queue, queue, messageId, content, 'RUNNING');
 
-    if (queue === 'em.invitations' || content.email) {
+    if (content.purpose === 'CORRECTION' || content.correctionUrl) {
+      await handleCorrection(content);
+    } else if (queue === 'em.invitations' || content.invitationId) {
       await handleInvitation(content);
     } else if (queue === 'em.notifications' || queue === 'em.reports') {
       await handleNotification(content);
@@ -142,6 +144,44 @@ async function handleMessage(
       }, Math.min(30_000, 500 * 2 ** attempts + Math.random() * 250));
     }
   }
+}
+
+async function handleCorrection(content: Record<string, unknown>) {
+  const correctionId = String(content.correctionId ?? '');
+  const email = String(content.email ?? '');
+  const correctionUrl = String(content.correctionUrl ?? '');
+  if (!email || !correctionUrl) {
+    return;
+  }
+
+  logger.info(
+    {
+      to: email,
+      correctionUrl,
+      organizationName: content.organizationName,
+      formName: content.formName,
+      fieldSummary: content.fieldSummary,
+    },
+    'Correction email dispatched (console provider)',
+  );
+
+  await prisma.notificationEvent.create({
+    data: {
+      templateCode: 'correction',
+      recipientEmail: email,
+      payload: content as object,
+      idempotencyKey: `correction.email:${correctionId || correctionUrl}`,
+      deliveries: {
+        create: {
+          status: 'SENT',
+          provider: process.env.EMAIL_PROVIDER ?? 'console',
+          attempt: 1,
+          sentAt: new Date(),
+          providerResponse: { mode: 'console' },
+        },
+      },
+    },
+  });
 }
 
 async function handleInvitation(content: Record<string, unknown>) {

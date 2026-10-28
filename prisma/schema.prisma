@@ -94,6 +94,12 @@ enum SubmissionStatus {
   NEEDS_INFO
 }
 
+enum CorrectionStatus {
+  OPEN
+  RESOLVED
+  SUPERSEDED
+}
+
 enum MatchmakingRunStatus {
   DRAFT
   QUEUED
@@ -193,6 +199,7 @@ model User {
   invitationsAccepted   Invitation[]           @relation("InvitationAcceptor")
   refreshTokens         RefreshToken[]
   formSubmissions       FormSubmission[]
+  submissionCorrections SubmissionCorrection[] @relation("CorrectionRequester")
   meetingParticipations MeetingParticipant[]
   meetingConfirmations  MeetingConfirmation[]
   feedbacks             MeetingFeedback[]
@@ -369,7 +376,8 @@ model Vendor {
   capacityPerDay     Int?
   commercialPrefs    Json     @default("{}")
   verificationStatus String   @default("UNVERIFIED")
-  approvalStatus     String   @default("PENDING")
+  /// INVITED | WAITING_FOR_REVIEW | IN_REVIEW | VERIFIED | RESEND_FOR_IMPROVEMENTS
+  approvalStatus     String   @default("INVITED")
   onboardingComplete Boolean  @default(false)
   matchingEligible   Boolean  @default(false)
   profileVersion     Int      @default(0)
@@ -538,13 +546,44 @@ model FormSubmission {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  formVersion  FormVersion  @relation(fields: [formVersionId], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
-  submittedBy  User         @relation(fields: [submittedById], references: [id])
+  formVersion  FormVersion             @relation(fields: [formVersionId], references: [id])
+  organization Organization            @relation(fields: [organizationId], references: [id])
+  submittedBy  User                    @relation(fields: [submittedById], references: [id])
+  corrections  SubmissionCorrection[]
 
   @@index([organizationId, status])
   @@index([formVersionId])
   @@map("form_submissions")
+}
+
+model SubmissionCorrection {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  submissionId    String           @db.Uuid
+  status          CorrectionStatus @default(OPEN)
+  requestedById   String           @db.Uuid
+  accessTokenHash String?          @unique
+  createdAt       DateTime         @default(now())
+  resolvedAt      DateTime?
+
+  submission  FormSubmission               @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  requestedBy User                         @relation("CorrectionRequester", fields: [requestedById], references: [id])
+  fields      SubmissionCorrectionField[]
+
+  @@index([submissionId, status])
+  @@map("submission_corrections")
+}
+
+model SubmissionCorrectionField {
+  id           String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  correctionId String @db.Uuid
+  fieldId      String
+  note         String
+
+  correction SubmissionCorrection @relation(fields: [correctionId], references: [id], onDelete: Cascade)
+
+  @@unique([correctionId, fieldId])
+  @@index([correctionId])
+  @@map("submission_correction_fields")
 }
 
 // ─── Availability ────────────────────────────────────────────────────────────
