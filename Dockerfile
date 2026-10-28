@@ -46,5 +46,8 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/apps ./apps
 
-EXPOSE 3000 4000
+# Railway sets PORT (often 8080). App must listen on that same port.
+ENV HOSTNAME=0.0.0.0
+ENV PORT=8080
+EXPOSE 8080
 CMD ["node", "scripts/start-by-type.mjs"]

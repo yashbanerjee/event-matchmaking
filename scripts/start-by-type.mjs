@@ -69,25 +69,6 @@ if (type === 'api') {
   }
   runNode(mainJs);
 } else {
-  // web — prefer Next standalone server if present
-  const standalone = resolve(root, 'apps/web/server.js');
-  const nestedStandalone = resolve(root, 'apps/web/.next/standalone/apps/web/server.js');
-  if (existsSync(standalone)) {
-    runNode(standalone);
-  } else if (existsSync(nestedStandalone)) {
-    runNode(nestedStandalone);
-  } else {
-    const port = process.env.PORT || '3000';
-    runNpm([
-      'run',
-      'start',
-      '-w',
-      '@em/web',
-      '--',
-      '-H',
-      '0.0.0.0',
-      '-p',
-      String(port),
-    ]);
-  }
+  // web — always bind to process.env.PORT (Railway public port, e.g. 8080)
+  runNode(resolve(root, 'scripts/start-web.mjs'));
 }
