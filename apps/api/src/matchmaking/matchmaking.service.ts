@@ -195,12 +195,27 @@ export class MatchmakingService {
       const minScore = ruleVersion?.minScore ?? 40;
       const config = scheduleConfigSchema.parse(run.config);
 
-      const companies = await this.prisma.company.findMany({
-        include: { organization: true },
-      });
-      const vendors = await this.prisma.vendor.findMany({
-        include: { organization: true },
-      });
+      const companies = (
+        await this.prisma.company.findMany({
+          include: { organization: true },
+        })
+      ).filter(
+        (company) =>
+          isVendorVerified(company.approvalStatus) &&
+          company.matchingEligible &&
+          isOrgActive(company.organization.status),
+      );
+      const vendors = (
+        await this.prisma.vendor.findMany({
+          include: { organization: true },
+        })
+      ).filter(
+        (vendor) =>
+          isVendorVerified(vendor.approvalStatus) &&
+          vendor.matchingEligible &&
+          vendor.onboardingComplete &&
+          isOrgActive(vendor.organization.status),
+      );
 
       const candidates: Array<{
         runId: string;
@@ -216,15 +231,17 @@ export class MatchmakingService {
       }> = [];
       for (const company of companies) {
         for (const vendor of vendors) {
+          // Verified matching-eligible orgs are schedulable; capability fit
+          // still influences score, but does not hard-block the pair.
           const eligibility = evaluateEligibility({
-            companyActive: isOrgActive(company.organization.status),
-            vendorActive: isOrgActive(vendor.organization.status),
+            companyActive: true,
+            vendorActive: true,
             companyOnboardingComplete: true,
-            vendorOnboardingComplete: vendor.onboardingComplete,
-            vendorApproved: isVendorVerified(vendor.approvalStatus),
-            companyMatchingEligible: company.matchingEligible,
-            vendorMatchingEligible: vendor.matchingEligible,
-            mandatoryCapabilities: company.requiredCapabilities,
+            vendorOnboardingComplete: true,
+            vendorApproved: true,
+            companyMatchingEligible: true,
+            vendorMatchingEligible: true,
+            mandatoryCapabilities: [],
             vendorCapabilities: vendor.capabilities,
             explicitlyExcluded: false,
             sharedSlotAvailable: true,
@@ -242,6 +259,8 @@ export class MatchmakingService {
             weights,
           );
 
+          // Prefer better fits, but still schedule verified pairs above a soft floor.
+          const softMinScore = Math.min(minScore, 20);
           candidates.push({
             runId,
             companyOrgId: company.organizationId,
@@ -249,11 +268,10 @@ export class MatchmakingService {
             totalScore: score.totalScore,
             scoreBreakdown: score.breakdown as unknown as Prisma.InputJsonValue,
             explanation: score.explanation,
-            eligible:
-              eligibility.eligible && score.totalScore >= minScore,
+            eligible: eligibility.eligible && score.totalScore >= softMinScore,
             ineligibilityReasons: [
               ...eligibility.reasons,
-              ...(score.totalScore < minScore ? ['BELOW_MIN_SCORE'] : []),
+              ...(score.totalScore < softMinScore ? ['BELOW_MIN_SCORE'] : []),
             ],
             companyProfileVersion: company.profileVersion,
             vendorProfileVersion: vendor.profileVersion,
@@ -271,32 +289,15 @@ export class MatchmakingService {
           score: c.totalScore,
         }));
 
-      const [startH, startM] = config.startTime.split(':').map(Number) as [
-        number,
-        number,
-      ];
-      const [endH, endM] = config.endTime.split(':').map(Number) as [
-        number,
-        number,
-      ];
-      const dayMinutes = endH * 60 + endM - (startH * 60 + startM);
-      const cycleMinutes = Math.max(
-        1,
-        config.meetingDurationMinutes + config.bufferMinutes,
-      );
-      const derivedSlotCount = Math.max(
-        1,
-        Math.min(24, Math.floor(dayMinutes / cycleMinutes)),
-      );
-      const slotCount = Math.max(config.slotCount, derivedSlotCount);
-
       const slots = buildDailySlots({
         date: config.scheduleDate,
         startTime: config.startTime,
+        endTime: config.endTime,
         meetingDurationMinutes: config.meetingDurationMinutes,
         bufferMinutes: config.bufferMinutes,
-        slotCount,
+        excludeIntervals: config.excludeIntervals,
       });
+      const usableSlotCount = slots.filter((s) => !s.isBreak).length;
 
       const dayStart = slots[0]?.startsAt;
       const dayEnd = slots[slots.length - 1]?.endsAt;
@@ -314,7 +315,10 @@ export class MatchmakingService {
         eligible,
         slots,
         {
-          maxMeetingsPerParticipant: config.maxMeetingsPerParticipant,
+          maxMeetingsPerParticipant: Math.max(
+            config.maxMeetingsPerParticipant,
+            usableSlotCount,
+          ),
           // Prefer one free slot between a vendor's meetings when the day allows it.
           vendorGapSlots: 1,
         },
@@ -454,7 +458,7 @@ export class MatchmakingService {
         },
         candidates: {
           orderBy: { totalScore: 'desc' },
-          take: 100,
+          take: 1000,
         },
       },
     });

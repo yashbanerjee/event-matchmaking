@@ -35,11 +35,20 @@ export const scheduleConfigSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   timeZone: z.string().min(1),
-  slotCount: z.number().int().min(1).max(24).default(6),
+  slotCount: z.number().int().min(1).max(64).default(6),
   meetingDurationMinutes: z.number().int().min(5).max(240).default(15),
-  bufferMinutes: z.number().int().min(0).max(60).default(10),
-  maxMeetingsPerParticipant: z.number().int().min(1).max(20).default(6),
+  bufferMinutes: z.number().int().min(0).max(60).default(5),
+  maxMeetingsPerParticipant: z.number().int().min(1).max(64).default(24),
   mode: z.enum(['VIRTUAL', 'IN_PERSON', 'HYBRID']).default('VIRTUAL'),
+  /** Time windows where no meetings should be scheduled (e.g. lunch 12:00–13:00). */
+  excludeIntervals: z
+    .array(
+      z.object({
+        startTime: z.string().regex(/^\d{2}:\d{2}$/),
+        endTime: z.string().regex(/^\d{2}:\d{2}$/),
+      }),
+    )
+    .default([]),
   breaks: z
     .array(
       z.object({

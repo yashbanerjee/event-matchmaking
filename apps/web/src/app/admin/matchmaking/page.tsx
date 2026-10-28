@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -44,13 +44,6 @@ type Run = {
 
 type OrgOption = { id: string; name: string; code: string };
 
-type SettingsResponse = {
-  integration: Array<{
-    id: string;
-    fields: Array<{ key: string; value: unknown }>;
-  }>;
-};
-
 function toDateTimeLocal(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -63,9 +56,18 @@ function fromDateTimeLocal(value: string) {
   return d.toISOString();
 }
 
+/** Normalize `<input type="time">` values to HH:mm. */
+function toHm(value: string) {
+  return value.slice(0, 5);
+}
+
 export default function MatchmakingPage() {
   const [date, setDate] = useState('2026-11-01');
-  const [durationMinutes, setDurationMinutes] = useState(15);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [excludeEnabled, setExcludeEnabled] = useState(false);
+  const [excludeStart, setExcludeStart] = useState('12:00');
+  const [excludeEnd, setExcludeEnd] = useState('13:00');
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
@@ -75,21 +77,6 @@ export default function MatchmakingPage() {
     startsAt: '',
     reason: '',
   });
-
-  const settings = useQuery({
-    queryKey: ['settings-for-matchmaking'],
-    queryFn: () =>
-      apiFetch<SettingsResponse>('/settings', { token: getAccessToken() }),
-  });
-
-  useEffect(() => {
-    const ops = settings.data?.integration.find((g) => g.id === 'ops');
-    const field = ops?.fields.find((f) => f.key === 'ops.meetingDurationMinutes');
-    const n = Number(field?.value);
-    if (Number.isFinite(n) && n >= 5) {
-      setDurationMinutes(n);
-    }
-  }, [settings.data]);
 
   const companies = useQuery({
     queryKey: ['orgs-companies-for-matchmaking'],
@@ -112,22 +99,40 @@ export default function MatchmakingPage() {
   });
 
   const start = useMutation({
-    mutationFn: () =>
-      apiFetch<Run>('/matchmaking/runs', {
+    mutationFn: () => {
+      const start = toHm(startTime);
+      const end = toHm(endTime);
+      const gapStart = toHm(excludeStart);
+      const gapEnd = toHm(excludeEnd);
+      if (start >= end) {
+        throw new Error('End time must be after start time');
+      }
+      if (
+        excludeEnabled &&
+        (gapStart >= gapEnd || gapStart < start || gapEnd > end)
+      ) {
+        throw new Error(
+          'Exclude interval must sit inside the schedule start/end window',
+        );
+      }
+      return apiFetch<Run>('/matchmaking/runs', {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify({
           scheduleDate: date,
-          startTime: '09:00',
-          endTime: '17:00',
+          startTime: start,
+          endTime: end,
           timeZone: 'UTC',
-          slotCount: 6,
-          meetingDurationMinutes: durationMinutes,
           bufferMinutes: 5,
-          maxMeetingsPerParticipant: 6,
+          maxMeetingsPerParticipant: 24,
           mode: 'VIRTUAL',
+          excludeIntervals:
+            excludeEnabled && gapStart && gapEnd
+              ? [{ startTime: gapStart, endTime: gapEnd }]
+              : [],
         }),
-      }),
+      });
+    },
     onSuccess: (data) => {
       setRun(data);
       setError(null);
@@ -245,43 +250,83 @@ export default function MatchmakingPage() {
         </p>
       </div>
 
-      <Card className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm">Schedule date</label>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm">Meeting duration (min)</label>
-          <Input
-            type="number"
-            min={5}
-            max={240}
-            className="w-28"
-            value={durationMinutes}
-            onChange={(e) =>
-              setDurationMinutes(Math.max(5, Number(e.target.value) || 15))
-            }
-          />
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Default from Settings → Ops
-          </p>
-        </div>
-        <Button onClick={() => start.mutate()} disabled={start.isPending}>
-          {start.isPending ? 'Running…' : 'Generate schedule'}
-        </Button>
-        {schedule && schedule.status !== 'PUBLISHED' && (
-          <Button
-            variant="outline"
-            onClick={() => publish.mutate(schedule.id)}
-            disabled={publish.isPending || meetings.length === 0}
-          >
-            Publish schedule
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-sm">Schedule date</label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm">Start time</label>
+            <Input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm">End time</label>
+            <Input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+            />
+          </div>
+          <Button onClick={() => start.mutate()} disabled={start.isPending}>
+            {start.isPending ? 'Running…' : 'Generate schedule'}
           </Button>
-        )}
+          {schedule && schedule.status !== 'PUBLISHED' && (
+            <Button
+              variant="outline"
+              onClick={() => publish.mutate(schedule.id)}
+              disabled={publish.isPending || meetings.length === 0}
+            >
+              Publish schedule
+            </Button>
+          )}
+        </div>
+
+        <div className="rounded-md border border-[var(--border)] p-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={excludeEnabled}
+              onChange={(e) => setExcludeEnabled(e.target.checked)}
+            />
+            Exclude interval (no meetings in this window)
+          </label>
+          {excludeEnabled ? (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div>
+                <label className="mb-1 block text-sm">Exclude from</label>
+                <Input
+                  type="time"
+                  value={excludeStart}
+                  onChange={(e) => setExcludeStart(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm">Exclude to</label>
+                <Input
+                  type="time"
+                  value={excludeEnd}
+                  onChange={(e) => setExcludeEnd(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-[var(--muted)]">
+                Example: lunch break 12:00–13:00
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          Schedules all verified matching-eligible companies and vendors.
+          Meeting length comes from Settings → Operations.
+        </p>
       </Card>
 
       {error && <p className="text-sm text-red-700">{error}</p>}
@@ -426,11 +471,11 @@ export default function MatchmakingPage() {
               }
             />
             <p className="mt-1 text-xs text-[var(--muted)]">
-              End time is calculated from meeting duration (
+              End time keeps the meeting duration from Settings
               {edit?.endsAt
-                ? `${Math.round((new Date(edit.endsAt).getTime() - new Date(edit.startsAt).getTime()) / 60_000)} min`
-                : `${durationMinutes} min`}
-              ).
+                ? ` (${Math.round((new Date(edit.endsAt).getTime() - new Date(edit.startsAt).getTime()) / 60_000)} min)`
+                : ''}
+              .
             </p>
           </div>
           <div>

@@ -86,6 +86,26 @@ describe('scheduleGreedy', () => {
     assert.ok(v1Slots[1]! - v1Slots[0]! >= 2);
   });
 
+  it('marks exclude intervals as break slots', () => {
+    const slots = buildDailySlots({
+      date: '2026-11-01',
+      startTime: '09:00',
+      endTime: '14:00',
+      meetingDurationMinutes: 60,
+      bufferMinutes: 0,
+      excludeIntervals: [{ startTime: '12:00', endTime: '13:00' }],
+    });
+
+    const breakSlots = slots.filter((s) => s.isBreak);
+    assert.ok(breakSlots.length >= 1);
+    assert.ok(
+      breakSlots.some(
+        (s) =>
+          s.startsAt.getUTCHours() === 12 && s.startsAt.getUTCMinutes() === 0,
+      ),
+    );
+  });
+
   it('respects max meetings per participant', () => {
     const slots = buildDailySlots({
       date: '2026-11-01',
