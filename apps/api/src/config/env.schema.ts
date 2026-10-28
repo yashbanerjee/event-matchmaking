@@ -29,10 +29,27 @@ export const envSchema = z.object({
   // These remain optional env fallbacks for boot before DB overrides exist.
   EMAIL_PROVIDER: z.enum(['console', 'smtp', 'sendgrid']).default('console'),
   EMAIL_FROM: z.string().email().default('noreply@example.com'),
+  EMAIL_FROM_NAME: z.string().optional().default('Event Matchmaking'),
   SMTP_HOST: z.string().optional().default(''),
   SMTP_PORT: z.coerce.number().optional().default(587),
+  SMTP_SECURE: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional()
+    .default('false'),
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
+  SMTP_MIN_INTERVAL_MS: z.coerce.number().int().min(0).max(60_000).default(5000),
+  SMTP_FALLBACK_HOST: z.string().optional().default(''),
+  SMTP_FALLBACK_PORT: z.coerce.number().optional().default(587),
+  SMTP_FALLBACK_SECURE: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional()
+    .default('false'),
+  SMTP_FALLBACK_USER: z.string().optional().default(''),
+  SMTP_FALLBACK_PASS: z.string().optional().default(''),
+  SMTP_FALLBACK_FROM: z.string().optional().default(''),
   SENDGRID_API_KEY: z.string().optional().default(''),
   STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./uploads'),

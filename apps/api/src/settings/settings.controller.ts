@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@em/shared';
 import {
@@ -8,6 +16,7 @@ import {
 } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { EmailService } from '../integrations/email/email.service';
 import { SettingsService } from './settings.service';
 
 @ApiTags('settings')
@@ -15,7 +24,10 @@ import { SettingsService } from './settings.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('settings')
 export class SettingsController {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly email: EmailService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
@@ -54,5 +66,21 @@ export class SettingsController {
     @Body() body: { key: string; enabled: boolean },
   ) {
     return this.settings.setFlag(user, body.key, body.enabled);
+  }
+
+  @Post('test-email')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  async testEmail(@Body() body: { to?: string }) {
+    const to = body.to?.trim();
+    if (!to) {
+      throw new BadRequestException('Enter an email address to send the test to');
+    }
+    const result = await this.email.sendTest(to);
+    return {
+      ok: true,
+      to,
+      provider: result.provider,
+      messageId: result.messageId,
+    };
   }
 }

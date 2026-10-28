@@ -39,6 +39,9 @@ export default function SettingsPage() {
   }>(['settings'], '/settings');
 
   const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [testTo, setTestTo] = useState('');
+  const [testNote, setTestNote] = useState('');
+  const [testError, setTestError] = useState('');
 
   useEffect(() => {
     if (!data?.integration) return;
@@ -93,6 +96,23 @@ export default function SettingsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 
+  const testMail = useMutation({
+    mutationFn: () =>
+      apiFetch<{ ok: boolean; provider: string }>('/settings/test-email', {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({ to: testTo.trim() }),
+      }),
+    onSuccess: (res) => {
+      setTestNote(`Test email sent via ${res.provider} to ${testTo.trim()}.`);
+      setTestError('');
+    },
+    onError: (caught) => {
+      setTestNote('');
+      setTestError((caught as Error).message || 'Test email failed.');
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -100,7 +120,8 @@ export default function SettingsPage() {
         <p className="text-sm text-[var(--muted)]">
           Email, storage, AI, and ops are managed here (not via .env). Values are
           stored in the database; secrets are masked on read. Leave a secret blank
-          to keep the existing value.
+          to keep the existing value. For SMTP, set provider to smtp, save, then
+          send a test email.
         </p>
       </div>
 
@@ -113,7 +134,9 @@ export default function SettingsPage() {
             <div>
               <h2 className="font-medium">{group.title}</h2>
               <p className="text-xs text-[var(--muted)]">
-                Setting key shown on each row
+                {group.id === 'email'
+                  ? 'Messages to vendors use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
+                  : 'Setting key shown on each row'}
               </p>
             </div>
             <Button
@@ -203,6 +226,44 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+          {group.id === 'email' ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Send a test email</h3>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Uses the saved settings. Save the email group first if you
+                  changed host, port, or password.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label className="mb-1 block text-sm font-medium">
+                    Send test to
+                  </label>
+                  <Input
+                    type="email"
+                    value={testTo}
+                    onChange={(e) => setTestTo(e.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="off"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  disabled={testMail.isPending || !testTo.trim()}
+                  onClick={() => testMail.mutate()}
+                >
+                  {testMail.isPending ? 'Sending…' : 'Send test'}
+                </Button>
+              </div>
+              {testNote ? (
+                <p className="text-sm text-[var(--success)]">{testNote}</p>
+              ) : null}
+              {testError ? (
+                <p className="text-sm text-[var(--danger)]">{testError}</p>
+              ) : null}
+            </div>
+          ) : null}
         </Card>
       ))}
 

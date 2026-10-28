@@ -1,19 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OrganizationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EnvService } from '../config/env.service';
 import { OutboxService } from '../messaging/outbox.service';
+import { EmailService } from '../integrations/email/email.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
 @Injectable()
 export class OrganizationsService {
+  private readonly logger = new Logger(OrganizationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly env: EnvService,
     private readonly outbox: OutboxService,
+    private readonly email: EmailService,
   ) {}
 
   async createCompany(
@@ -208,13 +212,29 @@ export class OrganizationsService {
       return { org, invitation, registrationUrl };
     });
 
+    let emailSent = false;
+    try {
+      await this.email.send({
+        to: email,
+        subject: `You are invited to ${result.org.name}`,
+        text: `Hello,\n\nYou have been invited to join ${result.org.name} on Event Matchmaking.\n\nRegister here: ${result.registrationUrl}\n\nThis link expires on ${expiresAt.toISOString()}.`,
+        html: `<p>Hello,</p><p>You have been invited to join <strong>${result.org.name}</strong> on Event Matchmaking.</p><p><a href="${result.registrationUrl}">Register here</a></p><p>This link expires on ${expiresAt.toUTCString()}.</p>`,
+        idempotencyKey: `invitation.email:${result.invitation.id}`,
+      });
+      emailSent = true;
+    } catch (err) {
+      this.logger.warn(
+        `Invitation email failed for ${email}: ${(err as Error).message}`,
+      );
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'vendor.invite',
       entityType: 'Organization',
       entityId: result.org.id,
       outcome: 'SUCCESS',
-      after: { email, name, code },
+      after: { email, name, code, emailSent },
     });
 
     return {
@@ -227,6 +247,7 @@ export class OrganizationsService {
       },
       inviteUrl: result.registrationUrl,
       emailQueued: true,
+      emailSent,
     };
   }
 

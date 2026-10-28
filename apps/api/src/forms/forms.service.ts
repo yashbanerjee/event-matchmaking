@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { FieldType, Prisma } from '@prisma/client';
@@ -16,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
 import { EnvService } from '../config/env.service';
+import { EmailService } from '../integrations/email/email.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
@@ -36,11 +38,14 @@ export interface FormFieldInput {
 
 @Injectable()
 export class FormsService {
+  private readonly logger = new Logger(FormsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly env: EnvService,
+    private readonly email: EmailService,
   ) {}
 
   async createForm(
@@ -775,19 +780,36 @@ export class FormsService {
       return created;
     });
 
+    let emailSent = false;
+    try {
+      await this.email.send({
+        to: email,
+        subject: `Please update ${input.fields.length} field${input.fields.length === 1 ? '' : 's'} on ${submission.formVersion.form.name}`,
+        text: `Hello,\n\nSome answers on ${submission.formVersion.form.name} need updates for ${submission.organization.name}.\n\nOpen this link and fix only the marked fields:\n${correctionUrl}\n\n${labels}`,
+        html: `<p>Hello,</p><p>Some answers on <strong>${submission.formVersion.form.name}</strong> need updates for <strong>${submission.organization.name}</strong>.</p><p><a href="${correctionUrl}">Update marked fields</a></p><pre style="white-space:pre-wrap;font-family:inherit">${labels.replace(/</g, '&lt;')}</pre>`,
+        idempotencyKey: `correction.email:${correction.id}`,
+      });
+      emailSent = true;
+    } catch (err) {
+      this.logger.warn(
+        `Correction email failed for ${email}: ${(err as Error).message}`,
+      );
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'submission.correction.request',
       entityType: 'FormSubmission',
       entityId: submissionId,
       outcome: 'SUCCESS',
-      after: { fieldCount: input.fields.length },
+      after: { fieldCount: input.fields.length, emailSent },
     });
 
     return {
       correction,
       correctionUrl,
       emailQueued: true,
+      emailSent,
     };
   }
 
