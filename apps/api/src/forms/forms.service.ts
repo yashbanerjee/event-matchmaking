@@ -359,14 +359,47 @@ export class FormsService {
       });
     });
 
-    const published = await this.prisma.formVersion.update({
-      where: { id: draft.id },
-      data: {
-        status: 'PUBLISHED',
-        publishedAt: new Date(),
-        schemaHash: `v${draft.version}:${schema.fields.length}`,
-      },
-      include: { fields: true },
+    const published = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formVersion.update({
+        where: { id: draft.id },
+        data: {
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+          schemaHash: `v${draft.version}:${schema.fields.length}`,
+        },
+        include: { fields: true },
+      });
+
+      // Point open assignments at the newly published version so vendors/companies
+      // immediately see added/removed fields (unless they already submitted).
+      const assignments = await tx.formAssignment.findMany({
+        where: { formId },
+        select: { id: true, organizationId: true, formVersionId: true },
+      });
+      for (const assignment of assignments) {
+        if (!assignment.organizationId) {
+          await tx.formAssignment.update({
+            where: { id: assignment.id },
+            data: { formVersionId: next.id },
+          });
+          continue;
+        }
+        const lockedSubmission = await tx.formSubmission.findFirst({
+          where: {
+            organizationId: assignment.organizationId,
+            formVersion: { formId },
+            status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'] },
+          },
+          select: { id: true },
+        });
+        if (lockedSubmission) continue;
+        await tx.formAssignment.update({
+          where: { id: assignment.id },
+          data: { formVersionId: next.id },
+        });
+      }
+
+      return next;
     });
 
     await this.audit.record({
@@ -502,22 +535,26 @@ export class FormsService {
 
     for (const assignment of assignments) {
       if (!assignment.organizationId || !assignment.organization) continue;
-      if (assignment.formVersion.status !== 'PUBLISHED') continue;
 
       const organization = assignment.organization;
       const organizationId = assignment.organizationId;
-      const schema = resolveSchema(
-        assignment.formVersion.schemaJson,
-        assignment.formVersion.fields,
-      );
 
+      const latestPublished = await this.prisma.formVersion.findFirst({
+        where: { formId: assignment.formId, status: 'PUBLISHED' },
+        orderBy: { version: 'desc' },
+        include: { fields: true, form: true },
+      });
+      if (!latestPublished) continue;
+
+      // Prefer the latest published schema for orgs that have not submitted yet.
       const submission = await this.prisma.formSubmission.findFirst({
         where: {
           organizationId,
-          formVersionId: assignment.formVersionId,
+          formVersion: { formId: assignment.formId },
         },
         orderBy: { createdAt: 'desc' },
         include: {
+          formVersion: { include: { fields: true } },
           corrections: {
             where: { status: 'OPEN' },
             include: { fields: true },
@@ -528,18 +565,36 @@ export class FormsService {
       });
 
       const openCorrection = submission?.corrections[0] ?? null;
-      const workflowStatus =
-        organization.vendor?.approvalStatus ??
-        organization.company?.approvalStatus ??
-        organization.status;
-
+      const needsCorrection =
+        submission?.status === 'NEEDS_INFO' && Boolean(openCorrection);
       const lockedStatuses = new Set([
         'SUBMITTED',
         'UNDER_REVIEW',
         'APPROVED',
       ]);
-      const needsCorrection =
-        submission?.status === 'NEEDS_INFO' && Boolean(openCorrection);
+
+      // Pending vendors always get the latest published fields.
+      // After submit (or during correction), keep the submission's version.
+      const versionForUi = !submission
+        ? latestPublished
+        : submission.formVersion;
+      const schema = resolveSchema(
+        versionForUi.schemaJson,
+        versionForUi.fields,
+      );
+
+      if (!submission && assignment.formVersionId !== latestPublished.id) {
+        await this.prisma.formAssignment.update({
+          where: { id: assignment.id },
+          data: { formVersionId: latestPublished.id },
+        });
+      }
+
+      const workflowStatus =
+        organization.vendor?.approvalStatus ??
+        organization.company?.approvalStatus ??
+        organization.status;
+
       const canEdit = !submission || needsCorrection;
       const action: 'submit' | 'correct' | 'view' = !submission
         ? 'submit'
@@ -553,7 +608,7 @@ export class FormsService {
         organizationName: organization.name,
         organizationType: organization.type,
         formId: assignment.formId,
-        formVersionId: assignment.formVersionId,
+        formVersionId: versionForUi.id,
         formName: assignment.form.name,
         schema,
         workflowStatus,
@@ -580,7 +635,9 @@ export class FormsService {
             }
           : null,
         canEdit,
-        locked: Boolean(submission) && lockedStatuses.has(submission!.status),
+        locked: submission
+          ? lockedStatuses.has(submission.status)
+          : false,
         action,
       });
     }

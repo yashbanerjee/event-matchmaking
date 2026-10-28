@@ -20,6 +20,8 @@
   --sidebar-fg: #e8eef4;
   --sidebar-muted: #8aa0b4;
   --sidebar-active: #143049;
+  /* Override to resize the admin rail (e.g. 14rem, 240px, 18%). */
+  --sidebar-width: 17rem;
   --ring: #0f766e;
   --shadow: 0 16px 40px rgba(15, 28, 39, 0.08);
   --radius: 16px;
@@ -29,6 +31,22 @@
   --page-pad-top: 1.5rem;
   /* Extra bottom inset so lists, builders, and panels never hug the viewport edge */
   --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Side-by-side shell whenever the viewport can fit rail + a usable main pane */
+.admin-shell {
+  min-height: 100vh;
+}
+
+@media (min-width: 640px) {
+  .admin-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+}
+
+.admin-sidebar {
+  width: min(var(--sidebar-width), 100%);
 }
 
 @media (min-width: 1024px) {
