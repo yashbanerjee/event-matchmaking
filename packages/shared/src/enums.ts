@@ -19,7 +19,7 @@ export const DEFAULT_MATCHING_WEIGHTS = {
 
 export const DEFAULT_SCHEDULE_CONFIG = {
   slotCount: 6,
-  meetingDurationMinutes: 30,
+  meetingDurationMinutes: 15,
   bufferMinutes: 10,
   maxMeetingsPerParticipant: 6,
   mode: 'VIRTUAL' as const,

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   COUNTRIES,
+  CURRENCIES,
   isFieldVisible,
   type FormField,
   type FormSchemaDefinition,
@@ -285,14 +286,23 @@ function Control({
       />
     );
   }
-  if (field.type === 'select' || field.type === 'country') {
+  if (
+    field.type === 'select' ||
+    field.type === 'country' ||
+    field.type === 'currency'
+  ) {
     const options =
       field.type === 'country'
         ? COUNTRIES.map((country) => ({
             value: country.code,
             label: country.name,
           }))
-        : (field.options ?? []);
+        : field.type === 'currency'
+          ? CURRENCIES.map((currency) => ({
+              value: currency.code,
+              label: `${currency.code} — ${currency.name}`,
+            }))
+          : (field.options ?? []);
     return (
       <select
         id={id}
@@ -302,7 +312,9 @@ function Control({
         value={text}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Select</option>
+        <option value="">
+          {field.type === 'currency' ? 'Select currency' : 'Select'}
+        </option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -378,7 +390,7 @@ function Control({
     );
   }
   const type =
-    field.type === 'number' || field.type === 'currency'
+    field.type === 'number'
       ? 'number'
       : field.type === 'datetime'
         ? 'datetime-local'

@@ -252,6 +252,15 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
 
   // Ops / feature flags
   {
+    key: 'ops.meetingDurationMinutes',
+    envKey: 'MEETING_DURATION_MINUTES',
+    label: 'Meeting duration (minutes)',
+    description:
+      'Default length for generated matchmaking meetings (e.g. 15). Used when generating schedules.',
+    group: 'ops',
+    type: 'number',
+  },
+  {
     key: 'ops.semanticSearch',
     envKey: 'FEATURE_SEMANTIC_SEARCH',
     label: 'Semantic search',

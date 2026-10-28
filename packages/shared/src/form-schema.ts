@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CURRENCIES } from "./currencies.js";
 
 export const FIELD_TYPES = [
   "text",
@@ -371,8 +372,11 @@ function validateLeaf(field: FormField, value: unknown, issues: { fieldId: strin
       issues.push({ fieldId: field.id, message: `${field.label} must be an http(s) URL.` });
     }
   }
-  if ((field.type === "number" || field.type === "currency") && Number.isNaN(Number(value))) {
+  if (field.type === "number" && Number.isNaN(Number(value))) {
     issues.push({ fieldId: field.id, message: `${field.label} must be a number.` });
+  }
+  if (field.type === "currency" && !CURRENCIES.some((currency) => currency.code === text)) {
+    issues.push({ fieldId: field.id, message: `${field.label} must be a valid currency.` });
   }
   if (field.validation?.minLength && text.length < field.validation.minLength) {
     issues.push({ fieldId: field.id, message: `${field.label} is too short.` });

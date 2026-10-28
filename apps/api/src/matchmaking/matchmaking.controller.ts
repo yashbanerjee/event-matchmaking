@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   UseGuards,
@@ -66,5 +67,21 @@ export class MatchmakingController {
     },
   ) {
     return this.matchmaking.manualAssign(user, body);
+  }
+
+  @Patch('meetings/:id')
+  @RequirePermissions(PERMISSIONS.SCHEDULE_OVERRIDE)
+  updateMeeting(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      companyOrgId?: string;
+      vendorOrgId?: string;
+      startsAt?: string;
+      reason?: string;
+    },
+  ) {
+    return this.matchmaking.updateMeeting(user, id, body);
   }
 }

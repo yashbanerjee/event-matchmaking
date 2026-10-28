@@ -173,6 +173,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <SidebarNav pathname={pathname} onNavigate={() => setNavOpen(false)} />
 
         <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+          <Link href="/vendor" onClick={() => setNavOpen(false)}>
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
+            >
+              Open vendor panel
+            </Button>
+          </Link>
           <Link href="/portal" onClick={() => setNavOpen(false)}>
             <Button
               variant="ghost"

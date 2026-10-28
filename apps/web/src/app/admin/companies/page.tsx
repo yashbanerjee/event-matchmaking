@@ -1,7 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormSchemaDefinition } from '@em/shared';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -98,6 +103,7 @@ export default function CompaniesPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState(
@@ -127,15 +133,33 @@ export default function CompaniesPage() {
     submissionId?: string | null;
   } | null>(null);
 
-  const queryKey = ['companies', page] as const;
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [search]);
 
-  const { data, isLoading, error } = useQuery({
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const queryKey = ['companies', page, debouncedSearch] as const;
+
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey,
-    queryFn: () =>
-      apiFetch<OrgList>(
-        `/organizations?type=COMPANY&page=${page}&pageSize=${PAGE_SIZE}`,
-        { token: getAccessToken() },
-      ),
+    queryFn: () => {
+      const params = new URLSearchParams({
+        type: 'COMPANY',
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      return apiFetch<OrgList>(`/organizations?${params}`, {
+        token: getAccessToken(),
+      });
+    },
+    placeholderData: keepPreviousData,
   });
 
   const forms = useQuery({
@@ -166,17 +190,7 @@ export default function CompaniesPage() {
     }>;
   }, [forms.data]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q || !data?.items) return data?.items ?? [];
-    return data.items.filter(
-      (org) =>
-        org.name.toLowerCase().includes(q) ||
-        org.code.toLowerCase().includes(q) ||
-        (org.contactEmail ?? '').toLowerCase().includes(q) ||
-        (org.industry ?? '').toLowerCase().includes(q),
-    );
-  }, [data?.items, search]);
+  const items = data?.items ?? [];
 
   const resetAddForm = () => {
     setForm({
@@ -392,7 +406,7 @@ export default function CompaniesPage() {
           <h2 className="text-lg font-semibold">Directory</h2>
           <Input
             className="max-w-xs"
-            placeholder="Search code, name, industry…"
+            placeholder="Search name or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -401,14 +415,24 @@ export default function CompaniesPage() {
         {isLoading && <p className="text-[var(--muted)]">Loading…</p>}
         {error && <p className="text-rose-700">{(error as Error).message}</p>}
 
-        {!isLoading && filtered.length === 0 ? (
+        {!isLoading && items.length === 0 ? (
           <EmptyState
-            title="No companies yet"
-            description="Use Add to invite a company by email, or fill the form as admin."
+            title={
+              debouncedSearch ? 'No matching companies' : 'No companies yet'
+            }
+            description={
+              debouncedSearch
+                ? 'Try another name or email.'
+                : 'Use Add to invite a company by email, or fill the form as admin.'
+            }
           />
         ) : (
           <>
-            <Table>
+            <Table
+              className={
+                isFetching ? 'opacity-70 transition-opacity' : undefined
+              }
+            >
               <THead>
                 <TR>
                   <TH>Code</TH>
@@ -420,7 +444,7 @@ export default function CompaniesPage() {
                 </TR>
               </THead>
               <TBody>
-                {filtered.map((org) => {
+                {items.map((org) => {
                   const status =
                     org.workflowStatus ??
                     org.company?.approvalStatus ??

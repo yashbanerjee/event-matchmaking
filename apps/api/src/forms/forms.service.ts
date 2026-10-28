@@ -1382,7 +1382,9 @@ export class FormsService {
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },
           onboardingComplete: true,
-          matchingEligible: org.vendor.approvalStatus === 'APPROVED',
+          matchingEligible:
+            org.vendor.approvalStatus === 'VERIFIED' ||
+            org.vendor.approvalStatus === 'APPROVED',
         },
       });
     }

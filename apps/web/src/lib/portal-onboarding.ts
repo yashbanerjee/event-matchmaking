@@ -50,13 +50,15 @@ export async function resolveParticipantHome(
   );
   if (isAdmin) return '/admin';
 
+  const isVendor = roles.includes('VENDOR_USER');
+
   try {
     const onboarding = await fetchOnboarding();
     if (onboarding.pendingCount > 0) {
-      return '/portal/onboarding';
+      return isVendor ? '/vendor/forms' : '/portal/onboarding';
     }
   } catch {
-    // Fall through to meetings if onboarding is unavailable.
+    // Fall through to home if onboarding is unavailable.
   }
-  return '/portal';
+  return isVendor ? '/vendor' : '/portal';
 }

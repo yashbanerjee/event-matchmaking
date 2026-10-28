@@ -628,16 +628,45 @@ export class OrganizationsService {
     pageSize?: number;
     q?: string;
   }) {
-    const page = params.page ?? 1;
-    const pageSize = Math.min(params.pageSize ?? 20, 100);
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(Math.max(1, params.pageSize ?? 20), 100);
+    const q = params.q?.trim().replace(/\s+/g, ' ') ?? '';
     const where = {
       ...(params.type ? { type: params.type } : {}),
       status: { not: 'ARCHIVED' as const },
-      ...(params.q
+      ...(q
         ? {
             OR: [
-              { name: { contains: params.q, mode: 'insensitive' as const } },
-              { code: { contains: params.q, mode: 'insensitive' as const } },
+              { name: { contains: q, mode: 'insensitive' as const } },
+              { code: { contains: q, mode: 'insensitive' as const } },
+              { industry: { contains: q, mode: 'insensitive' as const } },
+              {
+                vendor: {
+                  displayName: { contains: q, mode: 'insensitive' as const },
+                },
+              },
+              {
+                invitations: {
+                  some: {
+                    email: { contains: q, mode: 'insensitive' as const },
+                  },
+                },
+              },
+              {
+                members: {
+                  some: {
+                    user: {
+                      email: { contains: q, mode: 'insensitive' as const },
+                    },
+                  },
+                },
+              },
+              {
+                customAttrs: {
+                  path: ['contactEmail'],
+                  string_contains: q,
+                },
+              },
             ],
           }
         : {}),
@@ -646,7 +675,8 @@ export class OrganizationsService {
     const [items, total] = await Promise.all([
       this.prisma.organization.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        // Name-first when searching; newest-first for the default directory.
+        orderBy: q ? { name: 'asc' } : { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {

@@ -1,7 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { formatVendorStatus, statusTone } from '@/lib/status';
@@ -104,6 +109,7 @@ export default function VendorsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvResult, setCsvResult] = useState<string | null>(null);
@@ -124,15 +130,33 @@ export default function VendorsPage() {
     'name,email,phone,phoneCountryCode\nAcme Supplies,vendor@example.com,501234567,+971',
   );
 
-  const queryKey = ['vendors', page] as const;
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [search]);
 
-  const { data, isLoading, error } = useQuery({
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  const queryKey = ['vendors', page, debouncedSearch] as const;
+
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey,
-    queryFn: () =>
-      apiFetch<OrgList>(
-        `/organizations?type=VENDOR&page=${page}&pageSize=${PAGE_SIZE}`,
-        { token: getAccessToken() },
-      ),
+    queryFn: () => {
+      const params = new URLSearchParams({
+        type: 'VENDOR',
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      return apiFetch<OrgList>(`/organizations?${params}`, {
+        token: getAccessToken(),
+      });
+    },
+    placeholderData: keepPreviousData,
     retry: 1,
   });
 
@@ -166,16 +190,7 @@ export default function VendorsPage() {
     }>;
   }, [forms.data]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q || !data?.items) return data?.items ?? [];
-    return data.items.filter(
-      (org) =>
-        org.name.toLowerCase().includes(q) ||
-        org.code.toLowerCase().includes(q) ||
-        (org.contactEmail ?? '').toLowerCase().includes(q),
-    );
-  }, [data?.items, search]);
+  const items = data?.items ?? [];
 
   const invite = useMutation({
     mutationFn: () =>
@@ -279,7 +294,7 @@ export default function VendorsPage() {
           <h2 className="text-lg font-semibold">Directory</h2>
           <Input
             className="max-w-xs"
-            placeholder="Search vendors…"
+            placeholder="Search name or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -295,16 +310,24 @@ export default function VendorsPage() {
           </p>
         )}
 
-        {!isLoading && !error && filtered.length === 0 ? (
+        {!isLoading && !error && items.length === 0 ? (
           <EmptyState
-            title="No vendors yet"
-            description="Use Add to invite a vendor by email, or import a CSV."
+            title={debouncedSearch ? 'No matching vendors' : 'No vendors yet'}
+            description={
+              debouncedSearch
+                ? 'Try another name or email.'
+                : 'Use Add to invite a vendor by email, or import a CSV.'
+            }
           />
         ) : null}
 
-        {!isLoading && !error && filtered.length > 0 ? (
+        {!isLoading && !error && items.length > 0 ? (
           <>
-            <Table>
+            <Table
+              className={
+                isFetching ? 'opacity-70 transition-opacity' : undefined
+              }
+            >
               <THead>
                 <TR>
                   <TH>Code</TH>
@@ -316,7 +339,7 @@ export default function VendorsPage() {
                 </TR>
               </THead>
               <TBody>
-                {filtered.map((org) => {
+                {items.map((org) => {
                   const status =
                     org.workflowStatus ??
                     org.vendor?.approvalStatus ??
@@ -398,7 +421,7 @@ export default function VendorsPage() {
             <Pagination
               page={data?.page ?? page}
               pageSize={data?.pageSize ?? PAGE_SIZE}
-              total={data?.total ?? filtered.length}
+              total={data?.total ?? items.length}
               onPageChange={setPage}
             />
           </>

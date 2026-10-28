@@ -20,8 +20,17 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
+import { EffectiveConfigService } from '../settings/effective-config.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
+
+function isOrgActive(status: string): boolean {
+  return status === 'ACTIVE' || status === 'APPROVED';
+}
+
+function isVendorVerified(approvalStatus: string): boolean {
+  return approvalStatus === 'VERIFIED' || approvalStatus === 'APPROVED';
+}
 
 @Injectable()
 export class MatchmakingService {
@@ -29,6 +38,7 @@ export class MatchmakingService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly config: EffectiveConfigService,
   ) {}
 
   async ensureDefaultRule() {
@@ -86,7 +96,21 @@ export class MatchmakingService {
     actor: AuthUser,
     rawConfig: unknown,
   ) {
-    const config = scheduleConfigSchema.parse(rawConfig);
+    const incoming =
+      rawConfig && typeof rawConfig === 'object'
+        ? { ...(rawConfig as Record<string, unknown>) }
+        : {};
+    if (
+      incoming.meetingDurationMinutes === undefined ||
+      incoming.meetingDurationMinutes === null ||
+      incoming.meetingDurationMinutes === ''
+    ) {
+      incoming.meetingDurationMinutes = await this.config.getNumber(
+        'ops.meetingDurationMinutes',
+        15,
+      );
+    }
+    const config = scheduleConfigSchema.parse(incoming);
     const rule = await this.ensureDefaultRule();
     const ruleVersion = await this.prisma.matchingRuleVersion.findFirst({
       where: { ruleId: rule.id },
@@ -185,13 +209,11 @@ export class MatchmakingService {
       for (const company of companies) {
         for (const vendor of vendors) {
           const eligibility = evaluateEligibility({
-            companyActive: company.organization.status === 'ACTIVE',
-            vendorActive:
-              vendor.organization.status === 'ACTIVE' ||
-              vendor.organization.status === 'APPROVED',
+            companyActive: isOrgActive(company.organization.status),
+            vendorActive: isOrgActive(vendor.organization.status),
             companyOnboardingComplete: true,
             vendorOnboardingComplete: vendor.onboardingComplete,
-            vendorApproved: vendor.approvalStatus === 'APPROVED',
+            vendorApproved: isVendorVerified(vendor.approvalStatus),
             companyMatchingEligible: company.matchingEligible,
             vendorMatchingEligible: vendor.matchingEligible,
             mandatoryCapabilities: company.requiredCapabilities,
@@ -241,12 +263,31 @@ export class MatchmakingService {
           score: c.totalScore,
         }));
 
+      const [startH, startM] = config.startTime.split(':').map(Number) as [
+        number,
+        number,
+      ];
+      const [endH, endM] = config.endTime.split(':').map(Number) as [
+        number,
+        number,
+      ];
+      const dayMinutes = endH * 60 + endM - (startH * 60 + startM);
+      const cycleMinutes = Math.max(
+        1,
+        config.meetingDurationMinutes + config.bufferMinutes,
+      );
+      const derivedSlotCount = Math.max(
+        1,
+        Math.min(24, Math.floor(dayMinutes / cycleMinutes)),
+      );
+      const slotCount = Math.max(config.slotCount, derivedSlotCount);
+
       const slots = buildDailySlots({
         date: config.scheduleDate,
         startTime: config.startTime,
         meetingDurationMinutes: config.meetingDurationMinutes,
         bufferMinutes: config.bufferMinutes,
-        slotCount: config.slotCount,
+        slotCount,
       });
 
       const dayStart = slots[0]?.startsAt;
@@ -490,12 +531,6 @@ export class MatchmakingService {
     if (!schedule) {
       throw new NotFoundException('Schedule not found');
     }
-    if (schedule.status === 'PUBLISHED') {
-      throw new BadRequestException(
-        'Use revision workflow for published schedules',
-      );
-    }
-
     const slot = schedule.slots.find((s) => s.slotIndex === input.slotIndex);
     if (!slot || slot.isBreak) {
       throw new BadRequestException('Invalid slot');
@@ -541,8 +576,11 @@ export class MatchmakingService {
           durationMinutes: Math.round(
             (slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000,
           ),
-          status: 'PROPOSED',
-          idempotencyKey: `manual:${schedule.id}:${input.companyOrgId}:${input.vendorOrgId}:${input.slotIndex}`,
+          status:
+            schedule.status === 'PUBLISHED'
+              ? 'AWAITING_CONFIRMATION'
+              : 'PROPOSED',
+          idempotencyKey: `manual:${schedule.id}:${input.companyOrgId}:${input.vendorOrgId}:${input.slotIndex}:${Date.now()}`,
         },
       });
 
@@ -576,6 +614,181 @@ export class MatchmakingService {
     });
 
     return meeting;
+  }
+
+  async updateMeeting(
+    actor: AuthUser,
+    meetingId: string,
+    input: {
+      companyOrgId?: string;
+      vendorOrgId?: string;
+      startsAt?: string;
+      reason?: string;
+    },
+  ) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: {
+        scheduleVersion: true,
+        match: true,
+      },
+    });
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(meeting.status)) {
+      throw new BadRequestException(
+        `Cannot edit a meeting in status ${meeting.status}`,
+      );
+    }
+
+    const companyOrgId = input.companyOrgId ?? meeting.companyOrgId;
+    const vendorOrgId = input.vendorOrgId ?? meeting.vendorOrgId;
+    if (companyOrgId === vendorOrgId) {
+      throw new BadRequestException('Company and vendor must be different');
+    }
+
+    const [company, vendor] = await Promise.all([
+      this.prisma.organization.findUnique({ where: { id: companyOrgId } }),
+      this.prisma.organization.findUnique({ where: { id: vendorOrgId } }),
+    ]);
+    if (!company || company.type !== 'COMPANY') {
+      throw new BadRequestException('Invalid company');
+    }
+    if (!vendor || vendor.type !== 'VENDOR') {
+      throw new BadRequestException('Invalid vendor');
+    }
+
+    const startsAt = input.startsAt
+      ? new Date(input.startsAt)
+      : meeting.startsAt;
+    if (Number.isNaN(startsAt.getTime())) {
+      throw new BadRequestException('Invalid start time');
+    }
+    const endsAt = new Date(
+      startsAt.getTime() + meeting.durationMinutes * 60_000,
+    );
+
+    const conflict = await this.prisma.meetingOccupancy.findFirst({
+      where: {
+        meetingId: { not: meeting.id },
+        participantKey: {
+          in: [`org:${companyOrgId}`, `org:${vendorOrgId}`],
+        },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    if (conflict) {
+      throw new BadRequestException(
+        'Scheduling conflict: company or vendor is already booked in that window',
+      );
+    }
+
+    const reason =
+      input.reason?.trim() ||
+      'Admin updated meeting company, vendor, or time';
+    const timeChanged =
+      startsAt.getTime() !== meeting.startsAt.getTime() ||
+      endsAt.getTime() !== meeting.endsAt.getTime();
+    const partiesChanged =
+      companyOrgId !== meeting.companyOrgId ||
+      vendorOrgId !== meeting.vendorOrgId;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (meeting.matchId && partiesChanged) {
+        await tx.match.update({
+          where: { id: meeting.matchId },
+          data: {
+            companyOrgId,
+            vendorOrgId,
+            isManual: true,
+            overrideReason: reason,
+            explanation: `Admin update: ${reason}`,
+          },
+        });
+      }
+
+      if (timeChanged) {
+        await tx.meetingReschedule.create({
+          data: {
+            meetingId: meeting.id,
+            previousStartsAt: meeting.startsAt,
+            previousEndsAt: meeting.endsAt,
+            newStartsAt: startsAt,
+            newEndsAt: endsAt,
+            reason,
+            actorId: actor.id,
+          },
+        });
+      }
+
+      const next = await tx.meeting.update({
+        where: { id: meeting.id },
+        data: {
+          companyOrgId,
+          vendorOrgId,
+          startsAt,
+          endsAt,
+          slotId: timeChanged ? null : meeting.slotId,
+          version: { increment: 1 },
+          ...(timeChanged && meeting.status === 'CONFIRMED'
+            ? { status: 'RESCHEDULED' }
+            : {}),
+        },
+        include: {
+          companyOrg: true,
+          vendorOrg: true,
+          match: true,
+        },
+      });
+
+      await tx.meetingOccupancy.deleteMany({ where: { meetingId: meeting.id } });
+      await tx.meetingOccupancy.createMany({
+        data: [
+          {
+            meetingId: meeting.id,
+            participantKey: `org:${companyOrgId}`,
+            startsAt,
+            endsAt,
+          },
+          {
+            meetingId: meeting.id,
+            participantKey: `org:${vendorOrgId}`,
+            startsAt,
+            endsAt,
+          },
+        ],
+      });
+
+      await tx.meetingStatusHistory.create({
+        data: {
+          meetingId: meeting.id,
+          fromStatus: meeting.status,
+          toStatus: next.status,
+          reason,
+          actorId: actor.id,
+        },
+      });
+
+      return next;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'meeting.admin_update',
+      entityType: 'Meeting',
+      entityId: meeting.id,
+      outcome: 'SUCCESS',
+      metadata: {
+        reason,
+        companyOrgId,
+        vendorOrgId,
+        startsAt: startsAt.toISOString(),
+      },
+    });
+
+    return updated;
   }
 
   private toCompanyFeatures(company: {
