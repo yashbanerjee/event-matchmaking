@@ -70,7 +70,7 @@ export class DocumentsService {
             stored.checksumSha256 ??
             createHash('sha256').update(input.buffer).digest('hex'),
           scanStatus: 'PENDING',
-          metadata: { provider: this.storage.getProviderName() },
+          metadata: { provider: await this.storage.getProviderName() },
         },
       });
       await this.outbox.enqueue(tx, {

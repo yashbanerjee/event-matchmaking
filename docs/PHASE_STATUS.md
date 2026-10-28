@@ -53,8 +53,6 @@
 ## Known limitations / external setup
 
 - PostgreSQL exclusion constraint SQL should be applied after schema sync (`prisma/sql/001_meeting_occupancy_exclusion.sql`).
-- Set `EMAIL_PROVIDER=smtp|sendgrid` and credentials for production mail.
-- Set `STORAGE_PROVIDER=s3` plus bucket/region/keys for object storage.
-- Set `AI_ENABLED=true`, provider keys, and optionally `FEATURE_SEMANTIC_SEARCH=true`.
+- Configure email, storage, AI, and ops in **Admin → System Settings** (not `.env`).
 - Bulk invitation CSV import UI not yet built (API pattern ready via invitations module).
 - Malware scanning marks documents `PENDING`/`SKIPPED` until a scanner is configured.

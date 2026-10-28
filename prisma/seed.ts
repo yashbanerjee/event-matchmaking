@@ -196,6 +196,51 @@ async function main() {
     update: {},
   });
 
+  await prisma.featureFlag.upsert({
+    where: { key: 'semantic_search' },
+    create: {
+      key: 'semantic_search',
+      enabled: false,
+      description: 'Enable semantic vendor search (falls back to structured filters)',
+    },
+    update: {},
+  });
+
+  // Seed Admin → System Settings defaults (email/storage/AI/ops are not in .env).
+  // Does not overwrite values an administrator already saved.
+  const integrationDefaults: Array<{ key: string; value: unknown }> = [
+    { key: 'email.provider', value: 'console' },
+    { key: 'email.from', value: 'noreply@example.com' },
+    { key: 'email.smtpHost', value: '' },
+    { key: 'email.smtpPort', value: 587 },
+    { key: 'email.smtpUser', value: '' },
+    { key: 'storage.provider', value: 'local' },
+    { key: 'storage.localPath', value: './uploads' },
+    { key: 'storage.s3Bucket', value: '' },
+    { key: 'storage.s3Region', value: '' },
+    { key: 'storage.s3Endpoint', value: '' },
+    { key: 'ai.enabled', value: false },
+    { key: 'ai.primaryProvider', value: 'none' },
+    { key: 'ai.secondaryProvider', value: 'none' },
+    { key: 'ai.requestTimeoutMs', value: 15000 },
+    { key: 'ai.maxRetries', value: 2 },
+    { key: 'ops.semanticSearch', value: false },
+    { key: 'ops.backupRetentionDays', value: 30 },
+    { key: 'ops.rpoHours', value: 24 },
+    { key: 'ops.rtoHours', value: 4 },
+  ];
+
+  for (const item of integrationDefaults) {
+    const existing = await prisma.systemSetting.findUnique({
+      where: { key: item.key },
+    });
+    if (!existing) {
+      await prisma.systemSetting.create({
+        data: { key: item.key, value: { value: item.value } },
+      });
+    }
+  }
+
   await prisma.emailTemplate.upsert({
     where: { code_version: { code: 'invitation', version: 1 } },
     create: {

@@ -23,8 +23,10 @@ export const envSchema = z.object({
   INVITATION_TTL_DAYS: z.coerce.number().int().positive().default(7),
   SESSION_COOKIE_NAME: z.string().default('em_session'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  // Integration/ops defaults — runtime values come from Admin → System Settings.
+  // These remain optional env fallbacks for boot before DB overrides exist.
   EMAIL_PROVIDER: z.enum(['console', 'smtp', 'sendgrid']).default('console'),
-  EMAIL_FROM: z.string().email(),
+  EMAIL_FROM: z.string().email().default('noreply@example.com'),
   SMTP_HOST: z.string().optional().default(''),
   SMTP_PORT: z.coerce.number().optional().default(587),
   SMTP_USER: z.string().optional().default(''),

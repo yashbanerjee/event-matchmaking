@@ -28,7 +28,7 @@ These are operational targets, not infrastructure guarantees.
 
 ## AI providers unavailable
 
-1. Keep `AI_ENABLED=false` or allow provider failures.
+1. Keep AI disabled in Admin → System Settings, or allow provider failures.
 2. Deterministic matching and manual scheduling remain available.
 3. Record degraded operation via health endpoint / logs.
 

@@ -23,6 +23,12 @@ export class SettingsController {
     return this.settings.list();
   }
 
+  @Get('integrations')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  integrations() {
+    return this.settings.listIntegrationSettings();
+  }
+
   @Put('values')
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   upsert(
@@ -30,6 +36,15 @@ export class SettingsController {
     @Body() body: { key: string; value: unknown },
   ) {
     return this.settings.upsertSetting(user, body.key, body.value);
+  }
+
+  @Put('integrations')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  upsertMany(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { values: Array<{ key: string; value: unknown }> },
+  ) {
+    return this.settings.upsertMany(user, body.values ?? []);
   }
 
   @Put('flags')

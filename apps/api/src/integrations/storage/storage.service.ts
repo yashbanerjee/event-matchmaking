@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EnvService } from '../../config/env.service';
+import { EffectiveConfigService } from '../../settings/effective-config.service';
 import type { StorageProvider } from './storage.provider';
 import { LocalStorageProvider } from './local-storage.provider';
 import { S3StorageProvider } from './s3-storage.provider';
@@ -7,48 +8,75 @@ import { S3StorageProvider } from './s3-storage.provider';
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private readonly provider: StorageProvider;
 
-  constructor(private readonly env: EnvService) {
-    this.provider = this.createProvider();
+  constructor(
+    private readonly env: EnvService,
+    private readonly config: EffectiveConfigService,
+  ) {}
+
+  async getProviderName() {
+    return this.config.getString(
+      'storage.provider',
+      this.env.storageProvider,
+    );
   }
 
-  getProviderName() {
-    return this.provider.name;
+  async putObject(input: { key: string; body: Buffer; mimeType: string }) {
+    return (await this.resolveProvider()).putObject(input);
   }
 
+  async getSignedDownloadUrl(key: string, expiresInSeconds?: number) {
+    return (await this.resolveProvider()).getSignedDownloadUrl(
+      key,
+      expiresInSeconds,
+    );
+  }
+
+  async deleteObject(key: string) {
+    return (await this.resolveProvider()).deleteObject(key);
+  }
+
+  /** @deprecated prefer getProviderName */
   getProvider() {
-    return this.provider;
+    return {
+      name: this.env.storageProvider,
+    } as StorageProvider;
   }
 
-  putObject(input: { key: string; body: Buffer; mimeType: string }) {
-    return this.provider.putObject(input);
-  }
-
-  getSignedDownloadUrl(key: string, expiresInSeconds?: number) {
-    return this.provider.getSignedDownloadUrl(key, expiresInSeconds);
-  }
-
-  deleteObject(key: string) {
-    return this.provider.deleteObject(key);
-  }
-
-  private createProvider(): StorageProvider {
-    const raw = this.env.raw;
-    if (raw.STORAGE_PROVIDER === 's3') {
-      if (!raw.S3_BUCKET || !raw.S3_REGION) {
+  private async resolveProvider(): Promise<StorageProvider> {
+    const provider = await this.config.getString(
+      'storage.provider',
+      this.env.storageProvider,
+    );
+    if (provider === 's3') {
+      const bucket = await this.config.getString('storage.s3Bucket', '');
+      const region = await this.config.getString('storage.s3Region', '');
+      if (!bucket || !region) {
         this.logger.warn(
-          'S3 storage selected but bucket/region missing; falling back to local',
+          'S3 selected but bucket/region missing; falling back to local',
         );
-        return new LocalStorageProvider(raw.STORAGE_LOCAL_PATH);
+        return new LocalStorageProvider(
+          await this.config.getString(
+            'storage.localPath',
+            this.env.storageLocalPath,
+          ),
+        );
       }
-      return new S3StorageProvider(raw.S3_BUCKET, {
-        region: raw.S3_REGION,
-        accessKey: raw.S3_ACCESS_KEY || undefined,
-        secretKey: raw.S3_SECRET_KEY || undefined,
-        endpoint: raw.S3_ENDPOINT || undefined,
+      return new S3StorageProvider(bucket, {
+        region,
+        accessKey:
+          (await this.config.getString('storage.s3AccessKey', '')) || undefined,
+        secretKey:
+          (await this.config.getString('storage.s3SecretKey', '')) || undefined,
+        endpoint:
+          (await this.config.getString('storage.s3Endpoint', '')) || undefined,
       });
     }
-    return new LocalStorageProvider(raw.STORAGE_LOCAL_PATH);
+    return new LocalStorageProvider(
+      await this.config.getString(
+        'storage.localPath',
+        this.env.storageLocalPath,
+      ),
+    );
   }
 }

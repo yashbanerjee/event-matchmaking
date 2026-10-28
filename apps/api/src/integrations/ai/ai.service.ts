@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EnvService } from '../../config/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EffectiveConfigService } from '../../settings/effective-config.service';
 import type {
   AiHealth,
   AiProvider,
@@ -12,32 +13,27 @@ import { NullAiProvider } from './null-ai.provider';
 import { OpenAiProvider } from './openai.provider';
 import { AnthropicProvider } from './anthropic.provider';
 
-/**
- * AI is optional. Hard eligibility and scheduling constraints are never overridden.
- * Provider priority: primary → secondary → null. Failures fall through.
- */
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly providers: AiProvider[];
   private circuitOpenUntil = new Map<string, number>();
 
   constructor(
     private readonly env: EnvService,
     private readonly prisma: PrismaService,
-  ) {
-    this.providers = this.buildProviders();
-  }
+    private readonly config: EffectiveConfigService,
+  ) {}
 
-  isEnabled() {
-    return this.env.aiEnabled;
+  async isEnabled() {
+    return this.config.getBoolean('ai.enabled', this.env.aiEnabled);
   }
 
   async health(): Promise<AiHealth[]> {
-    if (!this.env.aiEnabled) {
+    if (!(await this.isEnabled())) {
       return [{ provider: 'disabled', healthy: true }];
     }
-    const results = await Promise.all(this.providers.map((p) => p.health()));
+    const providers = await this.buildProviders();
+    const results = await Promise.all(providers.map((p) => p.health()));
     for (const result of results) {
       await this.prisma.integrationHealthEvent.create({
         data: {
@@ -57,12 +53,20 @@ export class AiService {
   async extractProfile(
     input: ProfileExtractionInput,
   ): Promise<ProfileExtractionResult | null> {
-    if (!this.env.aiEnabled) return null;
-    for (const provider of this.providers) {
+    if (!(await this.isEnabled())) return null;
+    const providers = await this.buildProviders();
+    const maxRetries = await this.config.getNumber(
+      'ai.maxRetries',
+      this.env.raw.AI_MAX_RETRIES,
+    );
+    for (const provider of providers) {
       if (!provider.extractProfile) continue;
       if (this.isCircuitOpen(provider.name)) continue;
       try {
-        return await this.withRetries(() => provider.extractProfile!(input));
+        return await this.withRetries(
+          () => provider.extractProfile!(input),
+          maxRetries,
+        );
       } catch (err) {
         this.logger.warn(
           `AI provider ${provider.name} extract failed: ${(err as Error).message}`,
@@ -76,13 +80,19 @@ export class AiService {
   async semanticSimilarity(
     input: SemanticSimilarityInput,
   ): Promise<number | null> {
-    if (!this.env.aiEnabled) return null;
-    for (const provider of this.providers) {
+    if (!(await this.isEnabled())) return null;
+    const providers = await this.buildProviders();
+    const maxRetries = await this.config.getNumber(
+      'ai.maxRetries',
+      this.env.raw.AI_MAX_RETRIES,
+    );
+    for (const provider of providers) {
       if (!provider.semanticSimilarity) continue;
       if (this.isCircuitOpen(provider.name)) continue;
       try {
-        return await this.withRetries(() =>
-          provider.semanticSimilarity!(input),
+        return await this.withRetries(
+          () => provider.semanticSimilarity!(input),
+          maxRetries,
         );
       } catch (err) {
         this.logger.warn(
@@ -95,12 +105,10 @@ export class AiService {
   }
 
   private isCircuitOpen(name: string) {
-    const until = this.circuitOpenUntil.get(name) ?? 0;
-    return until > Date.now();
+    return (this.circuitOpenUntil.get(name) ?? 0) > Date.now();
   }
 
-  private async withRetries<T>(fn: () => Promise<T>): Promise<T> {
-    const max = this.env.raw.AI_MAX_RETRIES;
+  private async withRetries<T>(fn: () => Promise<T>, max: number): Promise<T> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= max; attempt += 1) {
       try {
@@ -115,28 +123,34 @@ export class AiService {
     throw lastError;
   }
 
-  private buildProviders(): AiProvider[] {
-    const raw = this.env.raw;
-    const orderedNames = [
-      raw.AI_PRIMARY_PROVIDER,
-      raw.AI_SECONDARY_PROVIDER,
-    ].filter((n) => n && n !== 'none');
+  private async buildProviders(): Promise<AiProvider[]> {
+    const timeout = await this.config.getNumber(
+      'ai.requestTimeoutMs',
+      this.env.raw.AI_REQUEST_TIMEOUT_MS,
+    );
+    const primary = await this.config.getString(
+      'ai.primaryProvider',
+      this.env.raw.AI_PRIMARY_PROVIDER,
+    );
+    const secondary = await this.config.getString(
+      'ai.secondaryProvider',
+      this.env.raw.AI_SECONDARY_PROVIDER,
+    );
+    const openaiKey = await this.config.getString('ai.openaiApiKey', '');
+    const anthropicKey = await this.config.getString('ai.anthropicApiKey', '');
 
     const byName = (name: string): AiProvider | null => {
-      if (name === 'openai' && raw.OPENAI_API_KEY) {
-        return new OpenAiProvider(raw.OPENAI_API_KEY, raw.AI_REQUEST_TIMEOUT_MS);
+      if (name === 'openai' && openaiKey) {
+        return new OpenAiProvider(openaiKey, timeout);
       }
-      if (name === 'anthropic' && raw.ANTHROPIC_API_KEY) {
-        return new AnthropicProvider(
-          raw.ANTHROPIC_API_KEY,
-          raw.AI_REQUEST_TIMEOUT_MS,
-        );
+      if (name === 'anthropic' && anthropicKey) {
+        return new AnthropicProvider(anthropicKey, timeout);
       }
       return null;
     };
 
     const providers: AiProvider[] = [];
-    for (const name of orderedNames) {
+    for (const name of [primary, secondary].filter((n) => n && n !== 'none')) {
       const provider = byName(name);
       if (provider) providers.push(provider);
     }

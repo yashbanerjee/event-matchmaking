@@ -8,7 +8,7 @@ import { AiService } from './ai/ai.service';
 import { EmailService } from './email/email.service';
 import { StorageService } from './storage/storage.service';
 import { SemanticSearchService } from './search/semantic-search.service';
-import { EnvService } from '../config/env.service';
+import { EffectiveConfigService } from '../settings/effective-config.service';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
@@ -20,18 +20,25 @@ export class IntegrationsController {
     private readonly email: EmailService,
     private readonly storage: StorageService,
     private readonly search: SemanticSearchService,
-    private readonly env: EnvService,
+    private readonly config: EffectiveConfigService,
   ) {}
 
   @Get('health')
   @RequirePermissions(PERMISSIONS.INTEGRATIONS_MANAGE)
   async health() {
-    const ai = await this.ai.health();
+    const [ai, emailProvider, storageProvider, aiEnabled, semanticSearchEnabled] =
+      await Promise.all([
+        this.ai.health(),
+        this.email.getProviderName(),
+        this.storage.getProviderName(),
+        this.ai.isEnabled(),
+        this.config.getBoolean('ops.semanticSearch', false),
+      ]);
     return {
-      emailProvider: this.email.getProviderName(),
-      storageProvider: this.storage.getProviderName(),
-      aiEnabled: this.ai.isEnabled(),
-      semanticSearchEnabled: this.env.raw.FEATURE_SEMANTIC_SEARCH,
+      emailProvider,
+      storageProvider,
+      aiEnabled,
+      semanticSearchEnabled,
       ai,
     };
   }

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EnvService } from '../../config/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EffectiveConfigService } from '../../settings/effective-config.service';
 import { AiService } from '../ai/ai.service';
 
 export interface SemanticSearchHit {
@@ -20,9 +20,9 @@ export class SemanticSearchService {
   private readonly logger = new Logger(SemanticSearchService.name);
 
   constructor(
-    private readonly env: EnvService,
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
+    private readonly config: EffectiveConfigService,
   ) {}
 
   async searchVendors(input: {
@@ -40,7 +40,8 @@ export class SemanticSearchService {
     });
 
     const semanticEnabled =
-      this.env.raw.FEATURE_SEMANTIC_SEARCH && this.env.aiEnabled;
+      (await this.config.getBoolean('ops.semanticSearch', false)) &&
+      (await this.ai.isEnabled());
 
     if (semanticEnabled) {
       try {
