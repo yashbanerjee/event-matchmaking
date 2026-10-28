@@ -16,6 +16,7 @@ import { MatchmakingModule } from './matchmaking/matchmaking.module';
 import { FormsModule } from './forms/forms.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { PlacesModule } from './places/places.module';
+import { FiltersModule } from './filters/filters.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ReportsModule } from './reports/reports.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -59,6 +60,7 @@ import { OpsModule } from './ops/ops.module';
     FormsModule,
     MeetingsModule,
     PlacesModule,
+    FiltersModule,
     DocumentsModule,
     ReportsModule,
     JobsModule,

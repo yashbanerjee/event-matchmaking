@@ -2,15 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { calculateMatchScore, type ProfileFeatures } from '@em/domain';
 import { defaultMatchingWeights } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { FiltersService } from '../filters/filters.service';
 import type { AuthUser } from '../common/decorators';
 
 @Injectable()
 export class RecommendationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly filters: FiltersService,
+  ) {}
 
   async forActor(actor: AuthUser, limit = 12) {
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) return { items: [] };
+
+    const equivalences = await this.filters.listEquivalences();
 
     const myOrgs = await this.prisma.organization.findMany({
       where: { id: { in: orgIds } },
@@ -40,6 +46,7 @@ export class RecommendationsService {
             companyFeatures,
             this.toVendorFeatures(vendor, vendor.organization),
             defaultMatchingWeights,
+            equivalences,
           );
           return {
             organizationId: vendor.organizationId,
@@ -77,6 +84,7 @@ export class RecommendationsService {
             this.toCompanyFeatures(company, company.organization),
             vendorFeatures,
             defaultMatchingWeights,
+            equivalences,
           );
           return {
             organizationId: company.organizationId,

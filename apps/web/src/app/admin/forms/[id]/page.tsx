@@ -53,6 +53,22 @@ export default function FormBuilderPage() {
   const [error, setError] = useState('');
   const hydratedForId = useRef<string | null>(null);
 
+  const filterDimensions = useQuery({
+    queryKey: ['filter-dimensions'],
+    queryFn: () =>
+      apiFetch<
+        Array<{
+          id: string;
+          name: string;
+          code: string;
+          profileKey: string;
+          tags: Array<{ value: string; label: string; isActive: boolean }>;
+        }>
+      >('/filters/dimensions?activeOnly=1', {
+        token: getAccessToken(),
+      }),
+  });
+
   useEffect(() => {
     hydratedForId.current = null;
     setSchema(null);
@@ -323,34 +339,81 @@ export default function FormBuilderPage() {
                 {['select', 'multiselect', 'radio', 'checkbox'].includes(
                   field.type,
                 ) ? (
-                  <label className="grid gap-1 text-sm font-medium">
-                    Options (one per line, value|label)
-                    <textarea
-                      className={`${formControlClass} min-h-24 py-2`}
-                      value={(field.options ?? [])
-                        .map((option) =>
-                          option.value === option.label
-                            ? option.label
-                            : `${option.value}|${option.label}`,
-                        )
-                        .join('\n')}
-                      onChange={(event) =>
-                        updateField(field.id, {
-                          options: event.target.value
-                            .split('\n')
-                            .map((line) => line.trim())
-                            .filter(Boolean)
-                            .map((line) => {
-                              const [value, label] = line.split('|');
-                              return {
-                                value: (value ?? '').trim(),
-                                label: (label ?? value ?? '').trim(),
-                              };
-                            }),
-                        })
-                      }
-                    />
-                  </label>
+                  <>
+                    <label className="grid gap-1 text-sm font-medium">
+                      Filter tags (admin Filters)
+                      <select
+                        className={formControlClass}
+                        value={field.filterDimensionId ?? ''}
+                        onChange={(event) => {
+                          const dimensionId = event.target.value || null;
+                          const dimension = (filterDimensions.data ?? []).find(
+                            (item) => item.id === dimensionId,
+                          );
+                          const options = (dimension?.tags ?? [])
+                            .filter((tag) => tag.isActive)
+                            .map((tag) => ({
+                              value: tag.value,
+                              label: tag.label,
+                            }));
+                          updateField(field.id, {
+                            filterDimensionId: dimensionId,
+                            ...(dimension
+                              ? {
+                                  options,
+                                  key: normalizeInternalKey(
+                                    dimension.profileKey || field.key,
+                                  ),
+                                }
+                              : { options: field.options ?? [] }),
+                          });
+                        }}
+                      >
+                        <option value="">Custom options (manual)</option>
+                        {(filterDimensions.data ?? []).map((dim) => (
+                          <option key={dim.id} value={dim.id}>
+                            {dim.name} ({dim.tags.length} tags)
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {field.filterDimensionId ? (
+                      <p className="text-xs text-[var(--muted)]">
+                        Options load from Filters. Save/publish refreshes the
+                        dropdown from current tags. Internal key set to profile
+                        field when possible.
+                      </p>
+                    ) : (
+                      <label className="grid gap-1 text-sm font-medium">
+                        Options (one per line, value|label)
+                        <textarea
+                          className={`${formControlClass} min-h-24 py-2`}
+                          value={(field.options ?? [])
+                            .map((option) =>
+                              option.value === option.label
+                                ? option.label
+                                : `${option.value}|${option.label}`,
+                            )
+                            .join('\n')}
+                          onChange={(event) =>
+                            updateField(field.id, {
+                              options: event.target.value
+                                .split('\n')
+                                .map((line) => line.trim())
+                                .filter(Boolean)
+                                .map((line) => {
+                                  const [value, label] = line.split('|');
+                                  return {
+                                    value: (value ?? '').trim(),
+                                    label: (label ?? value ?? '').trim(),
+                                  };
+                                }),
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                  </>
                 ) : null}
                 <label className="flex items-center gap-2 text-sm">
                   <input

@@ -31,12 +31,61 @@ export interface MatchScoreResult {
   missingDimensions: string[];
 }
 
+export type TagEquivalence = {
+  from: string;
+  to: string;
+  bidirectional?: boolean;
+};
+
 function normalizeSet(values: string[]): Set<string> {
   return new Set(
     values
       .map((v) => v.trim().toLowerCase())
       .filter((v) => v.length > 0),
   );
+}
+
+/**
+ * Expand tags with admin-defined equivalences (e.g. food ↔ hotel).
+ * Bidirectional by default so either side appears in the other's recommendations.
+ */
+export function expandWithMappings(
+  values: string[],
+  equivalences: TagEquivalence[] = [],
+): string[] {
+  if (!equivalences.length) {
+    return [...normalizeSet(values)];
+  }
+
+  const adjacency = new Map<string, Set<string>>();
+  const touch = (key: string) => {
+    if (!adjacency.has(key)) adjacency.set(key, new Set([key]));
+  };
+
+  for (const edge of equivalences) {
+    const from = edge.from.trim().toLowerCase();
+    const to = edge.to.trim().toLowerCase();
+    if (!from || !to) continue;
+    touch(from);
+    touch(to);
+    adjacency.get(from)!.add(to);
+    if (edge.bidirectional !== false) {
+      adjacency.get(to)!.add(from);
+    }
+  }
+
+  const out = new Set<string>();
+  for (const raw of values) {
+    const key = raw.trim().toLowerCase();
+    if (!key) continue;
+    const syn = adjacency.get(key);
+    if (syn) {
+      for (const value of syn) out.add(value);
+    } else {
+      out.add(key);
+    }
+  }
+  return [...out];
 }
 
 /**
@@ -61,36 +110,63 @@ export function overlapScore(a: string[], b: string[]): number {
 export function industryScore(
   companyIndustry?: string | null,
   vendorIndustry?: string | null,
+  equivalences: TagEquivalence[] = [],
 ): number {
   if (!companyIndustry || !vendorIndustry) {
     return 0;
   }
-  return companyIndustry.trim().toLowerCase() ===
-    vendorIndustry.trim().toLowerCase()
-    ? 100
-    : 0;
+  if (!equivalences.length) {
+    return companyIndustry.trim().toLowerCase() ===
+      vendorIndustry.trim().toLowerCase()
+      ? 100
+      : 0;
+  }
+  return overlapScore(
+    expandWithMappings([companyIndustry], equivalences),
+    expandWithMappings([vendorIndustry], equivalences),
+  );
 }
 
 /**
  * Deterministic weighted score on a 0–100 scale.
  * Missing dimensions contribute 0 and are listed for explainability.
+ * Optional tag equivalences expand categories/industry before overlap.
  */
 export function calculateMatchScore(
   company: ProfileFeatures,
   vendor: ProfileFeatures,
   weights: MatchingWeights = defaultMatchingWeights,
+  equivalences: TagEquivalence[] = [],
 ): MatchScoreResult {
+  const expand = (values: string[]) =>
+    expandWithMappings(values, equivalences);
+
   const breakdown: ScoreBreakdown = {
-    capability: overlapScore(company.requirements, vendor.capabilities),
-    industry: industryScore(company.industry, vendor.industry),
-    requirements: overlapScore(company.requirements, vendor.categories),
-    geography: overlapScore(company.regions, vendor.regions),
-    commercial: overlapScore(company.commercialTags, vendor.commercialTags),
+    capability: overlapScore(
+      expand(company.requirements),
+      expand(vendor.capabilities),
+    ),
+    industry: industryScore(
+      company.industry,
+      vendor.industry,
+      equivalences,
+    ),
+    requirements: overlapScore(
+      expand(company.requirements),
+      expand(vendor.categories),
+    ),
+    geography: overlapScore(expand(company.regions), expand(vendor.regions)),
+    commercial: overlapScore(
+      expand(company.commercialTags),
+      expand(vendor.commercialTags),
+    ),
     mutualPreferences: overlapScore(
-      company.preferredCategories,
-      vendor.categories.length
-        ? vendor.categories
-        : vendor.mutualPreferenceTags,
+      expand(company.preferredCategories),
+      expand(
+        vendor.categories.length
+          ? vendor.categories
+          : vendor.mutualPreferenceTags,
+      ),
     ),
   };
 

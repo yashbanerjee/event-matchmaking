@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateMatchScore, overlapScore } from './scoring.js';
+import {
+  calculateMatchScore,
+  expandWithMappings,
+  overlapScore,
+} from './scoring.js';
 
 describe('overlapScore', () => {
   it('returns 0 when either side is empty', () => {
@@ -73,5 +77,44 @@ describe('calculateMatchScore', () => {
 
     assert.equal(result.totalScore, 0);
     assert.ok(result.missingDimensions.includes('capability'));
+  });
+
+  it('matches preferred categories through tag equivalences', () => {
+    const equivalences = [
+      { from: 'food', to: 'hotel', bidirectional: true },
+    ];
+    assert.deepEqual(expandWithMappings(['food'], equivalences).sort(), [
+      'food',
+      'hotel',
+    ]);
+
+    const result = calculateMatchScore(
+      {
+        organizationId: 'c1',
+        industry: null,
+        capabilities: [],
+        categories: [],
+        regions: [],
+        requirements: [],
+        preferredCategories: ['food'],
+        commercialTags: [],
+        mutualPreferenceTags: [],
+      },
+      {
+        organizationId: 'v1',
+        industry: null,
+        capabilities: [],
+        categories: ['hotel'],
+        regions: [],
+        requirements: [],
+        preferredCategories: [],
+        commercialTags: [],
+        mutualPreferenceTags: [],
+      },
+      undefined,
+      equivalences,
+    );
+
+    assert.equal(result.breakdown.mutualPreferences, 100);
   });
 });

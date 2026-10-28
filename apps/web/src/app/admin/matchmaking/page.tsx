@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { TagMappingsPanel } from '@/components/tag-mappings-panel';
 
 type MeetingRow = {
   id: string;
@@ -358,9 +359,12 @@ export default function MatchmakingPage() {
         <h1 className="text-2xl font-semibold">Matchmaking</h1>
         <p className="text-sm text-[var(--muted)]">
           Deterministic scoring with greedy scheduling. Results persist before
-          publication; dashboards never re-run matching.
+          publication; dashboards never re-run matching. Tag links below drive
+          company ↔ vendor recommendations.
         </p>
       </div>
+
+      <TagMappingsPanel />
 
       <Card className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">

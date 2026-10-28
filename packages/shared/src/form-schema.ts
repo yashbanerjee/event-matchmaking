@@ -100,6 +100,8 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     order: z.number().int().nonnegative(),
     conditional: conditionSchema.nullable().optional(),
     readOnly: z.boolean().optional(),
+    /** When set, options are filled from this admin filter dimension's tags. */
+    filterDimensionId: z.string().uuid().nullable().optional(),
     children: z.array(fieldSchema).max(30).optional(),
   }),
 );
@@ -138,6 +140,8 @@ export type FormField = {
     value: string;
   } | null;
   readOnly?: boolean;
+  /** When set, options are filled from this admin filter dimension's tags. */
+  filterDimensionId?: string | null;
   children?: FormField[];
 };
 

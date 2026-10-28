@@ -1162,3 +1162,59 @@ model EmailTemplate {
   @@unique([code, version])
   @@map("email_templates")
 }
+
+// ─── Filters (admin-managed tag taxonomies for forms + matching) ─────────────
+
+model FilterDimension {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String   @unique
+  name        String
+  description String?
+  /// Where submitted values land on the profile: categories | preferredCategories |
+  /// capabilities | industry | regions | commercialTags
+  profileKey  String   @default("categories")
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tags FilterTag[]
+
+  @@index([isActive, sortOrder])
+  @@map("filter_dimensions")
+}
+
+model FilterTag {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dimensionId String   @db.Uuid
+  value       String
+  label       String
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dimension   FilterDimension    @relation(fields: [dimensionId], references: [id], onDelete: Cascade)
+  mappingsFrom FilterTagMapping[] @relation("MappingFrom")
+  mappingsTo   FilterTagMapping[] @relation("MappingTo")
+
+  @@unique([dimensionId, value])
+  @@index([dimensionId, isActive, sortOrder])
+  @@map("filter_tags")
+}
+
+model FilterTagMapping {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromTagId      String   @db.Uuid
+  toTagId        String   @db.Uuid
+  bidirectional  Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  fromTag FilterTag @relation("MappingFrom", fields: [fromTagId], references: [id], onDelete: Cascade)
+  toTag   FilterTag @relation("MappingTo", fields: [toTagId], references: [id], onDelete: Cascade)
+
+  @@unique([fromTagId, toTagId])
+  @@index([toTagId])
+  @@map("filter_tag_mappings")
+}

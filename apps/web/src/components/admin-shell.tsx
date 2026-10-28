@@ -21,6 +21,7 @@ const NAV_GROUPS = [
     label: 'Match & meet',
     items: [
       { href: '/admin/forms', label: 'Forms' },
+      { href: '/admin/filters', label: 'Filters' },
       { href: '/admin/workflows', label: 'Workflows' },
       { href: '/admin/profiles', label: 'Profiles' },
       { href: '/admin/matchmaking', label: 'Matchmaking' },

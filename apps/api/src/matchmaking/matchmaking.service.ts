@@ -26,6 +26,7 @@ import { OutboxService } from '../messaging/outbox.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
 import { EmailService } from '../integrations/email/email.service';
 import { EnvService } from '../config/env.service';
+import { FiltersService } from '../filters/filters.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
 
@@ -48,6 +49,7 @@ export class MatchmakingService {
     private readonly config: EffectiveConfigService,
     private readonly email: EmailService,
     private readonly env: EnvService,
+    private readonly filters: FiltersService,
   ) {}
 
   async ensureDefaultRule() {
@@ -238,6 +240,7 @@ export class MatchmakingService {
           vendor.onboardingComplete &&
           isOrgActive(vendor.organization.status),
       );
+      const equivalences = await this.filters.listEquivalences();
 
       const candidates: Array<{
         runId: string;
@@ -279,6 +282,7 @@ export class MatchmakingService {
             companyFeatures,
             vendorFeatures,
             weights,
+            equivalences,
           );
 
           // Prefer better fits, but still schedule verified pairs above a soft floor.

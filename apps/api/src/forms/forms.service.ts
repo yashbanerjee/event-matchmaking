@@ -51,6 +51,40 @@ export class FormsService {
     private readonly email: EmailService,
   ) {}
 
+  /** Snapshot filter-dimension tags into field.options for select/radio fields. */
+  private async hydrateFilterOptions(
+    schema: FormSchemaDefinition,
+  ): Promise<FormSchemaDefinition> {
+    const dimensionIds = [
+      ...new Set(
+        schema.fields
+          .map((field) => field.filterDimensionId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (!dimensionIds.length) return schema;
+
+    const tags = await this.prisma.filterTag.findMany({
+      where: { dimensionId: { in: dimensionIds }, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+    const byDimension = new Map<string, { value: string; label: string }[]>();
+    for (const tag of tags) {
+      const list = byDimension.get(tag.dimensionId) ?? [];
+      list.push({ value: tag.value, label: tag.label });
+      byDimension.set(tag.dimensionId, list);
+    }
+
+    return {
+      ...schema,
+      fields: schema.fields.map((field) => {
+        if (!field.filterDimensionId) return field;
+        const options = byDimension.get(field.filterDimensionId) ?? [];
+        return { ...field, options };
+      }),
+    };
+  }
+
   async createForm(
     actor: AuthUser,
     input: {
@@ -150,6 +184,8 @@ export class FormsService {
     if (!existing) {
       throw new NotFoundException('Form not found');
     }
+
+    schema = await this.hydrateFilterOptions(schema);
 
     const form = await this.prisma.$transaction(async (tx) => {
       await tx.form.update({
@@ -329,7 +365,9 @@ export class FormsService {
       throw new BadRequestException('No draft version to publish');
     }
 
-    const schema = resolveSchema(draft.schemaJson, draft.fields);
+    const schema = await this.hydrateFilterOptions(
+      resolveSchema(draft.schemaJson, draft.fields),
+    );
     if (
       !schema.fields.some(
         (field) => field.type !== 'heading' && field.type !== 'info',
@@ -1339,6 +1377,21 @@ export class FormsService {
     const responses = submission.responses as Record<string, unknown>;
     const org = submission.organization;
 
+    const industry = firstString(responses.industry);
+    const region = firstString(
+      responses.region ?? responses.regions ?? responses.area,
+    );
+
+    if (industry || region) {
+      await this.prisma.organization.update({
+        where: { id: org.id },
+        data: {
+          ...(industry ? { industry } : {}),
+          ...(region ? { region } : {}),
+        },
+      });
+    }
+
     if (org.company) {
       await this.prisma.company.update({
         where: { organizationId: org.id },
@@ -1371,7 +1424,7 @@ export class FormsService {
           ),
           categories: asStringArray(responses.categories),
           operatingRegions: asStringArray(
-            responses.operatingRegions ?? responses.regions,
+            responses.operatingRegions ?? responses.regions ?? responses.area,
           ),
           commercialPrefs: {
             tags: asStringArray(responses.commercialTags),
@@ -1625,4 +1678,13 @@ function asStringArray(value: unknown): string[] {
     return value.split(',').map((s) => s.trim());
   }
   return [];
+}
+
+function firstString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const first = value.find((item) => String(item ?? '').trim());
+    return first != null ? String(first).trim() : null;
+  }
+  return null;
 }
