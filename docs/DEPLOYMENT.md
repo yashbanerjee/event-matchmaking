@@ -2,11 +2,13 @@
 
 ## Architecture (3 app services + infra)
 
-| Service | Role | Dockerfile |
-| --- | --- | --- |
-| **api** | NestJS REST (`/api/v1`) | `infra/docker/Dockerfile.api` |
-| **worker** | RabbitMQ consumers | `infra/docker/Dockerfile.worker` |
-| **web** | Next.js UI | `infra/docker/Dockerfile.web` |
+| Service | Role | `SERVICE_TYPE` | Folder |
+| --- | --- | --- | --- |
+| **api** | NestJS REST (`/api/v1`) | `api` | `apps/api` |
+| **worker** | RabbitMQ consumers | `worker` | `apps/worker` |
+| **web** | Next.js UI | `web` | `apps/web` |
+
+One root `Dockerfile` builds/starts the folder matching `SERVICE_TYPE`.
 | Postgres | Primary data store | Railway Postgres / Compose |
 | Redis | Sessions / cache / readiness | Railway Redis / Compose |
 | RabbitMQ | Async jobs / outbox | Railway RabbitMQ or CloudAMQP / Compose |
@@ -76,40 +78,66 @@ Default seeded admin: set via `ADMIN_EMAIL` / `ADMIN_PASSWORD` (defaults `info@v
 
 For each service: **New → GitHub Repo** (same repo), then set:
 
-| Service | Dockerfile path | Notes |
+All three use the **root `Dockerfile`**. On each Railway service set:
+
+| Service | Variable (build + runtime) | Notes |
 | --- | --- | --- |
-| api | `infra/docker/Dockerfile.api` | Public HTTP; health `/api/v1/health/live` |
-| worker | `infra/docker/Dockerfile.worker` | No public HTTP |
-| web | `infra/docker/Dockerfile.web` | Public HTTP; build arg `NEXT_PUBLIC_API_URL` |
+| api | `SERVICE_TYPE=api` | Health `/api/v1/health/live` |
+| worker | `SERVICE_TYPE=worker` | No public HTTP |
+| web | `SERVICE_TYPE=web` | Also build-arg `NEXT_PUBLIC_API_URL` |
 
-Optional: set Config-as-code file to `infra/railway/api.toml` (or worker/web).
+Mark `SERVICE_TYPE` as **Available at Build Time** on Railway so Docker builds the correct folder.
 
-### 3. Shared variables (reference Postgres/Redis/Rabbit)
+Optional Config-as-code: `infra/railway/api.toml` (or `web.toml` / `worker.toml`).
 
-Set on **api** and **worker** (and build args on **web** where noted):
+### 3. Environment variables per service
 
-```env
-NODE_ENV=production
-APP_NAME=event-matchmaking
-APP_URL=https://<web-domain>
-API_URL=https://<api-domain>
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-REDIS_URL=${{Redis.REDIS_URL}}
-RABBITMQ_URL=${{RabbitMQ.URL}}   # or your AMQP URL
-JWT_ACCESS_SECRET=<min-32-chars>
-JWT_REFRESH_SECRET=<min-32-chars>
-CORS_ORIGINS=https://<web-domain>
-```
+Copy-paste templates live in:
 
-**web** only needs:
+- `infra/railway/api.env.example`
+- `infra/railway/worker.env.example`
+- `infra/railway/web.env.example`
 
-```env
-PORT=3000
-# Build-time (Railway → Variables → Build args / Docker build ARG):
-NEXT_PUBLIC_API_URL=https://<api-domain>/api/v1
-```
+#### API (required)
 
-Railway injects `PORT` for public services; the API prefers `PORT` over `API_PORT`.
+| Variable | Example / note |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+| `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+| `RABBITMQ_URL` | `${{RabbitMQ.URL}}` or CloudAMQP URL |
+| `JWT_ACCESS_SECRET` | min 32 chars (same as local `.env`) |
+| `JWT_REFRESH_SECRET` | min 32 chars (same as local `.env`) |
+| `APP_URL` | `https://<web-domain>` |
+| `API_URL` | `https://<api-domain>` |
+| `CORS_ORIGINS` | `https://<web-domain>` (comma-separated if multiple) |
+
+Recommended: `APP_NAME`, `LOG_LEVEL`, `RABBITMQ_EXCHANGE`, `RABBITMQ_PREFETCH`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `BCRYPT_COST`, `INVITATION_TTL_DAYS`, `SESSION_COOKIE_NAME`, `DATABASE_POOL_SIZE`.
+
+`PORT` is injected by Railway; API uses it automatically.
+
+#### Worker (required)
+
+| Variable | Example / note |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (same DB as API) |
+| `RABBITMQ_URL` | same as API |
+
+Recommended: `LOG_LEVEL`, `RABBITMQ_PREFETCH`, `EMAIL_PROVIDER`.
+
+Worker does **not** need JWT, Redis, `APP_URL`, `API_URL`, `CORS_ORIGINS`, or `PORT`.
+
+#### Web (required)
+
+| Variable | When | Example / note |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | **Build** | `https://<api-domain>/api/v1` |
+| `NODE_ENV` | Runtime | `production` |
+
+`PORT` is injected by Railway. Web does **not** need database, Redis, RabbitMQ, or JWT secrets.
+
+Email / storage / AI / ops are set in **Admin → System Settings**, not service env.
 
 ### 4. First deploy
 

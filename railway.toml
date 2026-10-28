@@ -1,12 +1,19 @@
-# Default service config (API). For worker/web use infra/railway/*.toml
-# in each Railway service's "Config as code" path setting.
+# One Dockerfile for all services. Each Railway service MUST set SERVICE_TYPE.
+#   API:    SERVICE_TYPE=api
+#   Web:    SERVICE_TYPE=web
+#   Worker: SERVICE_TYPE=worker
+#
+# Also pass SERVICE_TYPE as a Docker build arg (Railway Variables → available at build time).
 
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "infra/docker/Dockerfile.api"
+dockerfilePath = "Dockerfile"
 
 [deploy]
+# API health — for web set healthcheckPath="/" in the web service settings;
+# for worker disable healthchecks.
 healthcheckPath = "/api/v1/health/live"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
+startCommand = "node scripts/start-by-type.mjs"

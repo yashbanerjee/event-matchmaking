@@ -8,8 +8,9 @@ import { EnvService } from './env.service';
 function resolveEnvFiles(): string[] {
   const candidates = [
     resolve(process.cwd(), '.env'),
+    resolve(__dirname, '../../.env'), // apps/api/.env (from dist/config)
     resolve(process.cwd(), '../../.env'),
-    resolve(__dirname, '../../../../.env'),
+    resolve(__dirname, '../../../../.env'), // repo root .env
   ];
   return [...new Set(candidates.filter((path) => existsSync(path)))];
 }

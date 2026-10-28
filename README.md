@@ -42,11 +42,7 @@ Seed admin defaults: `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see `.env.example`).
 
 Deploy **api**, **worker**, and **web** as three services from this repo. See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for Dockerfiles, env vars, Redis/RabbitMQ, and domains.
 
-Dockerfiles:
-
-- `infra/docker/Dockerfile.api`
-- `infra/docker/Dockerfile.worker`
-- `infra/docker/Dockerfile.web`
+One root `Dockerfile` — each Railway service sets `SERVICE_TYPE=api|web|worker` (build + runtime) to deploy `apps/<type>`.
 
 ## Documentation
 

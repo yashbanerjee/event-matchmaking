@@ -22,6 +22,11 @@ export class HealthController {
     });
   }
 
+  @Get()
+  async index() {
+    return this.ready();
+  }
+
   @Get('live')
   live() {
     return { status: 'ok' };

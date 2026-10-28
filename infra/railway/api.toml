@@ -1,12 +1,10 @@
-# Copy into Railway service settings → Config-as-code path, or set Dockerfile manually.
-# Service role: API
-
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "infra/docker/Dockerfile.api"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/api/v1/health/live"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
+startCommand = "node scripts/start-by-type.mjs"
