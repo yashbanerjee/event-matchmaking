@@ -284,11 +284,9 @@ export function SubmissionReviewModal({
       {data ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            {kind === 'vendor' ? (
-              <Badge variant={statusTone(workflowStatus)}>
-                {formatVendorStatus(workflowStatus)}
-              </Badge>
-            ) : null}
+            <Badge variant={statusTone(workflowStatus)}>
+              {formatVendorStatus(workflowStatus)}
+            </Badge>
             <Badge variant={statusTone(data.status)}>
               Form: {formatSubmissionStatus(data.status)}
             </Badge>

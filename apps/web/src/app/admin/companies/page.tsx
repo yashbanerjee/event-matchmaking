@@ -450,7 +450,9 @@ export default function CompaniesPage() {
                               })
                             }
                           >
-                            {org.latestSubmission ? 'Form' : 'Status'}
+                            {org.latestSubmission
+                              ? 'View form'
+                              : 'Form status'}
                           </Button>
                           <OrgRowActions
                             org={org}

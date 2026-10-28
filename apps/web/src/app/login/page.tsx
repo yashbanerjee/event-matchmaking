@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '@/lib/api';
 import { setTokens } from '@/lib/auth-store';
+import { resolveParticipantHome } from '@/lib/portal-onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -39,10 +40,8 @@ export default function LoginPage() {
         body: JSON.stringify(values),
       });
       setTokens(result.accessToken, result.refreshToken);
-      const isAdmin = result.user.roles.some((r) =>
-        ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(r),
-      );
-      router.push(isAdmin ? '/admin' : '/portal');
+      const home = await resolveParticipantHome(result.user.roles ?? []);
+      router.push(home);
     } catch (err) {
       setError((err as Error).message);
     }

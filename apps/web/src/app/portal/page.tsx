@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
 import { EmptyState } from '@/components/empty-state';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { fetchOnboarding } from '@/lib/portal-onboarding';
 
 type Meeting = {
   id: string;
@@ -52,6 +53,19 @@ export default function PortalPage() {
         roles: string[];
       }>('/auth/me', { token: getAccessToken() }),
   });
+
+  const onboarding = useQuery({
+    queryKey: ['portal-onboarding'],
+    enabled: ready,
+    queryFn: () => fetchOnboarding(),
+  });
+
+  useEffect(() => {
+    if (!onboarding.data) return;
+    if (onboarding.data.pendingCount > 0) {
+      router.replace('/portal/onboarding');
+    }
+  }, [onboarding.data, router]);
 
   const meetings = useQuery({
     queryKey: ['portal-meetings'],
@@ -116,11 +130,25 @@ export default function PortalPage() {
   ).length;
 
   return (
-    <PortalShell email={me.data?.email}>
+    <PortalShell
+      email={me.data?.email}
+      pendingForms={onboarding.data?.pendingCount}
+    >
       <PageHeader
         eyebrow="Your workspace"
         title="Meetings"
         description="Confirm upcoming sessions and submit confidential feedback after each meeting."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => router.push('/portal/onboarding')}
+          >
+            Forms
+            {(onboarding.data?.pendingCount ?? 0) > 0
+              ? ` (${onboarding.data?.pendingCount})`
+              : ''}
+          </Button>
+        }
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

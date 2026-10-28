@@ -221,6 +221,37 @@ function hasAnswer(value: unknown): boolean {
   return false;
 }
 
+/** Map FormRenderer values (by field id) into API responses (by field key + id). */
+export function responsesByFieldKey(
+  schema: FormSchemaDefinition,
+  valuesById: Record<string, unknown>,
+): Record<string, unknown> {
+  const keyed: Record<string, unknown> = { ...valuesById };
+  for (const field of schema.fields) {
+    if (valuesById[field.id] !== undefined) {
+      keyed[field.key] = valuesById[field.id];
+      keyed[field.id] = valuesById[field.id];
+    }
+  }
+  return keyed;
+}
+
+/** Hydrate FormRenderer values from stored responses keyed by id and/or key. */
+export function valuesByFieldId(
+  schema: FormSchemaDefinition,
+  responses: Record<string, unknown>,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = { ...responses };
+  for (const field of schema.fields) {
+    if (responses[field.id] !== undefined) {
+      values[field.id] = responses[field.id];
+    } else if (responses[field.key] !== undefined) {
+      values[field.id] = responses[field.key];
+    }
+  }
+  return values;
+}
+
 /** Answerable fields on a form, and whether the current answers include a value for each one. */
 export function fieldAnswers(schema: FormSchemaDefinition, values: Record<string, unknown>): FieldAnswer[] {
   const byId = new Map<string, FormField>();

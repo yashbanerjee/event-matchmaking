@@ -357,7 +357,9 @@ export default function VendorsPage() {
                             })
                           }
                         >
-                          {canReview ? 'Form' : 'Status'}
+                          {canReview
+                            ? 'View form'
+                            : 'Form status'}
                         </Button>
                         {!verified && (
                           <Button

@@ -61,6 +61,26 @@ export class FormsController {
     return this.forms.list();
   }
 
+  @Get('onboarding/me')
+  @RequirePermissions(PERMISSIONS.FORMS_READ)
+  myOnboarding(@CurrentUser() user: AuthUser) {
+    return this.forms.getMyOnboarding(user);
+  }
+
+  @Post('onboarding/corrections/:correctionId')
+  @RequirePermissions(PERMISSIONS.FORMS_READ)
+  resubmitMyCorrection(
+    @CurrentUser() user: AuthUser,
+    @Param('correctionId') correctionId: string,
+    @Body() body: { responses: Record<string, unknown> },
+  ) {
+    return this.forms.resubmitMyCorrection(
+      user,
+      correctionId,
+      body.responses ?? {},
+    );
+  }
+
   @Post('assignments')
   @RequirePermissions(PERMISSIONS.FORMS_MANAGE)
   assign(

@@ -177,6 +177,10 @@ export class AuthService {
       registered.user.id,
       registered.user.email,
     );
+    const memberships = await this.prisma.userRole.findMany({
+      where: { userId: registered.user.id },
+      include: { role: true },
+    });
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -185,6 +189,7 @@ export class AuthService {
         email: registered.user.email,
         firstName: input.firstName,
         lastName: input.lastName,
+        roles: memberships.map((item) => item.role.code),
       },
     };
   }

@@ -455,6 +455,238 @@ export class FormsService {
     return assignment;
   }
 
+  /** Assignments + submission/correction state for the signed-in participant. */
+  async getMyOnboarding(actor: AuthUser) {
+    const orgIds = actor.organizationIds ?? [];
+    if (!orgIds.length) {
+      return { items: [], pendingCount: 0 };
+    }
+
+    const assignments = await this.prisma.formAssignment.findMany({
+      where: { organizationId: { in: orgIds } },
+      include: {
+        form: { select: { id: true, name: true, code: true } },
+        formVersion: { include: { form: true, fields: true } },
+        organization: {
+          include: { vendor: true, company: true },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    const items: Array<{
+      assignmentId: string;
+      organizationId: string;
+      organizationName: string;
+      organizationType: string;
+      formId: string;
+      formVersionId: string;
+      formName: string;
+      schema: FormSchemaDefinition;
+      workflowStatus: string;
+      submission: {
+        id: string;
+        status: string;
+        submittedAt: Date | null;
+        responses: Record<string, unknown>;
+      } | null;
+      openCorrection: {
+        id: string;
+        editableFieldIds: string[];
+        notes: Array<{ fieldId: string; note: string }>;
+      } | null;
+      canEdit: boolean;
+      locked: boolean;
+      action: 'submit' | 'correct' | 'view';
+    }> = [];
+
+    for (const assignment of assignments) {
+      if (!assignment.organizationId || !assignment.organization) continue;
+      if (assignment.formVersion.status !== 'PUBLISHED') continue;
+
+      const organization = assignment.organization;
+      const organizationId = assignment.organizationId;
+      const schema = resolveSchema(
+        assignment.formVersion.schemaJson,
+        assignment.formVersion.fields,
+      );
+
+      const submission = await this.prisma.formSubmission.findFirst({
+        where: {
+          organizationId,
+          formVersionId: assignment.formVersionId,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          corrections: {
+            where: { status: 'OPEN' },
+            include: { fields: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      });
+
+      const openCorrection = submission?.corrections[0] ?? null;
+      const workflowStatus =
+        organization.vendor?.approvalStatus ??
+        organization.company?.approvalStatus ??
+        organization.status;
+
+      const lockedStatuses = new Set([
+        'SUBMITTED',
+        'UNDER_REVIEW',
+        'APPROVED',
+      ]);
+      const needsCorrection =
+        submission?.status === 'NEEDS_INFO' && Boolean(openCorrection);
+      const canEdit = !submission || needsCorrection;
+      const action: 'submit' | 'correct' | 'view' = !submission
+        ? 'submit'
+        : needsCorrection
+          ? 'correct'
+          : 'view';
+
+      items.push({
+        assignmentId: assignment.id,
+        organizationId,
+        organizationName: organization.name,
+        organizationType: organization.type,
+        formId: assignment.formId,
+        formVersionId: assignment.formVersionId,
+        formName: assignment.form.name,
+        schema,
+        workflowStatus,
+        submission: submission
+          ? {
+              id: submission.id,
+              status: submission.status,
+              submittedAt: submission.submittedAt,
+              responses: submission.responses as Record<string, unknown>,
+            }
+          : null,
+        openCorrection: openCorrection
+          ? {
+              id: openCorrection.id,
+              editableFieldIds: openCorrection.fields.map(
+                (field: { fieldId: string }) => field.fieldId,
+              ),
+              notes: openCorrection.fields.map(
+                (field: { fieldId: string; note: string }) => ({
+                  fieldId: field.fieldId,
+                  note: field.note,
+                }),
+              ),
+            }
+          : null,
+        canEdit,
+        locked: Boolean(submission) && lockedStatuses.has(submission!.status),
+        action,
+      });
+    }
+
+    const pendingCount = items.filter(
+      (item) => item.action === 'submit' || item.action === 'correct',
+    ).length;
+
+    return { items, pendingCount };
+  }
+
+  async resubmitMyCorrection(
+    actor: AuthUser,
+    correctionId: string,
+    responses: Record<string, unknown>,
+  ) {
+    const correction = await this.prisma.submissionCorrection.findFirst({
+      where: { id: correctionId, status: 'OPEN' },
+      include: {
+        fields: true,
+        submission: {
+          include: {
+            formVersion: { include: { fields: true } },
+          },
+        },
+      },
+    });
+    if (!correction) {
+      throw new NotFoundException('Correction request not found');
+    }
+    if (
+      !actor.organizationIds.includes(correction.submission.organizationId) &&
+      !actor.permissions.includes('submissions:review')
+    ) {
+      throw new BadRequestException('Not allowed to update this form');
+    }
+
+    const schema = resolveSchema(
+      correction.submission.formVersion.schemaJson,
+      correction.submission.formVersion.fields,
+    );
+    const editable = new Set(correction.fields.map((f) => f.fieldId));
+    const previous = correction.submission.responses as Record<string, unknown>;
+
+    try {
+      assertLockedFieldsUnchanged({
+        fields: schema.fields,
+        previous,
+        next: responses,
+        editableFieldIds: editable,
+      });
+    } catch {
+      throw new BadRequestException(
+        'Only the fields marked for resubmit can be changed',
+      );
+    }
+
+    const merged = { ...previous, ...responses };
+    for (const fieldId of editable) {
+      const field = schema.fields.find((f) => f.id === fieldId);
+      if (!field) continue;
+      const value = merged[fieldId] ?? merged[field.key];
+      if (
+        field.required &&
+        (value === undefined || value === null || value === '')
+      ) {
+        throw new BadRequestException(`${field.label} is required`);
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formSubmission.update({
+        where: { id: correction.submissionId },
+        data: {
+          responses: merged as Prisma.InputJsonValue,
+          status: 'SUBMITTED',
+          submittedAt: new Date(),
+          reviewNotes: null,
+        },
+      });
+      await tx.submissionCorrection.update({
+        where: { id: correction.id },
+        data: { status: 'RESOLVED', resolvedAt: new Date() },
+      });
+      await tx.vendor.updateMany({
+        where: { organizationId: correction.submission.organizationId },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+      await tx.company.updateMany({
+        where: { organizationId: correction.submission.organizationId },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'FormSubmission',
+        aggregateId: next.id,
+        eventType: 'profile.normalize',
+        idempotencyKey: `profile.normalize:${next.id}:resubmit:${Date.now()}`,
+        payload: { submissionId: next.id },
+      });
+      return next;
+    });
+
+    await this.normalizeProfile(updated.id);
+    return { submissionId: updated.id, status: updated.status };
+  }
+
   async submit(
     actor: AuthUser,
     input: {
@@ -478,12 +710,40 @@ export class FormsService {
       throw new BadRequestException('Invalid form version');
     }
 
-    for (const field of version.fields) {
-      if (field.required) {
-        const value = input.responses[field.fieldKey];
-        if (value === undefined || value === null || value === '') {
-          throw new BadRequestException(`Field ${field.fieldKey} is required`);
-        }
+    const existing = await this.prisma.formSubmission.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        formVersionId: input.formVersionId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        corrections: {
+          where: { status: 'OPEN' },
+          take: 1,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.status === 'NEEDS_INFO' && existing.corrections.length) {
+        throw new BadRequestException(
+          'Use the correction form to update the fields requested by admin',
+        );
+      }
+      if (['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'].includes(existing.status)) {
+        throw new ConflictException(
+          'This form is already submitted and locked until admin requests changes',
+        );
+      }
+    }
+
+    const schema = resolveSchema(version.schemaJson, version.fields);
+    for (const field of schema.fields) {
+      if (field.type === 'heading' || field.type === 'info') continue;
+      if (!field.required) continue;
+      const value =
+        input.responses[field.key] ?? input.responses[field.id];
+      if (value === undefined || value === null || value === '') {
+        throw new BadRequestException(`${field.label} is required`);
       }
     }
 

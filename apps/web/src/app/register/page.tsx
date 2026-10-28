@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { apiFetch } from '@/lib/api';
 import { setTokens } from '@/lib/auth-store';
+import { resolveParticipantHome } from '@/lib/portal-onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -41,12 +42,14 @@ function RegisterForm() {
       const result = await apiFetch<{
         accessToken: string;
         refreshToken: string;
+        user?: { roles?: string[] };
       }>('/auth/register/invitation', {
         method: 'POST',
         body: JSON.stringify(values),
       });
       setTokens(result.accessToken, result.refreshToken);
-      router.push('/portal');
+      const home = await resolveParticipantHome(result.user?.roles ?? []);
+      router.push(home);
     } catch (err) {
       setError((err as Error).message);
     }
