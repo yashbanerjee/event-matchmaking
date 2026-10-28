@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -108,6 +109,8 @@ export class MatchmakingService {
       rawConfig && typeof rawConfig === 'object'
         ? { ...(rawConfig as Record<string, unknown>) }
         : {};
+    const forceRegenerate = Boolean(incoming.forceRegenerate);
+    delete incoming.forceRegenerate;
     if (
       incoming.meetingDurationMinutes === undefined ||
       incoming.meetingDurationMinutes === null ||
@@ -119,6 +122,25 @@ export class MatchmakingService {
       );
     }
     const config = scheduleConfigSchema.parse(incoming);
+    const existingForDate = await this.countActiveMeetingsForDate(
+      config.scheduleDate,
+    );
+    if (existingForDate > 0 && !forceRegenerate) {
+      throw new ConflictException({
+        message: `Meetings already exist for ${config.scheduleDate} (${existingForDate}). Remove them or regenerate.`,
+        code: 'SCHEDULE_DATE_EXISTS',
+        scheduleDate: config.scheduleDate,
+        meetingCount: existingForDate,
+      });
+    }
+    if (existingForDate > 0 && forceRegenerate) {
+      await this.cancelMeetingsForDate(
+        actor,
+        config.scheduleDate,
+        'Regenerated matchmaking for this date',
+      );
+    }
+
     const rule = await this.ensureDefaultRule();
     const ruleVersion = await this.prisma.matchingRuleVersion.findFirst({
       where: { ruleId: rule.id },
@@ -448,6 +470,8 @@ export class MatchmakingService {
           include: {
             slots: true,
             meetings: {
+              where: { status: { not: 'CANCELLED' } },
+              orderBy: { startsAt: 'asc' },
               include: {
                 companyOrg: true,
                 vendorOrg: true,
@@ -490,8 +514,8 @@ export class MatchmakingService {
         },
       });
       await tx.meeting.updateMany({
-        where: { scheduleVersionId },
-        data: { status: 'AWAITING_CONFIRMATION' },
+        where: { scheduleVersionId, status: { not: 'CANCELLED' } },
+        data: { status: 'CONFIRMED' },
       });
       await tx.matchmakingRun.update({
         where: { id: schedule.runId },
@@ -614,10 +638,7 @@ export class MatchmakingService {
           durationMinutes: Math.round(
             (slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000,
           ),
-          status:
-            schedule.status === 'PUBLISHED'
-              ? 'AWAITING_CONFIRMATION'
-              : 'PROPOSED',
+          status: schedule.status === 'PUBLISHED' ? 'CONFIRMED' : 'PROPOSED',
           idempotencyKey: `manual:${schedule.id}:${input.companyOrgId}:${input.vendorOrgId}:${input.slotIndex}:${Date.now()}`,
         },
       });
@@ -861,6 +882,360 @@ export class MatchmakingService {
     }
 
     return updated;
+  }
+
+  async deleteMeeting(
+    actor: AuthUser,
+    meetingId: string,
+    reason?: string,
+  ) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { scheduleVersion: true },
+    });
+    if (!meeting) {
+      throw new NotFoundException('Meeting not found');
+    }
+    if (meeting.status === 'CANCELLED') {
+      return { id: meeting.id, status: 'CANCELLED' as const };
+    }
+    if (['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(meeting.status)) {
+      throw new BadRequestException(
+        `Cannot delete a meeting in status ${meeting.status}`,
+      );
+    }
+
+    const note = reason?.trim() || 'Removed by admin';
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.meetingOccupancy.deleteMany({ where: { meetingId: meeting.id } });
+      await tx.meetingStatusHistory.create({
+        data: {
+          meetingId: meeting.id,
+          fromStatus: meeting.status,
+          toStatus: 'CANCELLED',
+          reason: note,
+          actorId: actor.id,
+        },
+      });
+      await tx.meeting.update({
+        where: { id: meeting.id },
+        data: {
+          status: 'CANCELLED',
+          cancellationReason: note,
+          version: { increment: 1 },
+        },
+      });
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'meeting.admin_delete',
+      entityType: 'Meeting',
+      entityId: meeting.id,
+      outcome: 'SUCCESS',
+      metadata: { reason: note },
+    });
+
+    return { id: meeting.id, status: 'CANCELLED' as const };
+  }
+
+  /**
+   * Create a one-off confirmed meeting for a company/vendor at an absolute start time.
+   * Attaches to an existing schedule for that date when possible; otherwise creates a manual schedule.
+   */
+  async createManualMeeting(
+    actor: AuthUser,
+    input: {
+      companyOrgId: string;
+      vendorOrgId: string;
+      startsAt: string;
+      durationMinutes?: number;
+      reason?: string;
+    },
+  ) {
+    if (!input.companyOrgId || !input.vendorOrgId) {
+      throw new BadRequestException('Company and vendor are required');
+    }
+    if (input.companyOrgId === input.vendorOrgId) {
+      throw new BadRequestException('Company and vendor must be different');
+    }
+
+    const startsAt = new Date(input.startsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      throw new BadRequestException('Invalid start time');
+    }
+
+    const durationMinutes =
+      input.durationMinutes && input.durationMinutes > 0
+        ? Math.round(input.durationMinutes)
+        : await this.config.getNumber('ops.meetingDurationMinutes', 15);
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
+    const reason = input.reason?.trim() || 'Manual meeting created by admin';
+    const scheduleDate = startsAt.toISOString().slice(0, 10);
+
+    const [company, vendor] = await Promise.all([
+      this.prisma.organization.findUnique({ where: { id: input.companyOrgId } }),
+      this.prisma.organization.findUnique({ where: { id: input.vendorOrgId } }),
+    ]);
+    if (!company || company.type !== 'COMPANY') {
+      throw new BadRequestException('Invalid company');
+    }
+    if (!vendor || vendor.type !== 'VENDOR') {
+      throw new BadRequestException('Invalid vendor');
+    }
+
+    const conflict = await this.prisma.meetingOccupancy.findFirst({
+      where: {
+        participantKey: {
+          in: [`org:${input.companyOrgId}`, `org:${input.vendorOrgId}`],
+        },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+    });
+    if (conflict) {
+      throw new BadRequestException(
+        'Scheduling conflict: company or vendor is already booked in that window',
+      );
+    }
+
+    const schedule = await this.resolveOrCreateManualSchedule(
+      actor,
+      scheduleDate,
+    );
+
+    const duplicatePair = await this.prisma.meeting.findFirst({
+      where: {
+        scheduleVersionId: schedule.id,
+        companyOrgId: input.companyOrgId,
+        vendorOrgId: input.vendorOrgId,
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+    });
+    if (duplicatePair) {
+      throw new BadRequestException(
+        'This company and vendor already have a meeting on this schedule',
+      );
+    }
+
+    const meeting = await this.prisma.$transaction(async (tx) => {
+      const match = await tx.match.create({
+        data: {
+          runId: schedule.runId,
+          companyOrgId: input.companyOrgId,
+          vendorOrgId: input.vendorOrgId,
+          totalScore: 0,
+          scoreBreakdown: {},
+          explanation: `Manual meeting: ${reason}`,
+          isManual: true,
+          overrideReason: reason,
+        },
+      });
+
+      const created = await tx.meeting.create({
+        data: {
+          scheduleVersionId: schedule.id,
+          matchId: match.id,
+          companyOrgId: input.companyOrgId,
+          vendorOrgId: input.vendorOrgId,
+          startsAt,
+          endsAt,
+          timeZone: 'UTC',
+          durationMinutes,
+          status: 'CONFIRMED',
+          idempotencyKey: `manual-meeting:${schedule.id}:${input.companyOrgId}:${input.vendorOrgId}:${startsAt.toISOString()}`,
+        },
+        include: {
+          companyOrg: true,
+          vendorOrg: true,
+        },
+      });
+
+      await tx.meetingOccupancy.createMany({
+        data: [
+          {
+            meetingId: created.id,
+            participantKey: `org:${input.companyOrgId}`,
+            startsAt,
+            endsAt,
+          },
+          {
+            meetingId: created.id,
+            participantKey: `org:${input.vendorOrgId}`,
+            startsAt,
+            endsAt,
+          },
+        ],
+      });
+
+      await tx.meetingStatusHistory.create({
+        data: {
+          meetingId: created.id,
+          fromStatus: 'PROPOSED',
+          toStatus: 'CONFIRMED',
+          reason,
+          actorId: actor.id,
+        },
+      });
+
+      return created;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'meeting.manual_create',
+      entityType: 'Meeting',
+      entityId: meeting.id,
+      outcome: 'SUCCESS',
+      metadata: { reason, scheduleDate },
+    });
+
+    return meeting;
+  }
+
+  async countActiveMeetingsForDate(scheduleDate: string) {
+    const { dayStart, dayEnd } = this.dayBoundsUtc(scheduleDate);
+    return this.prisma.meeting.count({
+      where: {
+        startsAt: { gte: dayStart, lt: dayEnd },
+        status: { not: 'CANCELLED' },
+      },
+    });
+  }
+
+  async cancelMeetingsForDate(
+    actor: AuthUser,
+    scheduleDate: string,
+    reason: string,
+  ) {
+    const { dayStart, dayEnd } = this.dayBoundsUtc(scheduleDate);
+    const meetings = await this.prisma.meeting.findMany({
+      where: {
+        startsAt: { gte: dayStart, lt: dayEnd },
+        status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'IN_PROGRESS'] },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (!meetings.length) return { cancelled: 0 };
+
+    await this.prisma.$transaction(async (tx) => {
+      const ids = meetings.map((m) => m.id);
+      await tx.meetingOccupancy.deleteMany({
+        where: { meetingId: { in: ids } },
+      });
+      for (const meeting of meetings) {
+        await tx.meetingStatusHistory.create({
+          data: {
+            meetingId: meeting.id,
+            fromStatus: meeting.status,
+            toStatus: 'CANCELLED',
+            reason,
+            actorId: actor.id,
+          },
+        });
+      }
+      await tx.meeting.updateMany({
+        where: { id: { in: ids } },
+        data: {
+          status: 'CANCELLED',
+          cancellationReason: reason,
+        },
+      });
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'meeting.cancel_for_date',
+      entityType: 'MatchmakingRun',
+      entityId: scheduleDate,
+      outcome: 'SUCCESS',
+      metadata: { scheduleDate, cancelled: meetings.length, reason },
+    });
+
+    return { cancelled: meetings.length };
+  }
+
+  private dayBoundsUtc(scheduleDate: string) {
+    const dayStart = new Date(`${scheduleDate}T00:00:00.000Z`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    if (Number.isNaN(dayStart.getTime())) {
+      throw new BadRequestException('Invalid schedule date');
+    }
+    return { dayStart, dayEnd };
+  }
+
+  private async resolveOrCreateManualSchedule(
+    actor: AuthUser,
+    scheduleDate: string,
+  ) {
+    const { dayStart, dayEnd } = this.dayBoundsUtc(scheduleDate);
+    const published = await this.prisma.scheduleVersion.findFirst({
+      where: {
+        status: 'PUBLISHED',
+        run: { scheduleDate: { gte: dayStart, lt: dayEnd } },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { run: true },
+    });
+    if (published) return published;
+
+    const existing = await this.prisma.scheduleVersion.findFirst({
+      where: {
+        status: 'PREVIEW_READY',
+        run: { scheduleDate: { gte: dayStart, lt: dayEnd } },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { run: true },
+    });
+    if (existing) return existing;
+
+    const rule = await this.ensureDefaultRule();
+    const ruleVersion = await this.prisma.matchingRuleVersion.findFirst({
+      where: { ruleId: rule.id },
+      orderBy: { version: 'desc' },
+    });
+    if (!ruleVersion) {
+      throw new BadRequestException('No matching rule version published');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const run = await tx.matchmakingRun.create({
+        data: {
+          matchingRuleId: rule.id,
+          matchingRuleVersion: ruleVersion.version,
+          scheduleDate: dayStart,
+          timeZone: 'UTC',
+          status: 'PUBLISHED',
+          config: {
+            scheduleDate,
+            startTime: '00:00',
+            endTime: '23:59',
+            timeZone: 'UTC',
+            mode: 'VIRTUAL',
+            source: 'manual',
+          } as Prisma.InputJsonValue,
+          idempotencyKey: `manual-schedule:${scheduleDate}:${generateSecureToken(8)}`,
+          createdById: actor.id,
+          completedAt: new Date(),
+        },
+      });
+
+      return tx.scheduleVersion.create({
+        data: {
+          runId: run.id,
+          version: 1,
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+          publishedById: actor.id,
+          config: { source: 'manual' } as Prisma.InputJsonValue,
+        },
+        include: { run: true },
+      });
+    });
   }
 
   private async notifySchedulePublished(scheduleVersionId: string) {

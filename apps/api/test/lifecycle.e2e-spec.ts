@@ -155,17 +155,12 @@ describe('Lifecycle e2e', () => {
       .expect(201);
 
     const vendorMeeting = published.body.meetings.find(
-      (m: { vendorOrgId: string; companyOrgId: string }) =>
+      (m: { vendorOrgId: string; companyOrgId: string; status: string }) =>
         m.vendorOrgId === vendorOrgId || m.companyOrgId === companyOrgId,
     );
     expect(vendorMeeting).toBeTruthy();
+    expect(vendorMeeting.status).toBe('CONFIRMED');
     meetingId = vendorMeeting.id;
-
-    await request(app.getHttpServer())
-      .post(`/api/v1/meetings/${meetingId}/confirm`)
-      .set('Authorization', `Bearer ${vendorUserToken}`)
-      .send({})
-      .expect(201);
 
     await request(app.getHttpServer())
       .post(`/api/v1/meetings/${meetingId}/feedback`)

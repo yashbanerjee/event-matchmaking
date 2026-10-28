@@ -7,6 +7,10 @@ describe('meeting transitions', () => {
     assert.equal(canTransition('PUBLISHED', 'AWAITING_CONFIRMATION'), true);
   });
 
+  it('allows proposed -> confirmed on publish', () => {
+    assert.equal(canTransition('PROPOSED', 'CONFIRMED'), true);
+  });
+
   it('rejects completed -> confirmed', () => {
     assert.equal(canTransition('COMPLETED', 'CONFIRMED'), false);
   });

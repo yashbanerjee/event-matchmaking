@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -69,6 +70,34 @@ export class MatchmakingController {
     return this.matchmaking.manualAssign(user, body);
   }
 
+  @Post('meetings')
+  @RequirePermissions(PERMISSIONS.SCHEDULE_OVERRIDE)
+  createManualMeeting(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      companyOrgId: string;
+      vendorOrgId: string;
+      startsAt: string;
+      durationMinutes?: number;
+      reason?: string;
+    },
+  ) {
+    return this.matchmaking.createManualMeeting(user, body);
+  }
+
+  @Get('dates/:scheduleDate/status')
+  @RequirePermissions(PERMISSIONS.MATCHING_RUN)
+  dateStatus(@Param('scheduleDate') scheduleDate: string) {
+    return this.matchmaking
+      .countActiveMeetingsForDate(scheduleDate)
+      .then((meetingCount) => ({
+        scheduleDate,
+        meetingCount,
+        canGenerate: meetingCount === 0,
+      }));
+  }
+
   @Patch('meetings/:id')
   @RequirePermissions(PERMISSIONS.SCHEDULE_OVERRIDE)
   updateMeeting(
@@ -83,5 +112,15 @@ export class MatchmakingController {
     },
   ) {
     return this.matchmaking.updateMeeting(user, id, body);
+  }
+
+  @Delete('meetings/:id')
+  @RequirePermissions(PERMISSIONS.SCHEDULE_OVERRIDE)
+  deleteMeeting(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body?: { reason?: string },
+  ) {
+    return this.matchmaking.deleteMeeting(user, id, body?.reason);
   }
 }

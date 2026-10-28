@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -44,6 +44,8 @@ type Run = {
 
 type OrgOption = { id: string; name: string; code: string };
 
+const PAGE_SIZE = 25;
+
 function toDateTimeLocal(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -56,9 +58,30 @@ function fromDateTimeLocal(value: string) {
   return d.toISOString();
 }
 
-/** Normalize `<input type="time">` values to HH:mm. */
 function toHm(value: string) {
   return value.slice(0, 5);
+}
+
+function formatSlot(startsAt: string, endsAt: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (Number.isNaN(start.getTime())) return '—';
+  const date = start.toLocaleDateString();
+  const startTime = start.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const endTime = Number.isNaN(end.getTime())
+    ? ''
+    : end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return endTime ? `${date} · ${startTime}–${endTime}` : `${date} · ${startTime}`;
+}
+
+function shortExplanation(text?: string) {
+  if (!text) return '—';
+  const match = text.match(/Score\s+([\d.]+)/i);
+  if (match) return `Score ${match[1]}`;
+  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
 }
 
 export default function MatchmakingPage() {
@@ -70,13 +93,17 @@ export default function MatchmakingPage() {
   const [excludeEnd, setExcludeEnd] = useState('13:00');
   const [run, setRun] = useState<Run | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [meetingSearch, setMeetingSearch] = useState('');
+  const [meetingPage, setMeetingPage] = useState(1);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     companyOrgId: '',
     vendorOrgId: '',
     startsAt: '',
     reason: '',
   });
+  const [pendingRegenerate, setPendingRegenerate] = useState(false);
 
   const companies = useQuery({
     queryKey: ['orgs-companies-for-matchmaking'],
@@ -98,46 +125,78 @@ export default function MatchmakingPage() {
       ),
   });
 
+  const dateStatus = useQuery({
+    queryKey: ['matchmaking-date-status', date],
+    queryFn: () =>
+      apiFetch<{
+        scheduleDate: string;
+        meetingCount: number;
+        canGenerate: boolean;
+      }>(`/matchmaking/dates/${date}/status`, { token: getAccessToken() }),
+  });
+
+  async function refreshRun(runId: string) {
+    const refreshed = await apiFetch<Run>(`/matchmaking/runs/${runId}`, {
+      token: getAccessToken(),
+    });
+    setRun(refreshed);
+  }
+
+  function buildRunPayload(forceRegenerate = false) {
+    const startHm = toHm(startTime);
+    const endHm = toHm(endTime);
+    const gapStart = toHm(excludeStart);
+    const gapEnd = toHm(excludeEnd);
+    if (startHm >= endHm) {
+      throw new Error('End time must be after start time');
+    }
+    if (
+      excludeEnabled &&
+      (gapStart >= gapEnd || gapStart < startHm || gapEnd > endHm)
+    ) {
+      throw new Error(
+        'Exclude interval must sit inside the schedule start/end window',
+      );
+    }
+    return {
+      scheduleDate: date,
+      startTime: startHm,
+      endTime: endHm,
+      timeZone: 'UTC',
+      bufferMinutes: 5,
+      maxMeetingsPerParticipant: 24,
+      mode: 'VIRTUAL',
+      forceRegenerate: forceRegenerate || undefined,
+      excludeIntervals:
+        excludeEnabled && gapStart && gapEnd
+          ? [{ startTime: gapStart, endTime: gapEnd }]
+          : [],
+    };
+  }
+
   const start = useMutation({
-    mutationFn: () => {
-      const start = toHm(startTime);
-      const end = toHm(endTime);
-      const gapStart = toHm(excludeStart);
-      const gapEnd = toHm(excludeEnd);
-      if (start >= end) {
-        throw new Error('End time must be after start time');
-      }
-      if (
-        excludeEnabled &&
-        (gapStart >= gapEnd || gapStart < start || gapEnd > end)
-      ) {
-        throw new Error(
-          'Exclude interval must sit inside the schedule start/end window',
-        );
-      }
-      return apiFetch<Run>('/matchmaking/runs', {
+    mutationFn: (forceRegenerate?: boolean) =>
+      apiFetch<Run>('/matchmaking/runs', {
         method: 'POST',
         token: getAccessToken(),
-        body: JSON.stringify({
-          scheduleDate: date,
-          startTime: start,
-          endTime: end,
-          timeZone: 'UTC',
-          bufferMinutes: 5,
-          maxMeetingsPerParticipant: 24,
-          mode: 'VIRTUAL',
-          excludeIntervals:
-            excludeEnabled && gapStart && gapEnd
-              ? [{ startTime: gapStart, endTime: gapEnd }]
-              : [],
-        }),
-      });
-    },
+        body: JSON.stringify(buildRunPayload(Boolean(forceRegenerate))),
+      }),
     onSuccess: (data) => {
       setRun(data);
+      setMeetingSearch('');
+      setMeetingPage(1);
       setError(null);
+      setPendingRegenerate(false);
+      void dateStatus.refetch();
     },
-    onError: (err) => setError((err as Error).message),
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        setPendingRegenerate(true);
+        setError(err.message);
+        return;
+      }
+      setError((err as Error).message);
+    },
   });
 
   const publish = useMutation({
@@ -148,10 +207,7 @@ export default function MatchmakingPage() {
       }),
     onSuccess: async () => {
       if (!run) return;
-      const refreshed = await apiFetch<Run>(`/matchmaking/runs/${run.id}`, {
-        token: getAccessToken(),
-      });
-      setRun(refreshed);
+      await refreshRun(run.id);
     },
   });
 
@@ -172,17 +228,65 @@ export default function MatchmakingPage() {
     onSuccess: async () => {
       setEdit(null);
       if (!run) return;
-      const refreshed = await apiFetch<Run>(`/matchmaking/runs/${run.id}`, {
-        token: getAccessToken(),
-      });
-      setRun(refreshed);
+      await refreshRun(run.id);
       setError(null);
     },
     onError: (err) => setError((err as Error).message),
   });
 
+  const removeMeeting = useMutation({
+    mutationFn: (meetingId: string) =>
+      apiFetch(`/matchmaking/meetings/${meetingId}`, {
+        method: 'DELETE',
+        token: getAccessToken(),
+        body: JSON.stringify({ reason: 'Removed from proposed schedule' }),
+      }),
+    onMutate: (meetingId) => setDeletingId(meetingId),
+    onSuccess: (_data, meetingId) => {
+      setRun((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          scheduleVersions: current.scheduleVersions.map((version, index) =>
+            index === 0
+              ? {
+                  ...version,
+                  meetings: version.meetings.filter((m) => m.id !== meetingId),
+                }
+              : version,
+          ),
+        };
+      });
+      setError(null);
+    },
+    onError: (err) => setError((err as Error).message),
+    onSettled: () => setDeletingId(null),
+  });
+
   const schedule = run?.scheduleVersions[0];
   const meetings = schedule?.meetings ?? [];
+
+  const filteredMeetings = useMemo(() => {
+    const q = meetingSearch.trim().toLowerCase();
+    const sorted = [...meetings].sort(
+      (a, b) =>
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+    );
+    if (!q) return sorted;
+    return sorted.filter(
+      (m) =>
+        m.companyOrg.name.toLowerCase().includes(q) ||
+        m.vendorOrg.name.toLowerCase().includes(q) ||
+        (m.match?.explanation ?? '').toLowerCase().includes(q),
+    );
+  }, [meetings, meetingSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMeetings.length / PAGE_SIZE));
+  const page = Math.min(meetingPage, totalPages);
+  const pagedMeetings = filteredMeetings.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
 
   const candidateStats = useMemo(() => {
     const all = run?.candidates ?? [];
@@ -208,6 +312,14 @@ export default function MatchmakingPage() {
       reason: '',
     });
     setError(null);
+  }
+
+  function confirmDelete(meeting: MeetingRow) {
+    const ok = window.confirm(
+      `Delete meeting between ${meeting.companyOrg.name} and ${meeting.vendorOrg.name}?`,
+    );
+    if (!ok) return;
+    removeMeeting.mutate(meeting.id);
   }
 
   const companyOptions = useMemo(() => {
@@ -276,19 +388,68 @@ export default function MatchmakingPage() {
               onChange={(e) => setEndTime(e.target.value)}
             />
           </div>
-          <Button onClick={() => start.mutate()} disabled={start.isPending}>
+          <Button
+            onClick={() => start.mutate(false)}
+            disabled={start.isPending}
+          >
             {start.isPending ? 'Running…' : 'Generate schedule'}
           </Button>
+          {(dateStatus.data?.meetingCount ?? 0) > 0 ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                const count = dateStatus.data?.meetingCount ?? 0;
+                const ok = window.confirm(
+                  `Regenerate for ${date}? This cancels ${count} existing meeting${count === 1 ? '' : 's'} for that date, then creates a new schedule.`,
+                );
+                if (!ok) return;
+                start.mutate(true);
+              }}
+              disabled={start.isPending}
+            >
+              Regenerate for date
+            </Button>
+          ) : null}
           {schedule && schedule.status !== 'PUBLISHED' && (
             <Button
               variant="outline"
               onClick={() => publish.mutate(schedule.id)}
               disabled={publish.isPending || meetings.length === 0}
             >
-              Publish schedule
+              Publish (confirm all)
             </Button>
           )}
         </div>
+        {(dateStatus.data?.meetingCount ?? 0) > 0 ? (
+          <p className="text-sm text-amber-800">
+            {dateStatus.data?.meetingCount} active meeting
+            {dateStatus.data?.meetingCount === 1 ? '' : 's'} already exist for{' '}
+            {date}. Generate is blocked unless you regenerate (cancels existing
+            for that date first).
+          </p>
+        ) : null}
+        {pendingRegenerate ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span>{error ?? 'Meetings already exist for this date.'}</span>
+            <Button
+              size="sm"
+              onClick={() => start.mutate(true)}
+              disabled={start.isPending}
+            >
+              Regenerate anyway
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPendingRegenerate(false);
+                setError(null);
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        ) : null}
 
         <div className="rounded-md border border-[var(--border)] p-3">
           <label className="flex items-center gap-2 text-sm">
@@ -354,49 +515,112 @@ export default function MatchmakingPage() {
           </Card>
 
           <Card>
-            <h2 className="mb-3 font-medium">Proposed meetings</h2>
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="font-medium">Proposed meetings</h2>
+              {meetings.length > 0 ? (
+                <Input
+                  className="max-w-xs"
+                  placeholder="Search company or vendor…"
+                  value={meetingSearch}
+                  onChange={(e) => {
+                    setMeetingSearch(e.target.value);
+                    setMeetingPage(1);
+                  }}
+                />
+              ) : null}
+            </div>
+
             {meetings.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">
-                No meetings yet. Verify companies and vendors are matching-eligible,
-                then generate again.
+                No meetings yet. Verify companies and vendors are
+                matching-eligible, then generate again.
+              </p>
+            ) : filteredMeetings.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">
+                No meetings match “{meetingSearch}”.
               </p>
             ) : (
-              <Table>
-                <THead>
-                  <TR>
-                    <TH>Company</TH>
-                    <TH>Vendor</TH>
-                    <TH>Score</TH>
-                    <TH>Starts</TH>
-                    <TH>Explanation</TH>
-                    <TH className="text-right">Actions</TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {meetings.map((m) => (
-                    <TR key={m.id}>
-                      <TD className="font-medium">{m.companyOrg.name}</TD>
-                      <TD>{m.vendorOrg.name}</TD>
-                      <TD>{m.matchScore?.toFixed(1) ?? '—'}</TD>
-                      <TD className="whitespace-nowrap text-xs">
-                        {new Date(m.startsAt).toLocaleString()}
-                      </TD>
-                      <TD className="max-w-md text-xs text-[var(--muted)]">
-                        {m.match?.explanation}
-                      </TD>
-                      <TD className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEdit(m)}
-                        >
-                          Edit
-                        </Button>
-                      </TD>
+              <>
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Company</TH>
+                      <TH>Vendor</TH>
+                      <TH>Score</TH>
+                      <TH>Time</TH>
+                      <TH>Match</TH>
+                      <TH className="text-right">Actions</TH>
                     </TR>
-                  ))}
-                </TBody>
-              </Table>
+                  </THead>
+                  <TBody>
+                    {pagedMeetings.map((m) => (
+                      <TR key={m.id}>
+                        <TD className="font-medium">{m.companyOrg.name}</TD>
+                        <TD>{m.vendorOrg.name}</TD>
+                        <TD>{m.matchScore?.toFixed(1) ?? '—'}</TD>
+                        <TD className="whitespace-nowrap text-xs">
+                          {formatSlot(m.startsAt, m.endsAt)}
+                        </TD>
+                        <TD
+                          className="max-w-[14rem] truncate text-xs text-[var(--muted)]"
+                          title={m.match?.explanation}
+                        >
+                          {shortExplanation(m.match?.explanation)}
+                        </TD>
+                        <TD>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEdit(m)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              disabled={deletingId === m.id}
+                              onClick={() => confirmDelete(m)}
+                            >
+                              {deletingId === m.id ? 'Deleting…' : 'Delete'}
+                            </Button>
+                          </div>
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+
+                {totalPages > 1 ? (
+                  <div className="mt-3 flex items-center justify-between text-sm">
+                    <span className="text-[var(--muted)]">
+                      Showing {(page - 1) * PAGE_SIZE + 1}–
+                      {Math.min(page * PAGE_SIZE, filteredMeetings.length)} of{' '}
+                      {filteredMeetings.length}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={page <= 1}
+                        onClick={() => setMeetingPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={page >= totalPages}
+                        onClick={() =>
+                          setMeetingPage((p) => Math.min(totalPages, p + 1))
+                        }
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
             )}
           </Card>
         </>

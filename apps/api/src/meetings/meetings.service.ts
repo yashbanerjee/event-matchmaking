@@ -104,6 +104,9 @@ export class MeetingsService {
 
   async confirm(user: AuthUser, meetingId: string, note?: string) {
     const meeting = await this.requireMeetingAccess(user, meetingId);
+    if (meeting.status === 'CONFIRMED') {
+      return { id: meeting.id, status: 'CONFIRMED' as const };
+    }
     if (
       !['AWAITING_CONFIRMATION', 'RESCHEDULED', 'PUBLISHED'].includes(
         meeting.status,

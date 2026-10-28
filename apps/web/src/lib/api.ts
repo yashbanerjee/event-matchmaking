@@ -83,10 +83,16 @@ export async function apiFetch<T>(
   if (!res.ok) {
     let message = res.statusText;
     try {
-      const body = (await res.json()) as { message?: string | string[] };
-      message = Array.isArray(body.message)
-        ? body.message.join(', ')
-        : (body.message ?? message);
+      const body = (await res.json()) as {
+        message?: string | string[] | { message?: string; code?: string };
+      };
+      if (Array.isArray(body.message)) {
+        message = body.message.join(', ');
+      } else if (typeof body.message === 'string') {
+        message = body.message;
+      } else if (body.message && typeof body.message === 'object') {
+        message = body.message.message ?? message;
+      }
     } catch {
       // ignore
     }
