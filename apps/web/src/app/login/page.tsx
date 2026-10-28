@@ -49,7 +49,7 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-6 py-10">
+    <main className="auth-pad relative min-h-screen overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_0%_0%,rgba(15,118,110,0.18),transparent_55%)]"

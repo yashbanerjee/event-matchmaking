@@ -59,7 +59,7 @@ export default function CorrectionResubmitPage() {
 
   if (query.isLoading) {
     return (
-      <main className="min-h-screen p-6 lg:p-8">
+      <main className="page-pad min-h-screen">
         <p className="text-sm text-[var(--muted)]">Loading form…</p>
       </main>
     );
@@ -67,7 +67,7 @@ export default function CorrectionResubmitPage() {
 
   if (query.isError || !query.data) {
     return (
-      <main className="min-h-screen p-6 lg:p-8">
+      <main className="page-pad min-h-screen">
         <PageHeader
           title="Link unavailable"
           description="This correction link is invalid or has already been used."
@@ -79,8 +79,8 @@ export default function CorrectionResubmitPage() {
   const data = query.data;
 
   return (
-    <main className="min-h-screen p-6 lg:p-8">
-      <div className="mx-auto w-full max-w-3xl space-y-6">
+    <main className="page-pad min-h-screen">
+      <div className="mx-auto w-full max-w-3xl space-y-6 pb-8">
         <PageHeader
           eyebrow={data.organizationName}
           title={data.formName}

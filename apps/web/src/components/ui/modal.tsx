@@ -48,9 +48,9 @@ export function Modal({
             Close
           </Button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="scroll-pad-bottom px-5 py-4 pb-6">{children}</div>
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+          <div className="modal-footer-pad flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
             {footer}
           </div>
         ) : null}

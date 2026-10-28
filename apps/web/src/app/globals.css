@@ -25,6 +25,18 @@
   --radius: 16px;
   --font-display: "Syne", "Avenir Next", system-ui, sans-serif;
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --page-pad-x: 1.5rem;
+  --page-pad-top: 1.5rem;
+  /* Extra bottom inset so lists, builders, and panels never hug the viewport edge */
+  --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-pad-x: 2rem;
+    --page-pad-top: 2rem;
+    --page-pad-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 * {
@@ -103,4 +115,27 @@ h2,
 
 .page-shell {
   animation: rise-in 0.45s ease-out both;
+}
+
+.page-pad {
+  padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
+}
+
+.scroll-pad-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+.sidebar-pad-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+.modal-footer-pad {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.auth-pad {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  padding-top: 2.5rem;
+  padding-bottom: max(2.5rem, env(safe-area-inset-bottom, 0px));
 }

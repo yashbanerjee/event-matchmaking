@@ -47,7 +47,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[272px_1fr]">
-      <aside className="flex flex-col gap-6 overflow-y-auto bg-[var(--sidebar)] px-4 py-5 text-[var(--sidebar-fg)] lg:sticky lg:top-0 lg:h-screen">
+      <aside className="sidebar-pad-bottom flex flex-col gap-6 overflow-y-auto bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] lg:sticky lg:top-0 lg:h-screen">
         <div className="px-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--sidebar-muted)]">
             Admin
@@ -57,7 +57,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-5">
+        <nav className="flex flex-1 flex-col gap-5 pb-4">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="space-y-1">
               <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-muted)]">
@@ -104,8 +104,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-h-screen p-6 lg:p-8">
-        <div className="w-full">{children}</div>
+      <main className="page-pad min-h-screen">
+        <div className="w-full pb-2">{children}</div>
       </main>
     </div>
   );

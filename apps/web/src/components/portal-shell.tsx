@@ -48,8 +48,8 @@ export function PortalShell({
           </div>
         </div>
       </header>
-      <main className="w-full p-6 lg:p-8">
-        {children}
+      <main className="page-pad w-full">
+        <div className="w-full pb-2">{children}</div>
       </main>
     </div>
   );

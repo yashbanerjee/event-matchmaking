@@ -151,7 +151,7 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="flex flex-col lg:h-[calc(100dvh-8.25rem)] lg:min-h-0 lg:overflow-hidden">
+    <div className="flex flex-col lg:h-[calc(100dvh-var(--page-pad-top)-var(--page-pad-bottom))] lg:min-h-0 lg:overflow-hidden">
       <div className="shrink-0">
         <PageHeader
           title={name || 'Form'}
@@ -190,11 +190,11 @@ export default function FormBuilderPage() {
         </label>
       </div>
       <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)_minmax(240px,320px)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
-        <aside className="max-h-72 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:h-full lg:max-h-full">
+        <aside className="scroll-pad-bottom max-h-72 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:h-full lg:max-h-full">
           <h2 className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
             Add a field
           </h2>
-          <div className="grid gap-1">
+          <div className="grid gap-1 pb-2">
             {palette.map((type) => (
               <button
                 key={type}
@@ -207,32 +207,34 @@ export default function FormBuilderPage() {
             ))}
           </div>
         </aside>
-        <div className="min-h-0 min-w-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden lg:pr-1">
+        <div className="scroll-pad-bottom min-h-0 min-w-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden lg:pr-1">
           {schema.fields.length === 0 ? (
             <p className="mb-3 text-sm text-[var(--muted)]">
               Add a field. It appears here the same way a recipient will see it.
             </p>
           ) : null}
-          <FormRenderer
-            schema={schema}
-            values={values}
-            selectedFieldId={selected}
-            onSelectField={setSelected}
-            onChange={(fieldId, value) => {
-              setSelected(fieldId);
-              setValues((current) => ({ ...current, [fieldId]: value }));
-            }}
-            onUpload={async (_field, file) => ({
-              documentId: crypto.randomUUID(),
-              filename: file.name,
-            })}
-          />
+          <div className="pb-8">
+            <FormRenderer
+              schema={schema}
+              values={values}
+              selectedFieldId={selected}
+              onSelectField={setSelected}
+              onChange={(fieldId, value) => {
+                setSelected(fieldId);
+                setValues((current) => ({ ...current, [fieldId]: value }));
+              }}
+              onUpload={async (_field, file) => ({
+                documentId: crypto.randomUUID(),
+                filename: file.name,
+              })}
+            />
+          </div>
         </div>
-        <aside className="flex max-h-[calc(100dvh-8.25rem)] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:h-full lg:max-h-full">
+        <aside className="flex max-h-[calc(100dvh-var(--page-pad-top)-var(--page-pad-bottom))] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:h-full lg:max-h-full">
           <h2 className="shrink-0 px-3 pt-3 text-xs font-semibold uppercase text-[var(--muted)]">
             Configuration
           </h2>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3">
+          <div className="scroll-pad-bottom min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 pb-8">
             {!field ? (
               <p className="text-sm text-[var(--muted)]">
                 Select a field in the form.

@@ -18,7 +18,7 @@ export function Pagination({
   const to = Math.min(total, page * pageSize);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-4">
+    <div className="flex flex-col gap-3 pt-4 pb-1 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-sm text-[var(--muted)]">
         Showing <span className="font-semibold text-[var(--foreground)]">{from}</span>
         –<span className="font-semibold text-[var(--foreground)]">{to}</span> of{' '}
