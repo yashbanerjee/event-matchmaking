@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -13,7 +14,7 @@ import { Card } from '@/components/ui/card';
 
 const schema = z.object({
   email: z.string().email(),
-  password: z.string().min(12),
+  password: z.string().min(8),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -23,7 +24,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: 'admin@example.com', password: 'ChangeMeAdmin1!' },
+    defaultValues: { email: '', password: '' },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -48,27 +49,59 @@ export default function LoginPage() {
   });
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <h1 className="text-2xl font-semibold mb-1">Sign in</h1>
-        <p className="text-sm text-[var(--muted)] mb-6">
-          Use your invited account credentials.
-        </p>
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label className="text-sm mb-1 block">Email</label>
-            <Input type="email" {...form.register('email')} />
-          </div>
-          <div>
-            <label className="text-sm mb-1 block">Password</label>
-            <Input type="password" {...form.register('password')} />
-          </div>
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          <Button className="w-full" type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </form>
-      </Card>
+    <main className="relative min-h-screen overflow-hidden px-6 py-10">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_0%_0%,rgba(15,118,110,0.18),transparent_55%)]"
+      />
+      <div className="relative mx-auto flex min-h-[85vh] max-w-6xl flex-col justify-center gap-10 lg:grid lg:grid-cols-2 lg:items-center">
+        <div className="animate-rise space-y-4">
+          <Link
+            href="/"
+            className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]"
+          >
+            Event Matchmaking
+          </Link>
+          <h1 className="max-w-md text-4xl leading-tight md:text-5xl">
+            Welcome back to your event workspace.
+          </h1>
+          <p className="max-w-md text-[var(--muted)]">
+            Admins manage matching and schedules. Vendors and companies use the
+            participant portal for confirmations and feedback.
+          </p>
+        </div>
+
+        <Card className="animate-rise mx-auto w-full max-w-md border-white/60 bg-white/90 p-7">
+          <h2 className="text-2xl">Sign in</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Use your invited account credentials.
+          </p>
+          <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Email</label>
+              <Input type="email" placeholder="you@company.com" {...form.register('email')} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Password</label>
+              <Input type="password" placeholder="••••••••••••" {...form.register('password')} />
+            </div>
+            {error && (
+              <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {error}
+              </p>
+            )}
+            <Button className="w-full" type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
+            </Button>
+          </form>
+          <p className="mt-5 text-center text-sm text-[var(--muted)]">
+            Have an invite?{' '}
+            <Link href="/register" className="font-semibold text-[var(--accent)]">
+              Accept invitation
+            </Link>
+          </p>
+        </Card>
+      </div>
     </main>
   );
 }

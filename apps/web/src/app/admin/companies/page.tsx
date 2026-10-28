@@ -1,12 +1,18 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import { statusTone } from '@/lib/status';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Pagination } from '@/components/ui/pagination';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState } from '@/components/empty-state';
+import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type OrgList = {
   items: Array<{
@@ -17,10 +23,16 @@ type OrgList = {
     industry: string | null;
   }>;
   total: number;
+  page: number;
+  pageSize: number;
 };
+
+const PAGE_SIZE = 10;
 
 export default function CompaniesPage() {
   const qc = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     code: '',
     name: '',
@@ -30,12 +42,24 @@ export default function CompaniesPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['companies'],
+    queryKey: ['companies', page],
     queryFn: () =>
-      apiFetch<OrgList>('/organizations?type=COMPANY', {
-        token: getAccessToken(),
-      }),
+      apiFetch<OrgList>(
+        `/organizations?type=COMPANY&page=${page}&pageSize=${PAGE_SIZE}`,
+        { token: getAccessToken() },
+      ),
   });
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || !data?.items) return data?.items ?? [];
+    return data.items.filter(
+      (org) =>
+        org.name.toLowerCase().includes(q) ||
+        org.code.toLowerCase().includes(q) ||
+        (org.industry ?? '').toLowerCase().includes(q),
+    );
+  }, [data?.items, search]);
 
   const create = useMutation({
     mutationFn: () =>
@@ -53,20 +77,20 @@ export default function CompaniesPage() {
         country: 'DE',
         region: 'EU',
       });
+      setPage(1);
     },
   });
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Companies</h1>
-        <p className="text-sm text-[var(--muted)]">
-          Create and manage company organizations.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Organizations"
+        title="Companies"
+        description="Create and manage company organizations for matching."
+      />
 
       <Card>
-        <h2 className="font-medium mb-3">Create company</h2>
+        <h2 className="mb-3 text-lg font-semibold">Create company</h2>
         <div className="grid gap-3 md:grid-cols-3">
           <Input
             placeholder="Code"
@@ -85,42 +109,70 @@ export default function CompaniesPage() {
           />
         </div>
         <Button
-          className="mt-3"
+          className="mt-4"
           onClick={() => create.mutate()}
           disabled={create.isPending || !form.code || !form.name}
         >
-          Create
+          {create.isPending ? 'Creating…' : 'Create company'}
         </Button>
         {create.error && (
-          <p className="text-sm text-red-700 mt-2">
+          <p className="mt-2 text-sm text-rose-700">
             {(create.error as Error).message}
           </p>
         )}
       </Card>
 
       <Card>
-        {isLoading && <p>Loading…</p>}
-        {error && <p className="text-red-700">{(error as Error).message}</p>}
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
-              <th className="py-2">Code</th>
-              <th>Name</th>
-              <th>Industry</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data?.items.map((org) => (
-              <tr key={org.id} className="border-b border-[var(--border)]">
-                <td className="py-2 font-mono text-xs">{org.code}</td>
-                <td>{org.name}</td>
-                <td>{org.industry ?? '—'}</td>
-                <td>{org.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold">Directory</h2>
+          <Input
+            className="max-w-xs"
+            placeholder="Search code, name, industry…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {isLoading && <p className="text-[var(--muted)]">Loading…</p>}
+        {error && <p className="text-rose-700">{(error as Error).message}</p>}
+
+        {!isLoading && filtered.length === 0 ? (
+          <EmptyState
+            title="No companies yet"
+            description="Create your first company to start invitations and matching."
+          />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Code</TH>
+                  <TH>Name</TH>
+                  <TH>Industry</TH>
+                  <TH>Status</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {filtered.map((org) => (
+                  <TR key={org.id} className="hover:bg-slate-50/80">
+                    <TD className="font-mono text-xs">{org.code}</TD>
+                    <TD className="font-medium">{org.name}</TD>
+                    <TD>{org.industry ?? '—'}</TD>
+                    <TD>
+                      <Badge variant={statusTone(org.status)}>{org.status}</Badge>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination
+              page={data?.page ?? page}
+              pageSize={data?.pageSize ?? PAGE_SIZE}
+              total={data?.total ?? 0}
+              onPageChange={setPage}
+            />
+          </>
+        )}
       </Card>
     </div>
   );

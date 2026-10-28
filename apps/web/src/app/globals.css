@@ -1,37 +1,106 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7f8fa;
-  --foreground: #0f172a;
+  --background: #eef3f7;
+  --foreground: #0f1c27;
   --card: #ffffff;
-  --border: #e2e8f0;
-  --muted: #64748b;
+  --card-elevated: #f8fbfd;
+  --border: #d5e0e8;
+  --muted: #5b6f7e;
   --accent: #0f766e;
-  --accent-foreground: #ecfdf5;
-  --danger: #b91c1c;
-  --sidebar: #0b1220;
-  --sidebar-fg: #e2e8f0;
+  --accent-hover: #0d5f59;
+  --accent-foreground: #ecfdf8;
+  --accent-soft: #ccfbf1;
+  --highlight: #0369a1;
+  --highlight-soft: #e0f2fe;
+  --danger: #be123c;
+  --success: #047857;
+  --warning: #b45309;
+  --sidebar: #0b1b2b;
+  --sidebar-fg: #e8eef4;
+  --sidebar-muted: #8aa0b4;
+  --sidebar-active: #143049;
+  --ring: #0f766e;
+  --shadow: 0 16px 40px rgba(15, 28, 39, 0.08);
+  --radius: 16px;
+  --font-display: "Syne", "Avenir Next", system-ui, sans-serif;
+  --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
 }
 
-.dark {
-  --background: #0b1220;
-  --foreground: #e2e8f0;
-  --card: #111827;
-  --border: #1f2937;
-  --muted: #94a3b8;
-  --accent: #2dd4bf;
-  --accent-foreground: #042f2e;
-  --sidebar: #020617;
-  --sidebar-fg: #e2e8f0;
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 520px at 8% -8%, rgba(15, 118, 110, 0.16), transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, rgba(3, 105, 161, 0.12), transparent 50%),
+    linear-gradient(180deg, #f5f8fb 0%, var(--background) 48%, #e7eef4 100%);
   color: var(--foreground);
-  font-family: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+h1,
+h2,
+.h-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.55s ease-out both;
+}
+
+.animate-fade {
+  animation: fade-in 0.45s ease-out both;
+}
+
+.glass-panel {
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.page-shell {
+  animation: rise-in 0.45s ease-out both;
 }

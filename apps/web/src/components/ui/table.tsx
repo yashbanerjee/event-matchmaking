@@ -12,7 +12,12 @@ export function Table({
 }
 
 export function THead(props: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className="text-left text-[var(--muted)]" {...props} />;
+  return (
+    <thead
+      className="text-left text-xs uppercase tracking-wide text-[var(--muted)]"
+      {...props}
+    />
+  );
 }
 
 export function TBody(props: React.HTMLAttributes<HTMLTableSectionElement>) {
@@ -32,12 +37,12 @@ export function TH({
   className,
   ...props
 }: React.ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th className={cn('py-2 font-medium', className)} {...props} />;
+  return <th className={cn('py-3 font-semibold', className)} {...props} />;
 }
 
 export function TD({
   className,
   ...props
 }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('py-2', className)} {...props} />;
+  return <td className={cn('py-3 align-middle', className)} {...props} />;
 }

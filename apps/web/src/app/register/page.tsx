@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -57,45 +58,70 @@ function RegisterForm() {
   });
 
   return (
-    <Card className="w-full max-w-md">
-      <h1 className="text-2xl font-semibold mb-1">Accept invitation</h1>
-      <p className="text-sm text-[var(--muted)] mb-6">
+    <Card className="w-full max-w-md border-white/60 bg-white/90 p-7">
+      <h1 className="text-2xl">Accept invitation</h1>
+      <p className="mt-1 text-sm text-[var(--muted)]">
         Create your account with the secure invitation token.
       </p>
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="mt-6 space-y-4" onSubmit={onSubmit}>
         <div>
-          <label className="text-sm mb-1 block">Invitation token</label>
+          <label className="mb-1.5 block text-sm font-medium">Invitation token</label>
           <Input {...form.register('token')} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-sm mb-1 block">First name</label>
+            <label className="mb-1.5 block text-sm font-medium">First name</label>
             <Input {...form.register('firstName')} />
           </div>
           <div>
-            <label className="text-sm mb-1 block">Last name</label>
+            <label className="mb-1.5 block text-sm font-medium">Last name</label>
             <Input {...form.register('lastName')} />
           </div>
         </div>
         <div>
-          <label className="text-sm mb-1 block">Password</label>
+          <label className="mb-1.5 block text-sm font-medium">Password</label>
           <Input type="password" {...form.register('password')} />
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Min 12 chars with upper, lower, and a number.
+          </p>
         </div>
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && (
+          <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </p>
+        )}
         <Button className="w-full" type="submit">
           Create account
         </Button>
       </form>
+      <p className="mt-5 text-center text-sm text-[var(--muted)]">
+        Already registered?{' '}
+        <Link href="/login" className="font-semibold text-[var(--accent)]">
+          Sign in
+        </Link>
+      </p>
     </Card>
   );
 }
 
 export default function RegisterPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <Suspense>
-        <RegisterForm />
-      </Suspense>
+    <main className="relative min-h-screen overflow-hidden px-6 py-10">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_100%_0%,rgba(3,105,161,0.14),transparent_55%)]"
+      />
+      <div className="relative mx-auto flex min-h-[85vh] max-w-6xl flex-col items-center justify-center">
+        <Link
+          href="/"
+          className="mb-6 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]"
+        >
+          Event Matchmaking
+        </Link>
+        <Suspense>
+          <RegisterForm />
+        </Suspense>
+      </div>
     </main>
   );
 }

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
  * Start Next.js on Railway's PORT (defaults to 3000 locally).
- * Railway public networking must target the same port (often 8080).
+ * Uses `next start` so CSS and static assets load correctly.
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -16,36 +15,18 @@ process.env.HOSTNAME = host;
 
 console.log(`Starting web on http://${host}:${port}`);
 
-const standaloneCandidates = [
-  resolve(root, 'apps/web/server.js'),
-  resolve(root, 'apps/web/.next/standalone/apps/web/server.js'),
-  resolve(root, 'apps/web/.next/standalone/server.js'),
-];
-
-const standalone = standaloneCandidates.find((p) => existsSync(p));
-if (standalone) {
-  const child = spawn(process.execPath, [standalone], {
-    cwd: resolve(standalone, '..'),
+const child = spawn(
+  'npx',
+  ['next', 'start', '-H', host, '-p', port],
+  {
+    cwd: resolve(root, 'apps/web'),
     stdio: 'inherit',
+    shell: true,
     env: process.env,
-  });
-  child.on('exit', (code, signal) => {
-    if (signal) process.kill(process.pid, signal);
-    process.exit(code ?? 1);
-  });
-} else {
-  const child = spawn(
-    'npx',
-    ['next', 'start', '-H', host, '-p', port],
-    {
-      cwd: resolve(root, 'apps/web'),
-      stdio: 'inherit',
-      shell: true,
-      env: process.env,
-    },
-  );
-  child.on('exit', (code, signal) => {
-    if (signal) process.kill(process.pid, signal);
-    process.exit(code ?? 1);
-  });
-}
+  },
+);
+
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 1);
+});

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Card } from '@/components/ui/card';
+import { PageHeader } from '@/components/page-header';
 
 type Overview = {
   totalCompanies: number;
@@ -32,19 +33,26 @@ export default function AdminOverviewPage() {
       }),
   });
 
-  if (isLoading) return <p>Loading metrics…</p>;
-  if (error) return <p className="text-red-700">{(error as Error).message}</p>;
+  if (isLoading) {
+    return <p className="text-[var(--muted)]">Loading metrics…</p>;
+  }
+  if (error) {
+    return <p className="text-rose-700">{(error as Error).message}</p>;
+  }
   if (!data) return null;
 
+  const hero = [
+    { label: 'Companies', value: data.totalCompanies, tone: 'teal' },
+    { label: 'Vendors', value: data.totalVendors, tone: 'sky' },
+    { label: 'Scheduled', value: data.scheduledMeetings, tone: 'teal' },
+    { label: 'Confirmed', value: data.confirmedMeetings, tone: 'sky' },
+  ];
+
   const metrics: Array<{ label: string; value: string | number }> = [
-    { label: 'Companies', value: data.totalCompanies },
-    { label: 'Vendors', value: data.totalVendors },
     { label: 'Active users', value: data.activeUsers },
     { label: 'Pending invitations', value: data.pendingInvitations },
     { label: 'Eligible participants', value: data.eligibleParticipants },
     { label: 'Generated matches', value: data.generatedMatches },
-    { label: 'Scheduled meetings', value: data.scheduledMeetings },
-    { label: 'Confirmed meetings', value: data.confirmedMeetings },
     { label: 'Completed meetings', value: data.completedMeetings },
     {
       label: 'Cancellation rate',
@@ -62,16 +70,36 @@ export default function AdminOverviewPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-2">Overview</h1>
-      <p className="text-sm text-[var(--muted)] mb-6">
-        Live metrics from PostgreSQL. Definitions are documented in the API
-        dashboard service.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <PageHeader
+        eyebrow="Control center"
+        title="Overview"
+        description="Live operational metrics from PostgreSQL — invitations through outcomes."
+      />
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {hero.map((m, i) => (
+          <Card
+            key={m.label}
+            className="relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#0f766e,#0b4f4a)] text-white"
+            style={{
+              background:
+                m.tone === 'sky'
+                  ? 'linear-gradient(145deg,#0369a1,#0c4a6e)'
+                  : undefined,
+              animationDelay: `${i * 60}ms`,
+            }}
+          >
+            <div className="text-sm text-white/75">{m.label}</div>
+            <div className="mt-3 text-3xl font-bold tracking-tight">{m.value}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((m) => (
-          <Card key={m.label}>
+          <Card key={m.label} className="hover:border-[var(--accent)]/30 transition-colors">
             <div className="text-sm text-[var(--muted)]">{m.label}</div>
-            <div className="text-2xl font-semibold mt-2">{m.value}</div>
+            <div className="mt-2 text-2xl font-semibold tracking-tight">{m.value}</div>
           </Card>
         ))}
       </div>
