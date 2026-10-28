@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OrganizationType } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { formSchemaDefinition } from '@em/shared';
+import { formSchemaDefinition, renderInvitationEmail } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EnvService } from '../config/env.service';
@@ -282,12 +282,22 @@ export class OrganizationsService {
 
     let emailSent = false;
     try {
+      const fromName = await this.email.getFromName();
+      const template = renderInvitationEmail({
+        brandName: fromName,
+        organizationName: result.org.name,
+        kind: input.type === 'COMPANY' ? 'company' : 'vendor',
+        registrationUrl: result.registrationUrl,
+        expiresAt,
+        formAttached: Boolean(input.formId),
+      });
       await this.email.send({
         to: email,
-        subject: `You are invited to ${result.org.name}`,
-        text: `Hello,\n\nYou have been invited to join ${result.org.name} on Event Matchmaking.\n\nRegister here: ${result.registrationUrl}\n\nThis link expires on ${expiresAt.toISOString()}.`,
-        html: `<p>Hello,</p><p>You have been invited to join <strong>${result.org.name}</strong> on Event Matchmaking.</p><p><a href="${result.registrationUrl}">Register here</a></p><p>This link expires on ${expiresAt.toUTCString()}.</p>`,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
         idempotencyKey: `invitation.email:${result.invitation.id}`,
+        templateCode: 'invitation',
       });
       emailSent = true;
     } catch (err) {

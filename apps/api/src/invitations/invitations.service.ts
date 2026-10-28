@@ -1,23 +1,29 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { createInvitationSchema, type CreateInvitationInput } from '@em/shared';
+import { InvitationStatus, Prisma } from '@prisma/client';
+import { createInvitationSchema, type CreateInvitationInput, renderInvitationEmail } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnvService } from '../config/env.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
+import { EmailService } from '../integrations/email/email.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
 @Injectable()
 export class InvitationsService {
+  private readonly logger = new Logger(InvitationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly env: EnvService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly email: EmailService,
   ) {}
 
   async create(actor: AuthUser, raw: CreateInvitationInput) {
@@ -42,6 +48,7 @@ export class InvitationsService {
     const expiresAt = new Date(
       Date.now() + this.env.invitationTtlDays * 86_400_000,
     );
+    const registrationUrl = `${this.env.appUrl}/register?token=${token}`;
 
     const invitation = await this.prisma.$transaction(async (tx) => {
       const created = await tx.invitation.create({
@@ -68,8 +75,9 @@ export class InvitationsService {
           email: created.email,
           organizationName: org.name,
           roleCode: role.code,
-          registrationUrl: `${this.env.appUrl}/register?token=${token}`,
+          registrationUrl,
           expiresAt: expiresAt.toISOString(),
+          organizationType: org.type,
         },
       });
 
@@ -89,23 +97,60 @@ export class InvitationsService {
       return created;
     });
 
+    let emailSent = false;
+    try {
+      const fromName = await this.email.getFromName();
+      const template = renderInvitationEmail({
+        brandName: fromName,
+        organizationName: org.name,
+        kind: org.type === 'COMPANY' ? 'company' : 'vendor',
+        registrationUrl,
+        expiresAt,
+      });
+      await this.email.send({
+        to: invitation.email,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+        idempotencyKey: `invitation.email:${invitation.id}`,
+        templateCode: 'invitation',
+      });
+      emailSent = true;
+    } catch (err) {
+      this.logger.warn(
+        `Invitation email failed for ${invitation.email}: ${(err as Error).message}`,
+      );
+    }
+
     return {
       id: invitation.id,
       email: invitation.email,
       status: invitation.status,
       expiresAt: invitation.expiresAt,
+      emailSent,
       // plaintext token returned only at creation for admin copy/debug in non-prod
       registrationToken:
         this.env.nodeEnv === 'production' ? undefined : token,
     };
   }
 
-  async list(params: { page?: number; pageSize?: number; status?: string }) {
-    const page = params.page ?? 1;
-    const pageSize = Math.min(params.pageSize ?? 20, 100);
-    const where = params.status
-      ? { status: params.status as never }
+  async list(params: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    organizationId?: string;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
+    const status = params.status
+      ? (params.status as InvitationStatus)
       : undefined;
+    const where: Prisma.InvitationWhereInput = {
+      ...(status ? { status } : {}),
+      ...(params.organizationId
+        ? { organizationId: params.organizationId }
+        : {}),
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.invitation.findMany({
@@ -121,12 +166,7 @@ export class InvitationsService {
       this.prisma.invitation.count({ where }),
     ]);
 
-    return {
-      items,
-      page,
-      pageSize,
-      total,
-    };
+    return { items, total, page, pageSize };
   }
 
   async revoke(actor: AuthUser, id: string) {
@@ -142,10 +182,7 @@ export class InvitationsService {
 
     const updated = await this.prisma.invitation.update({
       where: { id },
-      data: {
-        status: 'REVOKED',
-        tokenHash: hashToken(generateSecureToken()),
-      },
+      data: { status: 'REVOKED' },
     });
 
     await this.audit.record({

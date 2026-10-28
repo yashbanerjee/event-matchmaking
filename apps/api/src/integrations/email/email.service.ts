@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { renderTestEmail } from '@em/shared';
 import { EnvService } from '../../config/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EffectiveConfigService } from '../../settings/effective-config.service';
@@ -22,6 +23,10 @@ export class EmailService {
     return this.config.getString('email.provider', this.env.emailProvider);
   }
 
+  async getFromName() {
+    return this.config.getString('email.fromName', 'Event Matchmaking');
+  }
+
   async send(message: EmailMessage) {
     const provider = await this.resolveProvider();
     if (provider.name === 'smtp') {
@@ -30,11 +35,12 @@ export class EmailService {
 
     const event = await this.prisma.notificationEvent.create({
       data: {
-        templateCode: 'direct',
+        templateCode: message.templateCode ?? 'direct',
         recipientEmail: message.to,
         payload: {
           subject: message.subject,
           text: message.text,
+          templateCode: message.templateCode ?? 'direct',
         },
         idempotencyKey:
           message.idempotencyKey ??
@@ -73,16 +79,18 @@ export class EmailService {
   }
 
   async sendTest(to: string) {
-    const fromName = await this.config.getString(
-      'email.fromName',
-      'Event Matchmaking',
-    );
+    const fromName = await this.getFromName();
+    const template = renderTestEmail({
+      brandName: fromName,
+      appUrl: this.env.appUrl,
+    });
     return this.send({
       to,
-      subject: 'Event Matchmaking SMTP test',
-      text: `This is a test email from ${fromName}. If you received it, SMTP is configured correctly.`,
-      html: `<p>This is a test email from <strong>${fromName}</strong>.</p><p>If you received it, SMTP is configured correctly.</p>`,
+      subject: template.subject,
+      text: template.text,
+      html: template.html,
       idempotencyKey: `email.test:${to}:${Date.now()}`,
+      templateCode: 'test',
     });
   }
 

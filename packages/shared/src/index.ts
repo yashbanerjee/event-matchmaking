@@ -4,3 +4,4 @@ export * from './matching.js';
 export * from './auth.js';
 export * from './countries.js';
 export * from './form-schema.js';
+export * from './email-templates.js';

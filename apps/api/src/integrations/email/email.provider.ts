@@ -4,6 +4,8 @@ export interface EmailMessage {
   html: string;
   text: string;
   idempotencyKey?: string;
+  /** Notification catalog code for audit/delivery tracking */
+  templateCode?: string;
 }
 
 export interface EmailSendResult {

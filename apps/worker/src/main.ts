@@ -1,5 +1,9 @@
 import amqp, { Channel, ConsumeMessage } from 'amqplib';
 import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  renderCorrectionEmail,
+  renderInvitationEmail,
+} from '@em/shared';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import pino from 'pino';
@@ -154,30 +158,63 @@ async function handleCorrection(content: Record<string, unknown>) {
     return;
   }
 
+  const organizationName = String(content.organizationName ?? 'Organization');
+  const formName = String(content.formName ?? 'Form');
+  const fieldSummary = String(content.fieldSummary ?? '');
+  const fields = fieldSummary
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const [labelLine, ...rest] = block.split('\n');
+      const label = (labelLine ?? '').replace(/^\d+\.\s*/, '').trim() || 'Field';
+      const note = rest
+        .join('\n')
+        .replace(/^Comment:\s*/i, '')
+        .trim();
+      return { label, note: note || 'Please review this field.' };
+    });
+
+  const template = renderCorrectionEmail({
+    brandName: process.env.APP_NAME ?? 'Event Matchmaking',
+    organizationName,
+    formName,
+    correctionUrl,
+    fields: fields.length
+      ? fields
+      : [{ label: 'Requested fields', note: fieldSummary || 'See portal' }],
+    audience: content.organizationType === 'COMPANY' ? 'company' : 'vendor',
+  });
+
   logger.info(
     {
       to: email,
+      subject: template.subject,
       correctionUrl,
-      organizationName: content.organizationName,
-      formName: content.formName,
-      fieldSummary: content.fieldSummary,
+      organizationName,
+      formName,
     },
-    'Correction email dispatched (console provider)',
+    'Correction email rendered (console provider)',
   );
 
   await prisma.notificationEvent.create({
     data: {
       templateCode: 'correction',
       recipientEmail: email,
-      payload: content as object,
-      idempotencyKey: `correction.email:${correctionId || correctionUrl}`,
+      payload: {
+        ...content,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+      } as object,
+      idempotencyKey: `correction.email.worker:${correctionId || correctionUrl}`,
       deliveries: {
         create: {
           status: 'SENT',
           provider: process.env.EMAIL_PROVIDER ?? 'console',
           attempt: 1,
           sentAt: new Date(),
-          providerResponse: { mode: 'console' },
+          providerResponse: { mode: 'console', templated: true },
         },
       },
     },
@@ -198,29 +235,54 @@ async function handleInvitation(content: Record<string, unknown>) {
     return;
   }
 
-  // Console/email adapter — production swaps SendGrid/SMTP via EMAIL_PROVIDER
+  const organizationName = String(content.organizationName ?? 'Organization');
+  const registrationUrl = String(content.registrationUrl ?? '');
+  const expiresAt = String(
+    content.expiresAt ?? invitation.expiresAt.toISOString(),
+  );
+  const kind =
+    content.organizationType === 'COMPANY' ||
+    String(content.roleCode ?? '').includes('COMPANY')
+      ? 'company'
+      : 'vendor';
+
+  const template = renderInvitationEmail({
+    brandName: process.env.APP_NAME ?? 'Event Matchmaking',
+    organizationName,
+    kind,
+    registrationUrl,
+    expiresAt,
+    formAttached: Boolean(content.formAttached),
+  });
+
   logger.info(
     {
       to: email,
-      registrationUrl: content.registrationUrl,
-      organizationName: content.organizationName,
+      subject: template.subject,
+      registrationUrl,
+      organizationName,
     },
-    'Invitation email dispatched (console provider)',
+    'Invitation email rendered (console provider)',
   );
 
   await prisma.notificationEvent.create({
     data: {
       templateCode: 'invitation',
       recipientEmail: email,
-      payload: content as object,
-      idempotencyKey: `invitation.email:${invitationId}`,
+      payload: {
+        ...content,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
+      } as object,
+      idempotencyKey: `invitation.email.worker:${invitationId}`,
       deliveries: {
         create: {
           status: 'SENT',
           provider: process.env.EMAIL_PROVIDER ?? 'console',
           attempt: 1,
           sentAt: new Date(),
-          providerResponse: { mode: 'console' },
+          providerResponse: { mode: 'console', templated: true },
         },
       },
     },

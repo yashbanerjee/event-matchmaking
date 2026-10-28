@@ -9,6 +9,7 @@ import { FieldType, Prisma } from '@prisma/client';
 import {
   assertLockedFieldsUnchanged,
   formSchemaDefinition,
+  renderCorrectionEmail,
   type FormSchemaDefinition,
   type FieldType as BuilderFieldType,
 } from '@em/shared';
@@ -807,12 +808,30 @@ export class FormsService {
 
     let emailSent = false;
     try {
+      const fromName = await this.email.getFromName();
+      const fieldRows = input.fields.map((field) => {
+        const match = schema.fields.find((item) => item.id === field.fieldId);
+        return {
+          label: match?.label ?? field.fieldId,
+          note: field.note.trim(),
+        };
+      });
+      const template = renderCorrectionEmail({
+        brandName: fromName,
+        organizationName: submission.organization.name,
+        formName: submission.formVersion.form.name,
+        correctionUrl,
+        fields: fieldRows,
+        audience:
+          submission.organization.type === 'COMPANY' ? 'company' : 'vendor',
+      });
       await this.email.send({
         to: email,
-        subject: `Please update ${input.fields.length} field${input.fields.length === 1 ? '' : 's'} on ${submission.formVersion.form.name}`,
-        text: `Hello,\n\nSome answers on ${submission.formVersion.form.name} need updates for ${submission.organization.name}.\n\nOpen this link and fix only the marked fields:\n${correctionUrl}\n\n${labels}`,
-        html: `<p>Hello,</p><p>Some answers on <strong>${submission.formVersion.form.name}</strong> need updates for <strong>${submission.organization.name}</strong>.</p><p><a href="${correctionUrl}">Update marked fields</a></p><pre style="white-space:pre-wrap;font-family:inherit">${labels.replace(/</g, '&lt;')}</pre>`,
+        subject: template.subject,
+        text: template.text,
+        html: template.html,
         idempotencyKey: `correction.email:${correction.id}`,
+        templateCode: 'correction',
       });
       emailSent = true;
     } catch (err) {
