@@ -16,12 +16,7 @@ const schema = z.object({
   token: z.string().min(32),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  password: z
-    .string()
-    .min(12)
-    .regex(/[A-Z]/)
-    .regex(/[a-z]/)
-    .regex(/[0-9]/),
+  password: z.string().min(4, 'Password must be at least 4 characters').max(128),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -82,7 +77,7 @@ function RegisterForm() {
           <label className="mb-1.5 block text-sm font-medium">Password</label>
           <Input type="password" {...form.register('password')} />
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Min 12 chars with upper, lower, and a number.
+            Minimum 4 characters.
           </p>
         </div>
         {error && (

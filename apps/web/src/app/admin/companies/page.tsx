@@ -99,7 +99,6 @@ export default function CompaniesPage() {
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [csvText, setCsvText] = useState(
     'name,email,phone,phoneCountryCode\nAcme Manufacturing,buyer@example.com,501234567,+971',
   );
@@ -189,7 +188,6 @@ export default function CompaniesPage() {
       formVersionId: '',
       sendInvitation: true,
     });
-    setInviteUrl(null);
   };
 
   const invite = useMutation({
@@ -209,8 +207,9 @@ export default function CompaniesPage() {
           formVersionId: form.formVersionId || undefined,
         }),
       }),
-    onSuccess: (res) => {
-      setInviteUrl(res.inviteUrl);
+    onSuccess: () => {
+      setAddOpen(false);
+      resetAddForm();
       void qc.invalidateQueries({ queryKey: ['companies'] });
     },
   });
@@ -375,6 +374,8 @@ export default function CompaniesPage() {
             </Button>
             <Button
               onClick={() => {
+                invite.reset();
+                startAdminFill.reset();
                 resetAddForm();
                 setAddOpen(true);
               }}
@@ -623,12 +624,6 @@ export default function CompaniesPage() {
                 (invite.error || startAdminFill.error) as Error
               ).message}
             </p>
-          )}
-          {inviteUrl && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-              <p className="font-semibold">Invitation queued for email.</p>
-              <p className="mt-1 break-all text-xs">Invite link: {inviteUrl}</p>
-            </div>
           )}
         </div>
       </Modal>

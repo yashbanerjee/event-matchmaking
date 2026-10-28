@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -18,11 +18,8 @@ export class RegisterInvitationDto {
   token!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(4)
   @MaxLength(128)
-  @Matches(/[A-Z]/, { message: 'Must include an uppercase letter' })
-  @Matches(/[a-z]/, { message: 'Must include a lowercase letter' })
-  @Matches(/[0-9]/, { message: 'Must include a number' })
   password!: string;
 
   @IsString()

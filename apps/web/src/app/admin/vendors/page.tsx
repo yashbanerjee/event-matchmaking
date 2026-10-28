@@ -105,7 +105,6 @@ export default function VendorsPage() {
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [csvResult, setCsvResult] = useState<string | null>(null);
   const [formReview, setFormReview] = useState<{
     id: string;
@@ -194,9 +193,8 @@ export default function VendorsPage() {
           formVersionId: form.formVersionId || undefined,
         }),
       }),
-    onSuccess: (res) => {
-      setInviteUrl(res.inviteUrl);
-      void qc.invalidateQueries({ queryKey: ['vendors'] });
+    onSuccess: () => {
+      setAddOpen(false);
       setForm({
         name: '',
         email: '',
@@ -205,6 +203,7 @@ export default function VendorsPage() {
         formId: '',
         formVersionId: '',
       });
+      void qc.invalidateQueries({ queryKey: ['vendors'] });
     },
   });
 
@@ -256,7 +255,15 @@ export default function VendorsPage() {
             </Button>
             <Button
               onClick={() => {
-                setInviteUrl(null);
+                invite.reset();
+                setForm({
+                  name: '',
+                  email: '',
+                  phone: '',
+                  phoneCountryCode: '+971',
+                  formId: '',
+                  formVersionId: '',
+                });
                 setAddOpen(true);
               }}
             >
@@ -492,12 +499,6 @@ export default function VendorsPage() {
             <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
               {(invite.error as Error).message}
             </p>
-          )}
-          {inviteUrl && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-              <p className="font-semibold">Invitation queued for email.</p>
-              <p className="mt-1 break-all text-xs">Invite link: {inviteUrl}</p>
-            </div>
           )}
         </div>
       </Modal>

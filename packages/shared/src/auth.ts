@@ -8,13 +8,7 @@ export const loginSchema = z.object({
 
 export const registerFromInvitationSchema = z.object({
   token: z.string().min(32).max(512),
-  password: z
-    .string()
-    .min(12)
-    .max(128)
-    .regex(/[A-Z]/, 'Must include an uppercase letter')
-    .regex(/[a-z]/, 'Must include a lowercase letter')
-    .regex(/[0-9]/, 'Must include a number'),
+  password: z.string().min(4, 'Password must be at least 4 characters').max(128),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
 });
