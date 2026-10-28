@@ -2,13 +2,15 @@
 
 import {
   FIELD_TYPES,
+  normalizeFormSchemaKeys,
+  normalizeInternalKey,
   type FieldType,
   type FormField,
   type FormSchemaDefinition,
 } from '@em/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { FormRenderer, formControlClass } from '@/components/form-renderer';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -49,21 +51,35 @@ export default function FormBuilderPage() {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const hydratedForId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (query.data) {
-      setSchema(query.data.draftSchema);
-      setName(query.data.name);
-    }
-  }, [query.data]);
+    hydratedForId.current = null;
+    setSchema(null);
+    setSelected(null);
+    setValues({});
+    setMessage('');
+    setError('');
+  }, [params.id]);
+
+  useEffect(() => {
+    if (!query.data || hydratedForId.current === params.id) return;
+    setSchema(normalizeFormSchemaKeys(query.data.draftSchema));
+    setName(query.data.name);
+    hydratedForId.current = params.id;
+  }, [query.data, params.id]);
 
   const save = useMutation({
-    mutationFn: () =>
-      apiFetch(`/forms/${params.id}/draft`, {
+    mutationFn: () => {
+      if (!schema) throw new Error('Form is still loading');
+      const normalized = normalizeFormSchemaKeys(schema);
+      setSchema(normalized);
+      return apiFetch(`/forms/${params.id}/draft`, {
         method: 'PUT',
         token: getAccessToken(),
-        body: JSON.stringify({ name, schema }),
-      }),
+        body: JSON.stringify({ name, schema: normalized }),
+      });
+    },
     onSuccess: async () => {
       setMessage('Draft saved.');
       setError('');
@@ -75,10 +91,13 @@ export default function FormBuilderPage() {
 
   const publish = useMutation({
     mutationFn: async () => {
+      if (!schema) throw new Error('Form is still loading');
+      const normalized = normalizeFormSchemaKeys(schema);
+      setSchema(normalized);
       await apiFetch(`/forms/${params.id}/draft`, {
         method: 'PUT',
         token: getAccessToken(),
-        body: JSON.stringify({ name, schema }),
+        body: JSON.stringify({ name, schema: normalized }),
       });
       return apiFetch(`/forms/${params.id}/publish`, {
         method: 'POST',
@@ -109,9 +128,16 @@ export default function FormBuilderPage() {
   function addField(type: FieldType) {
     if (!sectionId) return;
     const id = crypto.randomUUID();
+    const used = new Set(schema!.fields.map((field) => field.key));
+    let key = normalizeInternalKey(`${type}_${schema!.fields.length + 1}`);
+    let n = 2;
+    const base = key;
+    while (used.has(key)) {
+      key = normalizeInternalKey(`${base}_${n++}`);
+    }
     const next: FormField = {
       id,
-      key: `${type}_${schema!.fields.length + 1}`,
+      key,
       type,
       label: labelFor(type),
       description: '',
@@ -132,10 +158,14 @@ export default function FormBuilderPage() {
   }
 
   function updateField(id: string, patch: Partial<FormField>) {
+    const nextPatch =
+      patch.key !== undefined
+        ? { ...patch, key: normalizeInternalKey(patch.key) }
+        : patch;
     setSchema({
       ...schema!,
       fields: schema!.fields.map((item) =>
-        item.id === id ? { ...item, ...patch } : item,
+        item.id === id ? { ...item, ...nextPatch } : item,
       ),
     });
   }
@@ -151,8 +181,8 @@ export default function FormBuilderPage() {
   }
 
   return (
-    <div className="flex flex-col lg:h-[calc(100dvh-var(--page-pad-top)-var(--page-pad-bottom))] lg:min-h-0 lg:overflow-hidden">
-      <div className="shrink-0">
+    <div className="space-y-4">
+      <div>
         <PageHeader
           title={name || 'Form'}
           description={`This canvas is the form recipients will fill in. Click a field to edit it. Published versions: ${published || 'none yet'}`}
@@ -189,12 +219,12 @@ export default function FormBuilderPage() {
           />
         </label>
       </div>
-      <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)_minmax(240px,320px)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
-        <aside className="scroll-pad-bottom max-h-72 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:h-full lg:max-h-full">
+      <div className="grid items-start gap-4 lg:grid-cols-[200px_minmax(0,1fr)_minmax(240px,320px)]">
+        <aside className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto">
           <h2 className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
             Add a field
           </h2>
-          <div className="grid gap-1 pb-2">
+          <div className="grid gap-1">
             {palette.map((type) => (
               <button
                 key={type}
@@ -207,34 +237,32 @@ export default function FormBuilderPage() {
             ))}
           </div>
         </aside>
-        <div className="scroll-pad-bottom min-h-0 min-w-0 lg:h-full lg:overflow-y-auto lg:overflow-x-hidden lg:pr-1">
+        <div className="min-w-0">
           {schema.fields.length === 0 ? (
             <p className="mb-3 text-sm text-[var(--muted)]">
               Add a field. It appears here the same way a recipient will see it.
             </p>
           ) : null}
-          <div className="pb-8">
-            <FormRenderer
-              schema={schema}
-              values={values}
-              selectedFieldId={selected}
-              onSelectField={setSelected}
-              onChange={(fieldId, value) => {
-                setSelected(fieldId);
-                setValues((current) => ({ ...current, [fieldId]: value }));
-              }}
-              onUpload={async (_field, file) => ({
-                documentId: crypto.randomUUID(),
-                filename: file.name,
-              })}
-            />
-          </div>
+          <FormRenderer
+            schema={schema}
+            values={values}
+            selectedFieldId={selected}
+            onSelectField={setSelected}
+            onChange={(fieldId, value) => {
+              setSelected(fieldId);
+              setValues((current) => ({ ...current, [fieldId]: value }));
+            }}
+            onUpload={async (_field, file) => ({
+              documentId: crypto.randomUUID(),
+              filename: file.name,
+            })}
+          />
         </div>
-        <aside className="flex max-h-[calc(100dvh-var(--page-pad-top)-var(--page-pad-bottom))] min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:h-full lg:max-h-full">
-          <h2 className="shrink-0 px-3 pt-3 text-xs font-semibold uppercase text-[var(--muted)]">
+        <aside className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto">
+          <h2 className="px-3 pt-3 text-xs font-semibold uppercase text-[var(--muted)]">
             Configuration
           </h2>
-          <div className="scroll-pad-bottom min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 pb-8">
+          <div className="p-3 pb-6">
             {!field ? (
               <p className="text-sm text-[var(--muted)]">
                 Select a field in the form.

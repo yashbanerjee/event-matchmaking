@@ -31,6 +31,19 @@ export type FieldType = (typeof FIELD_TYPES)[number];
 
 export const DISPLAY_ONLY_TYPES: FieldType[] = ["heading", "info"];
 
+/** Lowercase snake_case internal keys: start with a letter, then a-z 0-9 _. */
+export function normalizeInternalKey(raw: string): string {
+  const cleaned = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!cleaned) return "field";
+  const withLetter = /^[a-z]/.test(cleaned) ? cleaned : `f_${cleaned}`;
+  return withLetter.slice(0, 80);
+}
+
 const conditionSchema = z.object({
   fieldId: z.string().uuid(),
   operator: z.enum(["eq", "neq", "includes"]),
@@ -143,6 +156,32 @@ export const formSchemaDefinition = z.object({
 });
 
 export type FormSchemaDefinition = z.infer<typeof formSchemaDefinition>;
+
+/** Ensure every field key is valid and unique within the schema. */
+export function normalizeFormSchemaKeys(
+  schema: FormSchemaDefinition,
+): FormSchemaDefinition {
+  const used = new Set<string>();
+  const normalizeField = (field: FormField): FormField => {
+    let key = normalizeInternalKey(field.key || field.label || field.type);
+    const base = key;
+    let n = 2;
+    while (used.has(key)) {
+      const suffix = `_${n++}`;
+      key = `${base.slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
+    }
+    used.add(key);
+    return {
+      ...field,
+      key,
+      children: field.children?.map(normalizeField),
+    };
+  };
+  return {
+    ...schema,
+    fields: schema.fields.map(normalizeField),
+  };
+}
 
 export class FormValidationError extends Error {
   constructor(

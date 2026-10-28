@@ -9,10 +9,12 @@ import { FieldType, Prisma } from '@prisma/client';
 import {
   assertLockedFieldsUnchanged,
   formSchemaDefinition,
+  normalizeFormSchemaKeys,
   renderCorrectionEmail,
   type FormSchemaDefinition,
   type FieldType as BuilderFieldType,
 } from '@em/shared';
+import { ZodError } from 'zod';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -122,7 +124,26 @@ export class FormsService {
       schema: FormSchemaDefinition;
     },
   ) {
-    const schema = formSchemaDefinition.parse(input.schema);
+    let schema: FormSchemaDefinition;
+    try {
+      schema = formSchemaDefinition.parse(
+        normalizeFormSchemaKeys(input.schema),
+      );
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new BadRequestException(
+          err.issues
+            .map((issue) => {
+              const where = issue.path.length
+                ? `${issue.path.join('.')}: `
+                : '';
+              return `${where}${issue.message}`;
+            })
+            .join('; '),
+        );
+      }
+      throw err;
+    }
     const existing = await this.prisma.form.findUnique({
       where: { id: formId },
     });

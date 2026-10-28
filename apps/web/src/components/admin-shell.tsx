@@ -105,7 +105,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="page-pad min-h-screen">
-        <div className="w-full pb-2">{children}</div>
+        <div className="w-full">{children}</div>
       </main>
     </div>
   );
