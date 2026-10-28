@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { demoCompanies, demoVendors, logoUrlFor } from './demo-orgs';
 
 const prisma = new PrismaClient();
 
@@ -289,6 +290,12 @@ async function main() {
       industry: 'Manufacturing',
       region: 'EU',
       country: 'DE',
+      website: 'https://www.acme-manufacturing.example',
+      customAttrs: {
+        contactEmail: 'buyer@acme-manufacturing.example',
+        logoUrl: logoUrlFor('Acme Manufacturing'),
+        city: 'Munich',
+      },
     },
     update: {},
   });
@@ -299,9 +306,15 @@ async function main() {
       requiredCapabilities: ['CNC', 'ISO9001'],
       preferredCategories: ['manufacturing'],
       commercialPrefs: { tags: ['net30'] },
+      verificationStatus: 'VERIFIED',
+      approvalStatus: 'VERIFIED',
       matchingEligible: true,
     },
-    update: { matchingEligible: true },
+    update: {
+      matchingEligible: true,
+      verificationStatus: 'VERIFIED',
+      approvalStatus: 'VERIFIED',
+    },
   });
 
   const vendorOrg = await prisma.organization.upsert({
@@ -313,6 +326,11 @@ async function main() {
       status: 'APPROVED',
       industry: 'Manufacturing',
       country: 'DE',
+      website: 'https://www.precision-parts.example',
+      customAttrs: {
+        contactEmail: 'sales@precision-parts.example',
+        logoUrl: logoUrlFor('Precision Parts'),
+      },
     },
     update: { status: 'APPROVED' },
   });
@@ -325,18 +343,174 @@ async function main() {
       capabilities: ['CNC', 'ISO9001', 'Welding'],
       operatingRegions: ['EU', 'UK'],
       commercialPrefs: { tags: ['net30'] },
-      approvalStatus: 'APPROVED',
+      verificationStatus: 'VERIFIED',
+      approvalStatus: 'VERIFIED',
       onboardingComplete: true,
       matchingEligible: true,
     },
     update: {
-      approvalStatus: 'APPROVED',
+      approvalStatus: 'VERIFIED',
+      verificationStatus: 'VERIFIED',
       onboardingComplete: true,
       matchingEligible: true,
     },
   });
 
-  console.log(`Seed complete. Login: ${adminEmail}`);
+  let companiesUpserted = 0;
+  for (const company of demoCompanies()) {
+    const org = await prisma.organization.upsert({
+      where: { code: company.code },
+      create: {
+        code: company.code,
+        name: company.name,
+        type: 'COMPANY',
+        status: 'ACTIVE',
+        industry: company.industry,
+        country: company.country,
+        region: company.region,
+        address: `${company.city}, ${company.country}`,
+        website: company.website,
+        sizeBand: company.sizeBand,
+        customAttrs: {
+          contactEmail: company.email,
+          logoUrl: logoUrlFor(company.name),
+          city: company.city,
+          demo: true,
+        },
+      },
+      update: {
+        name: company.name,
+        status: 'ACTIVE',
+        industry: company.industry,
+        country: company.country,
+        region: company.region,
+        address: `${company.city}, ${company.country}`,
+        website: company.website,
+        sizeBand: company.sizeBand,
+        customAttrs: {
+          contactEmail: company.email,
+          logoUrl: logoUrlFor(company.name),
+          city: company.city,
+          demo: true,
+        },
+      },
+    });
+    await prisma.company.upsert({
+      where: { organizationId: org.id },
+      create: {
+        organizationId: org.id,
+        preferredCategories: company.categories,
+        requiredCapabilities: company.capabilities,
+        commercialPrefs: { tags: ['net30'], paymentTerms: 'Net 30' },
+        verificationStatus: 'VERIFIED',
+        approvalStatus: 'VERIFIED',
+        matchingEligible: true,
+        normalizedProfile: {
+          name: company.name,
+          industry: company.industry,
+          website: company.website,
+          logoUrl: logoUrlFor(company.name),
+        },
+      },
+      update: {
+        preferredCategories: company.categories,
+        requiredCapabilities: company.capabilities,
+        verificationStatus: 'VERIFIED',
+        approvalStatus: 'VERIFIED',
+        matchingEligible: true,
+        normalizedProfile: {
+          name: company.name,
+          industry: company.industry,
+          website: company.website,
+          logoUrl: logoUrlFor(company.name),
+        },
+      },
+    });
+    companiesUpserted += 1;
+  }
+
+  let vendorsUpserted = 0;
+  for (const vendor of demoVendors(200)) {
+    const org = await prisma.organization.upsert({
+      where: { code: vendor.code },
+      create: {
+        code: vendor.code,
+        name: vendor.name,
+        type: 'VENDOR',
+        status: 'APPROVED',
+        industry: vendor.industry,
+        country: vendor.country,
+        region: vendor.region,
+        website: vendor.website,
+        customAttrs: {
+          contactEmail: vendor.email,
+          logoUrl: logoUrlFor(vendor.name),
+          demo: true,
+        },
+      },
+      update: {
+        name: vendor.name,
+        status: 'APPROVED',
+        industry: vendor.industry,
+        country: vendor.country,
+        region: vendor.region,
+        website: vendor.website,
+        customAttrs: {
+          contactEmail: vendor.email,
+          logoUrl: logoUrlFor(vendor.name),
+          demo: true,
+        },
+      },
+    });
+    await prisma.vendor.upsert({
+      where: { organizationId: org.id },
+      create: {
+        organizationId: org.id,
+        displayName: vendor.displayName,
+        categories: vendor.categories,
+        services: vendor.services,
+        capabilities: vendor.capabilities,
+        operatingRegions: vendor.operatingRegions,
+        capacityPerDay: vendor.capacityPerDay,
+        commercialPrefs: { tags: ['net30'], currency: 'USD' },
+        verificationStatus: 'VERIFIED',
+        approvalStatus: 'VERIFIED',
+        onboardingComplete: true,
+        matchingEligible: true,
+        normalizedProfile: {
+          name: vendor.name,
+          industry: vendor.industry,
+          website: vendor.website,
+          logoUrl: logoUrlFor(vendor.name),
+          verified: true,
+        },
+      },
+      update: {
+        displayName: vendor.displayName,
+        categories: vendor.categories,
+        services: vendor.services,
+        capabilities: vendor.capabilities,
+        operatingRegions: vendor.operatingRegions,
+        capacityPerDay: vendor.capacityPerDay,
+        verificationStatus: 'VERIFIED',
+        approvalStatus: 'VERIFIED',
+        onboardingComplete: true,
+        matchingEligible: true,
+        normalizedProfile: {
+          name: vendor.name,
+          industry: vendor.industry,
+          website: vendor.website,
+          logoUrl: logoUrlFor(vendor.name),
+          verified: true,
+        },
+      },
+    });
+    vendorsUpserted += 1;
+  }
+
+  console.log(
+    `Seed complete. Login: ${adminEmail}. Demo companies: ${companiesUpserted}. Demo vendors: ${vendorsUpserted}.`,
+  );
 }
 
 main()

@@ -25,6 +25,7 @@ type OrgList = {
     status: string;
     workflowStatus?: string;
     contactEmail?: string | null;
+    logoUrl?: string | null;
     industry?: string | null;
     country?: string | null;
     region?: string | null;
@@ -326,7 +327,19 @@ export default function VendorsPage() {
                   return (
                   <TR key={org.id}>
                     <TD className="font-mono text-xs">{org.code}</TD>
-                    <TD className="font-medium">{org.name}</TD>
+                    <TD className="font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        {org.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={org.logoUrl}
+                            alt=""
+                            className="h-7 w-7 rounded-md object-cover"
+                          />
+                        ) : null}
+                        {org.name}
+                      </span>
+                    </TD>
                     <TD className="text-[var(--muted)]">
                       {org.contactEmail ?? '—'}
                     </TD>

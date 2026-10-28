@@ -687,6 +687,8 @@ export class OrganizationsService {
             : {};
         const attrEmail =
           typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null;
+        const logoUrl =
+          typeof attrs.logoUrl === 'string' ? attrs.logoUrl : null;
         return {
           ...item,
           contactEmail:
@@ -694,6 +696,7 @@ export class OrganizationsService {
             attrEmail ??
             item.members[0]?.user.email ??
             null,
+          logoUrl,
           latestSubmission: item.formSubmissions[0] ?? null,
           workflowStatus:
             item.vendor?.approvalStatus ??
