@@ -39,9 +39,32 @@ function fromDateTimeLocal(value: string) {
   return new Date(value).toISOString();
 }
 
+function localDateKey(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function localTimeKey(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const emptyFilters = {
+  date: '',
+  timeFrom: '',
+  timeTo: '',
+  companyOrgId: '',
+  vendorOrgId: '',
+  search: '',
+};
+
 export default function AdminMeetingsPage() {
   const qc = useQueryClient();
-  const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState(emptyFilters);
   const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
   const [creating, setCreating] = useState(false);
@@ -68,10 +91,8 @@ export default function AdminMeetingsPage() {
       }),
   });
 
-  const orgsEnabled = Boolean(edit || creating);
   const companies = useQuery({
     queryKey: ['orgs-companies-for-meetings'],
-    enabled: orgsEnabled,
     queryFn: () =>
       apiFetch<{ items: OrgOption[] }>(
         '/organizations?type=COMPANY&pageSize=100',
@@ -80,7 +101,6 @@ export default function AdminMeetingsPage() {
   });
   const vendors = useQuery({
     queryKey: ['orgs-vendors-for-meetings'],
-    enabled: orgsEnabled,
     queryFn: () =>
       apiFetch<{ items: OrgOption[] }>(
         '/organizations?type=VENDOR&pageSize=100',
@@ -157,19 +177,78 @@ export default function AdminMeetingsPage() {
     onSettled: () => setDeletingId(null),
   });
 
+  const activeMeetings = useMemo(
+    () =>
+      (meetings.data?.items ?? []).filter((m) => m.status !== 'CANCELLED'),
+    [meetings.data?.items],
+  );
+
+  const companyFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const org of companies.data?.items ?? []) {
+      map.set(org.id, org.name);
+    }
+    for (const m of activeMeetings) {
+      map.set(m.companyOrgId ?? m.companyOrg.id, m.companyOrg.name);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeMeetings, companies.data?.items]);
+
+  const vendorFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const org of vendors.data?.items ?? []) {
+      map.set(org.id, org.name);
+    }
+    for (const m of activeMeetings) {
+      map.set(m.vendorOrgId ?? m.vendorOrg.id, m.vendorOrg.name);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeMeetings, vendors.data?.items]);
+
   const rows = useMemo(() => {
-    const items = (meetings.data?.items ?? []).filter(
-      (m) => m.status !== 'CANCELLED',
-    );
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (m) =>
+    const q = filters.search.trim().toLowerCase();
+    return activeMeetings.filter((m) => {
+      const companyId = m.companyOrgId ?? m.companyOrg.id;
+      const vendorId = m.vendorOrgId ?? m.vendorOrg.id;
+      const dateKey = localDateKey(m.startsAt);
+      const timeKey = localTimeKey(m.startsAt);
+
+      if (filters.companyOrgId && companyId !== filters.companyOrgId) {
+        return false;
+      }
+      if (filters.vendorOrgId && vendorId !== filters.vendorOrgId) {
+        return false;
+      }
+      if (filters.date && dateKey !== filters.date) {
+        return false;
+      }
+      if (filters.timeFrom && timeKey < filters.timeFrom) {
+        return false;
+      }
+      if (filters.timeTo && timeKey > filters.timeTo) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         m.companyOrg.name.toLowerCase().includes(q) ||
         m.vendorOrg.name.toLowerCase().includes(q) ||
-        m.status.toLowerCase().includes(q),
-    );
-  }, [meetings.data?.items, search]);
+        m.status.toLowerCase().includes(q)
+      );
+    });
+  }, [activeMeetings, filters]);
+
+  const filtersActive = Boolean(
+    filters.date ||
+      filters.timeFrom ||
+      filters.timeTo ||
+      filters.companyOrgId ||
+      filters.vendorOrgId ||
+      filters.search.trim(),
+  );
 
   function openEdit(meeting: MeetingRow) {
     setEdit(meeting);
@@ -209,14 +288,98 @@ export default function AdminMeetingsPage() {
       />
 
       <Card>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold">Schedule</h2>
-          <Input
-            className="max-w-xs"
-            placeholder="Search company, vendor, status…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="mb-4 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-semibold">Schedule</h2>
+            {filtersActive ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFilters(emptyFilters)}
+              >
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Date</span>
+              <Input
+                type="date"
+                value={filters.date}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, date: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Time from</span>
+              <Input
+                type="time"
+                value={filters.timeFrom}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, timeFrom: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Time to</span>
+              <Input
+                type="time"
+                value={filters.timeTo}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, timeTo: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Company</span>
+              <select
+                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+                value={filters.companyOrgId}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, companyOrgId: e.target.value }))
+                }
+              >
+                <option value="">All companies</option>
+                {companyFilterOptions.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Vendor</span>
+              <select
+                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+                value={filters.vendorOrgId}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, vendorOrgId: e.target.value }))
+                }
+              >
+                <option value="">All vendors</option>
+                {vendorFilterOptions.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Search</span>
+              <Input
+                placeholder="Status or name…"
+                value={filters.search}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, search: e.target.value }))
+                }
+              />
+            </label>
+          </div>
+          <p className="text-xs text-[var(--muted)]">
+            Showing {rows.length} of {activeMeetings.length} meetings
+          </p>
         </div>
 
         {error ? <p className="mb-3 text-sm text-rose-700">{error}</p> : null}
@@ -231,8 +394,9 @@ export default function AdminMeetingsPage() {
 
         {!meetings.isLoading && rows.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">
-            No meetings yet. Generate from Matchmaking or create a manual
-            meeting.
+            {activeMeetings.length === 0
+              ? 'No meetings yet. Generate from Matchmaking or create a manual meeting.'
+              : 'No meetings match these filters.'}
           </p>
         ) : (
           <Table>
