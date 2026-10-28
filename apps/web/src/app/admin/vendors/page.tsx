@@ -317,7 +317,7 @@ export default function VendorsPage() {
                   const verified =
                     status === 'VERIFIED' || status === 'APPROVED';
                   return (
-                  <TR key={org.id} className="hover:bg-slate-50/80">
+                  <TR key={org.id}>
                     <TD className="font-mono text-xs">{org.code}</TD>
                     <TD className="font-medium">{org.name}</TD>
                     <TD className="text-[var(--muted)]">
@@ -337,8 +337,8 @@ export default function VendorsPage() {
                         {org.vendor?.matchingEligible ? 'Yes' : 'No'}
                       </Badge>
                     </TD>
-                    <TD>
-                      <div className="flex flex-col items-end gap-2">
+                    <TD className="text-right">
+                      <div className="inline-flex flex-nowrap items-center justify-end gap-1">
                         <Button
                           size="sm"
                           variant="outline"
@@ -350,7 +350,7 @@ export default function VendorsPage() {
                             })
                           }
                         >
-                          {canReview ? 'View form' : 'Form status'}
+                          {canReview ? 'Form' : 'Status'}
                         </Button>
                         {!verified && (
                           <Button
@@ -358,7 +358,7 @@ export default function VendorsPage() {
                             variant="secondary"
                             onClick={() => approve.mutate(org.id)}
                           >
-                            Mark verified
+                            Verify
                           </Button>
                         )}
                         <OrgRowActions

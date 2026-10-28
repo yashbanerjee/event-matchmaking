@@ -354,6 +354,8 @@ model Company {
   requiredCapabilities String[] @default([])
   commercialPrefs      Json     @default("{}")
   verificationStatus   String   @default("UNVERIFIED")
+  /// INVITED | WAITING_FOR_REVIEW | IN_REVIEW | VERIFIED | RESEND_FOR_IMPROVEMENTS
+  approvalStatus       String   @default("INVITED")
   matchingEligible     Boolean  @default(false)
   profileVersion       Int      @default(0)
   normalizedProfile    Json     @default("{}")
@@ -362,7 +364,7 @@ model Company {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([matchingEligible])
+  @@index([matchingEligible, approvalStatus])
   @@map("companies")
 }
 

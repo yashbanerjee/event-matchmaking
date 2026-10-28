@@ -143,7 +143,7 @@ export function OrgRowActions({
 
   return (
     <>
-      <div className="flex flex-wrap justify-end gap-1.5">
+      <div className="inline-flex flex-nowrap items-center gap-1">
         <Button size="sm" variant="ghost" onClick={() => setMode('view')}>
           View
         </Button>

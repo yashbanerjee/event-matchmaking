@@ -46,6 +46,58 @@ export class OrganizationsController {
     return this.orgs.createCompany(user, body);
   }
 
+  @Post('companies/invite')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  inviteCompany(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId?: string;
+      formVersionId?: string;
+      code?: string;
+      industry?: string;
+    },
+  ) {
+    return this.orgs.inviteCompany(user, body);
+  }
+
+  @Post('companies/admin-fill')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  createCompanyAdminFill(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId: string;
+      formVersionId: string;
+      code?: string;
+      industry?: string;
+    },
+  ) {
+    return this.orgs.createCompanyForAdminFill(user, body);
+  }
+
+  @Post('companies/:id/admin-fill')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  completeCompanyAdminFill(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      formVersionId: string;
+      responses: Record<string, unknown>;
+    },
+  ) {
+    return this.orgs.completeCompanyAdminFill(user, id, body);
+  }
+
   @Post('vendors')
   @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
   createVendor(

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OrganizationType } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { formSchemaDefinition } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EnvService } from '../config/env.service';
@@ -54,7 +56,12 @@ export class OrganizationsService {
         },
       });
       await tx.company.create({
-        data: { organizationId: created.id },
+        data: {
+          organizationId: created.id,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          matchingEligible: true,
+        },
       });
       return created;
     });
@@ -71,6 +78,27 @@ export class OrganizationsService {
     return org;
   }
 
+  async inviteCompany(
+    actor: AuthUser,
+    input: {
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId?: string;
+      formVersionId?: string;
+      code?: string;
+      industry?: string;
+    },
+  ) {
+    return this.inviteOrganization(actor, {
+      ...input,
+      type: OrganizationType.COMPANY,
+      roleCode: 'COMPANY_USER',
+      industry: input.industry,
+    });
+  }
+
   async inviteVendor(
     actor: AuthUser,
     input: {
@@ -83,12 +111,36 @@ export class OrganizationsService {
       code?: string;
     },
   ) {
+    return this.inviteOrganization(actor, {
+      ...input,
+      type: OrganizationType.VENDOR,
+      roleCode: 'VENDOR_USER',
+    });
+  }
+
+  private async inviteOrganization(
+    actor: AuthUser,
+    input: {
+      type: 'COMPANY' | 'VENDOR';
+      roleCode: 'COMPANY_USER' | 'VENDOR_USER';
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId?: string;
+      formVersionId?: string;
+      code?: string;
+      industry?: string;
+    },
+  ) {
     const email = input.email.trim().toLowerCase();
     const name = input.name.trim();
+    const kind = input.type === 'COMPANY' ? 'Company' : 'Vendor';
     if (!name || !email) {
-      throw new BadRequestException('Vendor name and email are required');
+      throw new BadRequestException(`${kind} name and email are required`);
     }
 
+    const prefix = input.type === 'COMPANY' ? 'CMP' : 'VND';
     const code =
       input.code?.trim() ||
       name
@@ -96,7 +148,7 @@ export class OrganizationsService {
         .replace(/[^A-Z0-9]+/g, '_')
         .replace(/^_|_$/g, '')
         .slice(0, 24) ||
-      `VND_${Date.now().toString(36).toUpperCase()}`;
+      `${prefix}_${Date.now().toString(36).toUpperCase()}`;
 
     const existingCode = await this.prisma.organization.findUnique({
       where: { code },
@@ -108,10 +160,10 @@ export class OrganizationsService {
     }
 
     const role = await this.prisma.role.findUnique({
-      where: { code: 'VENDOR_USER' },
+      where: { code: input.roleCode },
     });
     if (!role) {
-      throw new BadRequestException('VENDOR_USER role is missing');
+      throw new BadRequestException(`${input.roleCode} role is missing`);
     }
 
     if (input.formId || input.formVersionId) {
@@ -123,7 +175,11 @@ export class OrganizationsService {
       const version = await this.prisma.formVersion.findUnique({
         where: { id: input.formVersionId },
       });
-      if (!version || version.formId !== input.formId || version.status !== 'PUBLISHED') {
+      if (
+        !version ||
+        version.formId !== input.formId ||
+        version.status !== 'PUBLISHED'
+      ) {
         throw new BadRequestException('Select a published form version');
       }
     }
@@ -138,31 +194,43 @@ export class OrganizationsService {
         ? {
             phone: input.phone.trim(),
             phoneCountryCode: input.phoneCountryCode.trim(),
+            contactEmail: email,
           }
-        : input.phone?.trim()
-          ? { phone: input.phone.trim() }
-          : {};
+        : {
+            ...(input.phone?.trim() ? { phone: input.phone.trim() } : {}),
+            contactEmail: email,
+          };
 
     const result = await this.prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
         data: {
-          type: OrganizationType.VENDOR,
+          type: input.type,
           code,
           name,
+          industry: input.industry,
           status: 'PENDING_APPROVAL',
           customAttrs: phone,
         },
       });
 
-      await tx.vendor.create({
-        data: {
-          organizationId: org.id,
-          displayName: name,
-          categories: [],
-          capabilities: [],
-          approvalStatus: 'INVITED',
-        },
-      });
+      if (input.type === 'VENDOR') {
+        await tx.vendor.create({
+          data: {
+            organizationId: org.id,
+            displayName: name,
+            categories: [],
+            capabilities: [],
+            approvalStatus: 'INVITED',
+          },
+        });
+      } else {
+        await tx.company.create({
+          data: {
+            organizationId: org.id,
+            approvalStatus: 'INVITED',
+          },
+        });
+      }
 
       if (input.formId && input.formVersionId) {
         await tx.formAssignment.create({
@@ -183,7 +251,7 @@ export class OrganizationsService {
           status: 'PENDING',
           expiresAt,
           createdById: actor.id,
-          idempotencyKey: `vendor-invite:${email}:${org.id}:${Date.now()}`,
+          idempotencyKey: `${input.type.toLowerCase()}-invite:${email}:${org.id}:${Date.now()}`,
         },
       });
 
@@ -202,7 +270,7 @@ export class OrganizationsService {
           invitationId: invitation.id,
           email,
           organizationName: org.name,
-          roleCode: 'VENDOR_USER',
+          roleCode: input.roleCode,
           registrationUrl,
           expiresAt: expiresAt.toISOString(),
           formAttached: Boolean(input.formId),
@@ -230,7 +298,8 @@ export class OrganizationsService {
 
     await this.audit.record({
       actorId: actor.id,
-      action: 'vendor.invite',
+      action:
+        input.type === 'COMPANY' ? 'company.invite' : 'vendor.invite',
       entityType: 'Organization',
       entityId: result.org.id,
       outcome: 'SUCCESS',
@@ -249,6 +318,203 @@ export class OrganizationsService {
       emailQueued: true,
       emailSent,
     };
+  }
+
+  /** Create company without invitation; admin will fill the form next. */
+  async createCompanyForAdminFill(
+    actor: AuthUser,
+    input: {
+      name: string;
+      email: string;
+      phone?: string;
+      phoneCountryCode?: string;
+      formId: string;
+      formVersionId: string;
+      code?: string;
+      industry?: string;
+    },
+  ) {
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    if (!name || !email) {
+      throw new BadRequestException('Company name and email are required');
+    }
+    if (!input.formId || !input.formVersionId) {
+      throw new BadRequestException(
+        'Select a published form for admin to fill',
+      );
+    }
+
+    const version = await this.prisma.formVersion.findUnique({
+      where: { id: input.formVersionId },
+      include: { form: true, fields: true },
+    });
+    if (
+      !version ||
+      version.formId !== input.formId ||
+      version.status !== 'PUBLISHED'
+    ) {
+      throw new BadRequestException('Select a published form version');
+    }
+
+    const code =
+      input.code?.trim() ||
+      name
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_|_$/g, '')
+        .slice(0, 24) ||
+      `CMP_${Date.now().toString(36).toUpperCase()}`;
+
+    const existingCode = await this.prisma.organization.findUnique({
+      where: { code },
+    });
+    if (existingCode) {
+      throw new BadRequestException(
+        `Organization code ${code} already exists — provide a unique code`,
+      );
+    }
+
+    const phone =
+      input.phone?.trim() && input.phoneCountryCode
+        ? {
+            phone: input.phone.trim(),
+            phoneCountryCode: input.phoneCountryCode.trim(),
+            contactEmail: email,
+          }
+        : {
+            ...(input.phone?.trim() ? { phone: input.phone.trim() } : {}),
+            contactEmail: email,
+          };
+
+    const org = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.organization.create({
+        data: {
+          type: OrganizationType.COMPANY,
+          code,
+          name,
+          industry: input.industry,
+          status: 'PENDING_APPROVAL',
+          customAttrs: phone,
+        },
+      });
+      await tx.company.create({
+        data: {
+          organizationId: created.id,
+          approvalStatus: 'IN_REVIEW',
+        },
+      });
+      await tx.formAssignment.create({
+        data: {
+          formId: input.formId,
+          formVersionId: input.formVersionId,
+          organizationId: created.id,
+        },
+      });
+      return created;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'company.create.admin_fill',
+      entityType: 'Organization',
+      entityId: org.id,
+      outcome: 'SUCCESS',
+      after: { email, name, code },
+    });
+
+    const schemaJson = version.schemaJson;
+    const parsed = formSchemaDefinition.safeParse(schemaJson);
+    const schema = parsed.success
+      ? parsed.data
+      : {
+          sections: [
+            {
+              id: randomUUID(),
+              title: 'General',
+              description: '',
+              order: 0,
+            },
+          ],
+          fields: [],
+        };
+
+    return {
+      organization: org,
+      formId: input.formId,
+      formVersionId: input.formVersionId,
+      formName: version.form.name,
+      schema,
+      contactEmail: email,
+    };
+  }
+
+  async completeCompanyAdminFill(
+    actor: AuthUser,
+    organizationId: string,
+    input: {
+      formVersionId: string;
+      responses: Record<string, unknown>;
+    },
+  ) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { company: true },
+    });
+    if (!org?.company) {
+      throw new NotFoundException('Company not found');
+    }
+
+    const version = await this.prisma.formVersion.findUnique({
+      where: { id: input.formVersionId },
+      include: { fields: true },
+    });
+    if (!version || version.status !== 'PUBLISHED') {
+      throw new BadRequestException('Invalid form version');
+    }
+
+    const submission = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.formSubmission.create({
+        data: {
+          formVersionId: input.formVersionId,
+          organizationId,
+          submittedById: actor.id,
+          status: 'APPROVED',
+          responses: input.responses as object,
+          submittedAt: new Date(),
+          reviewedAt: new Date(),
+          reviewNotes: 'Submitted by admin and verified directly',
+        },
+      });
+      await tx.company.update({
+        where: { organizationId },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          matchingEligible: true,
+          normalizedProfile: {
+            sourceSubmissionId: created.id,
+            responses: input.responses,
+          } as object,
+          profileVersion: { increment: 1 },
+        },
+      });
+      await tx.organization.update({
+        where: { id: organizationId },
+        data: { status: 'APPROVED' },
+      });
+      return created;
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'company.admin_fill.complete',
+      entityType: 'FormSubmission',
+      entityId: submission.id,
+      outcome: 'SUCCESS',
+    });
+
+    return { submission, organizationId, status: 'VERIFIED' };
   }
 
   async inviteVendorsCsv(
@@ -404,15 +670,27 @@ export class OrganizationsService {
     ]);
 
     return {
-      items: items.map((item) => ({
-        ...item,
-        contactEmail:
-          item.invitations[0]?.email ??
-          item.members[0]?.user.email ??
-          null,
-        latestSubmission: item.formSubmissions[0] ?? null,
-        workflowStatus: item.vendor?.approvalStatus ?? item.status,
-      })),
+      items: items.map((item) => {
+        const attrs =
+          item.customAttrs && typeof item.customAttrs === 'object'
+            ? (item.customAttrs as Record<string, unknown>)
+            : {};
+        const attrEmail =
+          typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null;
+        return {
+          ...item,
+          contactEmail:
+            item.invitations[0]?.email ??
+            attrEmail ??
+            item.members[0]?.user.email ??
+            null,
+          latestSubmission: item.formSubmissions[0] ?? null,
+          workflowStatus:
+            item.vendor?.approvalStatus ??
+            item.company?.approvalStatus ??
+            item.status,
+        };
+      }),
       page,
       pageSize,
       total,

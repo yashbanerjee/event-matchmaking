@@ -486,6 +486,15 @@ export class FormsService {
         },
         data: { approvalStatus: 'WAITING_FOR_REVIEW' },
       });
+      await tx.company.updateMany({
+        where: {
+          organizationId: input.organizationId,
+          approvalStatus: {
+            in: ['INVITED', 'RESEND_FOR_IMPROVEMENTS', 'PENDING', 'IN_REVIEW'],
+          },
+        },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
 
       await this.outbox.enqueue(tx, {
         aggregateType: 'FormSubmission',
@@ -584,6 +593,10 @@ export class FormsService {
         where: { organizationId: submission.organizationId },
         data: { approvalStatus: 'IN_REVIEW' },
       });
+      await tx.company.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: { approvalStatus: 'IN_REVIEW' },
+      });
       return next;
     });
 
@@ -620,6 +633,14 @@ export class FormsService {
           approvalStatus: 'VERIFIED',
           verificationStatus: 'VERIFIED',
           onboardingComplete: true,
+          matchingEligible: true,
+        },
+      });
+      await tx.company.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
           matchingEligible: true,
         },
       });
@@ -754,6 +775,10 @@ export class FormsService {
       });
 
       await tx.vendor.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: { approvalStatus: 'RESEND_FOR_IMPROVEMENTS' },
+      });
+      await tx.company.updateMany({
         where: { organizationId: submission.organizationId },
         data: { approvalStatus: 'RESEND_FOR_IMPROVEMENTS' },
       });
@@ -921,6 +946,10 @@ export class FormsService {
         data: { status: 'RESOLVED', resolvedAt: new Date() },
       });
       await tx.vendor.updateMany({
+        where: { organizationId: correction.submission.organizationId },
+        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+      await tx.company.updateMany({
         where: { organizationId: correction.submission.organizationId },
         data: { approvalStatus: 'WAITING_FOR_REVIEW' },
       });
