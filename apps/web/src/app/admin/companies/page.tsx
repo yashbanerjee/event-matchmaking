@@ -13,6 +13,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
+import { SubmissionReviewModal } from '@/components/submission-review-modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type OrgList = {
@@ -27,6 +28,11 @@ type OrgList = {
     region?: string | null;
     website?: string | null;
     address?: string | null;
+    latestSubmission?: {
+      id: string;
+      status: string;
+      submittedAt?: string | null;
+    } | null;
   }>;
   total: number;
   page: number;
@@ -46,6 +52,11 @@ export default function CompaniesPage() {
     country: 'DE',
     region: 'EU',
   });
+  const [formReview, setFormReview] = useState<{
+    id: string;
+    name: string;
+    submissionId?: string | null;
+  } | null>(null);
 
   const queryKey = ['companies', page] as const;
 
@@ -176,11 +187,26 @@ export default function CompaniesPage() {
                       <Badge variant={statusTone(org.status)}>{org.status}</Badge>
                     </TD>
                     <TD>
-                      <OrgRowActions
-                        org={org}
-                        kind="company"
-                        queryKey={[...queryKey]}
-                      />
+                      <div className="flex flex-col items-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setFormReview({
+                              id: org.id,
+                              name: org.name,
+                              submissionId: org.latestSubmission?.id ?? null,
+                            })
+                          }
+                        >
+                          {org.latestSubmission ? 'View form' : 'Form status'}
+                        </Button>
+                        <OrgRowActions
+                          org={org}
+                          kind="company"
+                          queryKey={[...queryKey]}
+                        />
+                      </div>
                     </TD>
                   </TR>
                 ))}
@@ -195,6 +221,16 @@ export default function CompaniesPage() {
           </>
         )}
       </Card>
+
+      <SubmissionReviewModal
+        open={Boolean(formReview)}
+        onClose={() => setFormReview(null)}
+        organizationId={formReview?.id ?? ''}
+        organizationName={formReview?.name ?? ''}
+        kind="company"
+        submissionId={formReview?.submissionId}
+        listQueryKey={[...queryKey]}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ export function Modal({
   onClose,
   footer,
   wide,
+  size,
 }: {
   open: boolean;
   title: string;
@@ -18,15 +19,21 @@ export function Modal({
   onClose: () => void;
   footer?: React.ReactNode;
   wide?: boolean;
+  size?: 'md' | 'lg' | 'xl';
 }) {
   if (!open) return null;
+
+  const width =
+    size === 'xl'
+      ? 'max-w-6xl'
+      : size === 'lg' || wide
+        ? 'max-w-2xl'
+        : 'max-w-lg';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px]">
       <div
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow)] ${
-          wide ? 'max-w-2xl' : 'max-w-lg'
-        }`}
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow)] ${width}`}
         role="dialog"
         aria-modal="true"
       >

@@ -1,7 +1,6 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -14,6 +13,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
+import { SubmissionReviewModal } from '@/components/submission-review-modal';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
@@ -100,7 +100,6 @@ function parseCsv(text: string) {
 }
 
 export default function VendorsPage() {
-  const router = useRouter();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -108,6 +107,11 @@ export default function VendorsPage() {
   const [csvOpen, setCsvOpen] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [csvResult, setCsvResult] = useState<string | null>(null);
+  const [formReview, setFormReview] = useState<{
+    id: string;
+    name: string;
+    submissionId?: string | null;
+  } | null>(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -335,19 +339,19 @@ export default function VendorsPage() {
                     </TD>
                     <TD>
                       <div className="flex flex-col items-end gap-2">
-                        {canReview ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              router.push(
-                                `/admin/vendors/${org.id}/review?submissionId=${org.latestSubmission!.id}`,
-                              )
-                            }
-                          >
-                            Review form
-                          </Button>
-                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setFormReview({
+                              id: org.id,
+                              name: org.name,
+                              submissionId: org.latestSubmission?.id ?? null,
+                            })
+                          }
+                        >
+                          {canReview ? 'View form' : 'Form status'}
+                        </Button>
                         {!verified && (
                           <Button
                             size="sm"
@@ -567,6 +571,16 @@ export default function VendorsPage() {
           )}
         </div>
       </Modal>
+
+      <SubmissionReviewModal
+        open={Boolean(formReview)}
+        onClose={() => setFormReview(null)}
+        organizationId={formReview?.id ?? ''}
+        organizationName={formReview?.name ?? ''}
+        kind="vendor"
+        submissionId={formReview?.submissionId}
+        listQueryKey={[...queryKey]}
+      />
     </div>
   );
 }
