@@ -10,14 +10,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@atlaskit/badge": "^22.0.0",
-    "@atlaskit/button": "^25.6.1",
-    "@atlaskit/css": "^1.1.7",
-    "@atlaskit/dynamic-table": "^19.3.8",
-    "@atlaskit/empty-state": "^12.2.4",
-    "@atlaskit/heading": "^8.0.0",
-    "@atlaskit/lozenge": "^17.0.6",
-    "@atlaskit/textfield": "^10.3.0",
     "@em/shared": "*",
     "@hookform/resolvers": "^4.1.3",
     "@tanstack/react-query": "^5.69.0",
@@ -26,8 +18,8 @@
     "lucide-react": "^0.483.0",
     "next": "^15.2.3",
     "next-themes": "^0.4.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-hook-form": "^7.54.2",
     "tailwind-merge": "^3.0.2",
     "zod": "^3.24.2"

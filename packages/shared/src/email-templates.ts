@@ -9,7 +9,9 @@ export type EmailTemplateKind =
   | 'test'
   | 'notice'
   | 'approved'
-  | 'rejected';
+  | 'rejected'
+  | 'meeting'
+  | 'meeting_update';
 
 export type EmailAudience = 'vendor' | 'company' | 'admin' | 'recipient';
 
@@ -56,6 +58,18 @@ const THEMES: Record<EmailTemplateKind, Theme> = {
     accent: '#be123c',
     accentSoft: '#ffe4e6',
     action: 'Review submission',
+  },
+  meeting: {
+    label: 'Meeting scheduled',
+    accent: '#0f766e',
+    accentSoft: '#ccfbf1',
+    action: 'View meetings',
+  },
+  meeting_update: {
+    label: 'Meeting updated',
+    accent: '#0369a1',
+    accentSoft: '#e0f2fe',
+    action: 'View meetings',
   },
 };
 
@@ -368,6 +382,80 @@ export function renderTestEmail(input: {
 
   return {
     subject: `${brandName} SMTP test`,
+    ...rendered,
+  };
+}
+
+function formatMeetingWhen(value: Date | string) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toUTCString();
+}
+
+export function renderMeetingEmail(input: {
+  brandName?: string;
+  audience: 'vendor' | 'company';
+  variant: 'published' | 'updated';
+  companyName: string;
+  vendorName: string;
+  startsAt: Date | string;
+  endsAt: Date | string;
+  durationMinutes: number;
+  mode?: string;
+  portalUrl?: string;
+  changeReason?: string;
+}): { subject: string; html: string; text: string } {
+  const brandName = input.brandName?.trim() || BRAND.name;
+  const counterpart =
+    input.audience === 'company' ? input.vendorName : input.companyName;
+  const isUpdate = input.variant === 'updated';
+  const title = isUpdate
+    ? `Your meeting with ${counterpart} was updated`
+    : `Meeting scheduled with ${counterpart}`;
+  const body = isUpdate
+    ? [
+        `Hello,`,
+        ``,
+        `Your matchmaking meeting details were updated by the event team.`,
+        `Please review the new time and counterpart below.`,
+        input.changeReason ? `Reason: ${input.changeReason}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : [
+        `Hello,`,
+        ``,
+        `A matchmaking meeting has been scheduled for you.`,
+        `Please review the details below and confirm in the portal when ready.`,
+      ].join('\n');
+
+  const rendered = renderBrandedEmail({
+    kind: isUpdate ? 'meeting_update' : 'meeting',
+    audience: input.audience,
+    brandName,
+    contextName:
+      input.audience === 'company' ? input.companyName : input.vendorName,
+    title,
+    body,
+    actionUrl: input.portalUrl,
+    actionLabel: 'View meetings',
+    details: [
+      { label: 'Company', value: input.companyName },
+      { label: 'Vendor', value: input.vendorName },
+      { label: 'Starts', value: formatMeetingWhen(input.startsAt) },
+      { label: 'Ends', value: formatMeetingWhen(input.endsAt) },
+      { label: 'Duration', value: `${input.durationMinutes} minutes` },
+      ...(input.mode ? [{ label: 'Mode', value: input.mode }] : []),
+    ],
+    footerNote: isUpdate
+      ? 'If this change does not work for you, contact the event team or request a reschedule in the portal.'
+      : 'Please confirm attendance in the portal. If you cannot attend, request a reschedule there.',
+  });
+
+  return {
+    subject: isUpdate
+      ? `Updated meeting: ${input.companyName} ↔ ${input.vendorName}`
+      : `Meeting scheduled: ${input.companyName} ↔ ${input.vendorName}`,
     ...rendered,
   };
 }

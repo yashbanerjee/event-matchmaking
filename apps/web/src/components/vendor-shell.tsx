@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import Badge from '@atlaskit/badge';
 import { Menu, X } from 'lucide-react';
 import { clearTokens } from '@/lib/auth-store';
 import { cn } from '@/lib/utils';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 
 const NAV_ITEMS = [
@@ -46,7 +46,9 @@ function SidebarNav({
           >
             <span>{item.label}</span>
             {item.href === '/vendor/forms' && pendingForms > 0 ? (
-              <Badge>{pendingForms}</Badge>
+              <Badge variant="accent" className="border-transparent bg-[var(--accent)] text-white">
+                {pendingForms}
+              </Badge>
             ) : null}
           </Link>
         );
@@ -180,7 +182,7 @@ export function VendorShell({
       </aside>
 
       <main className="page-pad min-h-screen min-w-0">
-        <div className="vendor-atlas w-full max-w-full">{children}</div>
+        <div className="w-full max-w-full">{children}</div>
       </main>
     </div>
   );

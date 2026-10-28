@@ -49,12 +49,6 @@
   width: min(var(--sidebar-width), 100%);
 }
 
-/* Atlaskit surfaces inside vendor pages sit on the app background */
-.vendor-atlas {
-  --ds-surface: var(--card);
-  --ds-background-neutral: var(--card-elevated);
-}
-
 @media (min-width: 1024px) {
   :root {
     --page-pad-x: 2rem;

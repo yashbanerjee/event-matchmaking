@@ -8,10 +8,15 @@ import { ConsoleEmailProvider } from './console-email.provider';
 import { SmtpEmailProvider, type SmtpEndpoint } from './smtp-email.provider';
 import { SendgridEmailProvider } from './sendgrid-email.provider';
 
+/** Default ~15 emails/minute for SMTP providers with burst limits. */
+const DEFAULT_SMTP_MIN_INTERVAL_MS = 4000;
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private lastSendAt = 0;
+  /** Serialize sends so concurrent callers still respect the rate limit. */
+  private sendQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly env: EnvService,
@@ -28,6 +33,16 @@ export class EmailService {
   }
 
   async send(message: EmailMessage) {
+    const run = this.sendQueue.then(() => this.sendImmediate(message));
+    // Keep the queue alive even if one send fails.
+    this.sendQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async sendImmediate(message: EmailMessage) {
     const provider = await this.resolveProvider();
     if (provider.name === 'smtp') {
       await this.pace();
@@ -97,7 +112,7 @@ export class EmailService {
   private async pace() {
     const interval = await this.config.getNumber(
       'email.smtpMinIntervalMs',
-      5000,
+      DEFAULT_SMTP_MIN_INTERVAL_MS,
     );
     if (interval <= 0 || !this.lastSendAt) return;
     const wait = this.lastSendAt + interval - Date.now();

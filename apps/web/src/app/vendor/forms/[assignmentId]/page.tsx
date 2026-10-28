@@ -4,18 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Button from '@atlaskit/button/new';
-import Heading from '@atlaskit/heading';
-import Lozenge from '@atlaskit/lozenge';
 import { responsesByFieldKey, valuesByFieldId } from '@em/shared';
 import { FormRenderer } from '@/components/form-renderer';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 import {
+  badgeToneForStatus,
   formatFilledDate,
   labelForFormItem,
-  lozengeAppearanceForStatus,
   statusForFormItem,
 } from '@/lib/vendor-forms';
 
@@ -111,7 +111,7 @@ export default function VendorFormDetailPage() {
     return (
       <div className="space-y-4">
         <p className="text-sm text-[var(--danger)]">Form assignment not found.</p>
-        <Button appearance="subtle" onClick={() => router.push('/vendor/forms')}>
+        <Button variant="outline" onClick={() => router.push('/vendor/forms')}>
           Back to forms
         </Button>
       </div>
@@ -130,18 +130,18 @@ export default function VendorFormDetailPage() {
           >
             ← Forms
           </Link>
-          <Heading size="large">{selected.formName}</Heading>
+          <h1 className="text-3xl tracking-tight">{selected.formName}</h1>
           <p className="text-sm text-[var(--muted)]">
             {selected.organizationName} · filled{' '}
             {formatFilledDate(selected.submission?.submittedAt)}
           </p>
         </div>
-        <Lozenge appearance={lozengeAppearanceForStatus(status)} isBold>
+        <Badge variant={badgeToneForStatus(status)}>
           {labelForFormItem(selected)}
-        </Lozenge>
+        </Badge>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <Card className="space-y-4">
         {selected.action === 'view' ? (
           <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm text-[var(--muted)]">
             Submitted details are locked. You can view them here. If admin
@@ -190,8 +190,7 @@ export default function VendorFormDetailPage() {
         {selected.action !== 'view' ? (
           <div className="flex justify-end">
             <Button
-              appearance="primary"
-              isDisabled={submit.isPending}
+              disabled={submit.isPending}
               onClick={() => submit.mutate()}
             >
               {submit.isPending
@@ -202,7 +201,7 @@ export default function VendorFormDetailPage() {
             </Button>
           </div>
         ) : null}
-      </section>
+      </Card>
     </div>
   );
 }

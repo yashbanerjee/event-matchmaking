@@ -84,7 +84,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'SMTP_MIN_INTERVAL_MS',
     label: 'Min interval between sends (ms)',
     description:
-      'Hostinger allows ~15/min; 5000 sends one every 5 seconds (12/min)',
+      'Pace outbound SMTP. Default 4000 ms ≈ 15 emails/minute (Hostinger-safe).',
     group: 'email',
     type: 'number',
   },

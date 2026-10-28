@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Button from '@atlaskit/button/new';
-import DynamicTable from '@atlaskit/dynamic-table';
-import EmptyState from '@atlaskit/empty-state';
-import Heading from '@atlaskit/heading';
-import Lozenge from '@atlaskit/lozenge';
-import Textfield from '@atlaskit/textfield';
+import { EmptyState } from '@/components/empty-state';
+import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { lozengeAppearanceForStatus } from '@/lib/vendor-forms';
+import { badgeToneForStatus } from '@/lib/vendor-forms';
 
 type Meeting = {
   id: string;
@@ -92,130 +93,101 @@ export default function VendorMeetingsPage() {
     );
   }, [meetings.data?.items, search]);
 
-  const rows = filtered.map((item) => ({
-    key: item.id,
-    cells: [
-      {
-        key: 'company',
-        content: <span className="font-medium">{item.companyOrg.name}</span>,
-      },
-      { key: 'vendor', content: item.vendorOrg.name },
-      {
-        key: 'starts',
-        content: new Date(item.startsAt).toLocaleString(),
-      },
-      {
-        key: 'ends',
-        content: item.endsAt ? new Date(item.endsAt).toLocaleString() : '—',
-      },
-      {
-        key: 'duration',
-        content: item.durationMinutes ? `${item.durationMinutes} min` : '—',
-      },
-      {
-        key: 'mode',
-        content: item.mode?.replaceAll('_', ' ') ?? '—',
-      },
-      {
-        key: 'venue',
-        content: item.venue || item.timeZone || '—',
-      },
-      {
-        key: 'score',
-        content: item.matchScore != null ? item.matchScore.toFixed(1) : '—',
-      },
-      {
-        key: 'status',
-        content: (
-          <Lozenge appearance={lozengeAppearanceForStatus(item.status)} isBold>
-            {item.status.replaceAll('_', ' ')}
-          </Lozenge>
-        ),
-      },
-      {
-        key: 'actions',
-        content: (
-          <div className="flex flex-wrap gap-2">
-            {item.status === 'AWAITING_CONFIRMATION' ? (
-              <Button
-                appearance="primary"
-                spacing="compact"
-                onClick={() => confirm.mutate(item.id)}
-              >
-                Confirm
-              </Button>
-            ) : null}
-            {me.data?.organizationIds[0] ? (
-              <Button
-                appearance="subtle"
-                spacing="compact"
-                onClick={() =>
-                  feedback.mutate({
-                    id: item.id,
-                    organizationId: me.data!.organizationIds[0]!,
-                  })
-                }
-              >
-                Feedback
-              </Button>
-            ) : null}
-          </div>
-        ),
-      },
-    ],
-  }));
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-            Meetings
-          </p>
-          <Heading size="large">Your meetings</Heading>
-          <p className="max-w-2xl text-sm text-[var(--muted)]">
-            Full meeting details in a table — confirm sessions and submit
-            confidential feedback.
-          </p>
-        </div>
-        <div className="w-full max-w-xs">
-          <Textfield
+      <PageHeader
+        eyebrow="Meetings"
+        title="Your meetings"
+        description="Full meeting details in a table — confirm sessions and submit confidential feedback."
+        actions={
+          <Input
+            className="max-w-xs"
             placeholder="Search company, vendor, status…"
             value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            isCompact
+            onChange={(event) => setSearch(event.target.value)}
           />
-        </div>
-      </div>
+        }
+      />
 
-      <section className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <DynamicTable
-          head={{
-            cells: [
-              { key: 'company', content: 'Company', isSortable: true },
-              { key: 'vendor', content: 'Vendor', isSortable: true },
-              { key: 'starts', content: 'Starts', isSortable: true },
-              { key: 'ends', content: 'Ends' },
-              { key: 'duration', content: 'Duration' },
-              { key: 'mode', content: 'Mode' },
-              { key: 'venue', content: 'Venue / TZ' },
-              { key: 'score', content: 'Score', isSortable: true },
-              { key: 'status', content: 'Status' },
-              { key: 'actions', content: 'Actions' },
-            ],
-          }}
-          rows={rows}
-          rowsPerPage={10}
-          defaultPage={1}
-          isLoading={meetings.isLoading}
-          emptyView={
-            <EmptyState
-              header="No meetings yet"
-              description="When schedules are published, your meetings will appear here with full details."
-            />
-          }
-        />
-      </section>
+      <Card>
+        {meetings.isLoading ? (
+          <p className="text-sm text-[var(--muted)]">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            title="No meetings yet"
+            description="When schedules are published, your meetings will appear here with full details."
+          />
+        ) : (
+          <Table>
+            <THead>
+              <TR>
+                <TH>Company</TH>
+                <TH>Vendor</TH>
+                <TH>Starts</TH>
+                <TH>Ends</TH>
+                <TH>Duration</TH>
+                <TH>Mode</TH>
+                <TH>Venue / TZ</TH>
+                <TH>Score</TH>
+                <TH>Status</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {filtered.map((item) => (
+                <TR key={item.id}>
+                  <TD className="font-medium">{item.companyOrg.name}</TD>
+                  <TD>{item.vendorOrg.name}</TD>
+                  <TD>{new Date(item.startsAt).toLocaleString()}</TD>
+                  <TD>
+                    {item.endsAt
+                      ? new Date(item.endsAt).toLocaleString()
+                      : '—'}
+                  </TD>
+                  <TD>
+                    {item.durationMinutes
+                      ? `${item.durationMinutes} min`
+                      : '—'}
+                  </TD>
+                  <TD>{item.mode?.replaceAll('_', ' ') ?? '—'}</TD>
+                  <TD>{item.venue || item.timeZone || '—'}</TD>
+                  <TD>
+                    {item.matchScore != null
+                      ? item.matchScore.toFixed(1)
+                      : '—'}
+                  </TD>
+                  <TD>
+                    <Badge variant={badgeToneForStatus(item.status)}>
+                      {item.status.replaceAll('_', ' ')}
+                    </Badge>
+                  </TD>
+                  <TD className="space-x-2 text-right">
+                    {item.status === 'AWAITING_CONFIRMATION' ? (
+                      <Button size="sm" onClick={() => confirm.mutate(item.id)}>
+                        Confirm
+                      </Button>
+                    ) : null}
+                    {me.data?.organizationIds[0] ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          feedback.mutate({
+                            id: item.id,
+                            organizationId: me.data!.organizationIds[0]!,
+                          })
+                        }
+                      >
+                        Feedback
+                      </Button>
+                    ) : null}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }

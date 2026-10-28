@@ -1,4 +1,4 @@
-import { formatVendorStatus } from '@/lib/status';
+import { formatVendorStatus, statusTone } from '@/lib/status';
 import type { OnboardingItem } from '@/lib/portal-onboarding';
 
 export function statusForFormItem(item: OnboardingItem) {
@@ -14,41 +14,8 @@ export function labelForFormItem(item: OnboardingItem) {
   return formatVendorStatus(item.submission?.status ?? item.workflowStatus);
 }
 
-export function lozengeAppearanceForStatus(
-  status: string,
-): 'default' | 'inprogress' | 'moved' | 'new' | 'removed' | 'success' {
-  const s = status.toUpperCase();
-  if (
-    ['APPROVED', 'VERIFIED', 'CONFIRMED', 'COMPLETED', 'PUBLISHED', 'ACTIVE'].includes(
-      s,
-    )
-  ) {
-    return 'success';
-  }
-  if (
-    [
-      'SUBMITTED',
-      'UNDER_REVIEW',
-      'WAITING_FOR_REVIEW',
-      'IN_REVIEW',
-      'AWAITING_CONFIRMATION',
-      'IN_PROGRESS',
-    ].includes(s)
-  ) {
-    return 'inprogress';
-  }
-  if (
-    ['NEEDS_INFO', 'RESEND_FOR_IMPROVEMENTS', 'DRAFT', 'PENDING', 'RESCHEDULE_REQUESTED'].includes(
-      s,
-    )
-  ) {
-    return 'moved';
-  }
-  if (['REJECTED', 'CANCELLED', 'NO_SHOW', 'FAILED', 'EXPIRED'].includes(s)) {
-    return 'removed';
-  }
-  if (['PROPOSED', 'INVITED'].includes(s)) return 'new';
-  return 'default';
+export function badgeToneForStatus(status: string) {
+  return statusTone(status);
 }
 
 export function formatFilledDate(value?: string | null) {

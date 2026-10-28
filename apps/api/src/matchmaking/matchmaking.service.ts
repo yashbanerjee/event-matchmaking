@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -13,6 +14,7 @@ import {
 import {
   defaultMatchingWeights,
   matchingWeightsSchema,
+  renderMeetingEmail,
   scheduleConfigSchema,
   type MatchingWeights,
 } from '@em/shared';
@@ -21,6 +23,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
+import { EmailService } from '../integrations/email/email.service';
+import { EnvService } from '../config/env.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
 
@@ -34,11 +38,15 @@ function isVendorVerified(approvalStatus: string): boolean {
 
 @Injectable()
 export class MatchmakingService {
+  private readonly logger = new Logger(MatchmakingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly config: EffectiveConfigService,
+    private readonly email: EmailService,
+    private readonly env: EnvService,
   ) {}
 
   async ensureDefaultRule() {
@@ -307,6 +315,8 @@ export class MatchmakingService {
         slots,
         {
           maxMeetingsPerParticipant: config.maxMeetingsPerParticipant,
+          // Prefer one free slot between a vendor's meetings when the day allows it.
+          vendorGapSlots: 1,
         },
         existingOccupancy.map((row) => ({
           participantId: row.participantKey.replace(/^org:/, ''),
@@ -504,6 +514,13 @@ export class MatchmakingService {
       outcome: 'SUCCESS',
     });
 
+    // Notify company + vendor for every meeting (paced ~15/min via EmailService).
+    void this.notifySchedulePublished(scheduleVersionId).catch((err) => {
+      this.logger.warn(
+        `Schedule publish emails failed: ${(err as Error).message}`,
+      );
+    });
+
     return this.prisma.scheduleVersion.findUnique({
       where: { id: scheduleVersionId },
       include: { meetings: true },
@@ -536,6 +553,21 @@ export class MatchmakingService {
       throw new BadRequestException('Invalid slot');
     }
 
+    const duplicatePair = await this.prisma.meeting.findFirst({
+      where: {
+        scheduleVersionId: schedule.id,
+        companyOrgId: input.companyOrgId,
+        vendorOrgId: input.vendorOrgId,
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+    });
+    if (duplicatePair) {
+      throw new BadRequestException(
+        'This company and vendor already have a meeting on this schedule',
+      );
+    }
+
     const conflict = await this.prisma.meetingOccupancy.findFirst({
       where: {
         participantKey: {
@@ -546,7 +578,9 @@ export class MatchmakingService {
       },
     });
     if (conflict) {
-      throw new BadRequestException('Scheduling conflict detected');
+      throw new BadRequestException(
+        'Scheduling conflict: company or vendor is already booked in that slot',
+      );
     }
 
     const meeting = await this.prisma.$transaction(async (tx) => {
@@ -669,6 +703,27 @@ export class MatchmakingService {
       startsAt.getTime() + meeting.durationMinutes * 60_000,
     );
 
+    if (
+      companyOrgId !== meeting.companyOrgId ||
+      vendorOrgId !== meeting.vendorOrgId
+    ) {
+      const duplicatePair = await this.prisma.meeting.findFirst({
+        where: {
+          id: { not: meeting.id },
+          scheduleVersionId: meeting.scheduleVersionId,
+          companyOrgId,
+          vendorOrgId,
+          status: { not: 'CANCELLED' },
+        },
+        select: { id: true },
+      });
+      if (duplicatePair) {
+        throw new BadRequestException(
+          'This company and vendor already have a meeting on this schedule',
+        );
+      }
+    }
+
     const conflict = await this.prisma.meetingOccupancy.findFirst({
       where: {
         meetingId: { not: meeting.id },
@@ -788,7 +843,148 @@ export class MatchmakingService {
       },
     });
 
+    if (
+      meeting.scheduleVersion.status === 'PUBLISHED' &&
+      (timeChanged || partiesChanged)
+    ) {
+      void this.notifyMeetingParties(updated.id, 'updated', reason).catch(
+        (err) => {
+          this.logger.warn(
+            `Meeting update emails failed: ${(err as Error).message}`,
+          );
+        },
+      );
+    }
+
     return updated;
+  }
+
+  private async notifySchedulePublished(scheduleVersionId: string) {
+    const meetings = await this.prisma.meeting.findMany({
+      where: {
+        scheduleVersionId,
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true },
+      orderBy: { startsAt: 'asc' },
+    });
+
+    for (const meeting of meetings) {
+      await this.notifyMeetingParties(meeting.id, 'published');
+    }
+  }
+
+  private async notifyMeetingParties(
+    meetingId: string,
+    variant: 'published' | 'updated',
+    changeReason?: string,
+  ) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: {
+        companyOrg: {
+          include: {
+            invitations: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { email: true },
+            },
+            members: {
+              take: 1,
+              orderBy: { joinedAt: 'asc' },
+              include: { user: { select: { email: true } } },
+            },
+          },
+        },
+        vendorOrg: {
+          include: {
+            invitations: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { email: true },
+            },
+            members: {
+              take: 1,
+              orderBy: { joinedAt: 'asc' },
+              include: { user: { select: { email: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!meeting) return;
+
+    const fromName = await this.email.getFromName();
+    const portalUrl = `${this.env.appUrl.replace(/\/$/, '')}/portal`;
+    const companyEmail = this.resolveOrgEmail(meeting.companyOrg);
+    const vendorEmail = this.resolveOrgEmail(meeting.vendorOrg);
+
+    const recipients: Array<{
+      to: string;
+      audience: 'company' | 'vendor';
+    }> = [];
+    if (companyEmail) {
+      recipients.push({ to: companyEmail, audience: 'company' });
+    } else {
+      this.logger.warn(
+        `No company email for meeting ${meetingId} (${meeting.companyOrg.name})`,
+      );
+    }
+    if (vendorEmail) {
+      recipients.push({ to: vendorEmail, audience: 'vendor' });
+    } else {
+      this.logger.warn(
+        `No vendor email for meeting ${meetingId} (${meeting.vendorOrg.name})`,
+      );
+    }
+
+    for (const recipient of recipients) {
+      const template = renderMeetingEmail({
+        brandName: fromName,
+        audience: recipient.audience,
+        variant,
+        companyName: meeting.companyOrg.name,
+        vendorName: meeting.vendorOrg.name,
+        startsAt: meeting.startsAt,
+        endsAt: meeting.endsAt,
+        durationMinutes: meeting.durationMinutes,
+        mode: meeting.mode,
+        portalUrl,
+        changeReason,
+      });
+      try {
+        await this.email.send({
+          to: recipient.to,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+          idempotencyKey: `meeting.${variant}:${meetingId}:${recipient.audience}:${meeting.version}:${Date.now()}`,
+          templateCode:
+            variant === 'updated' ? 'meeting_update' : 'meeting_published',
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Failed ${variant} email to ${recipient.to}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+
+  private resolveOrgEmail(org: {
+    customAttrs: unknown;
+    invitations: Array<{ email: string }>;
+    members: Array<{ user: { email: string } }>;
+  }): string | null {
+    const attrs =
+      org.customAttrs && typeof org.customAttrs === 'object'
+        ? (org.customAttrs as Record<string, unknown>)
+        : {};
+    const attrEmail =
+      typeof attrs.contactEmail === 'string' ? attrs.contactEmail.trim() : '';
+    const inviteEmail = org.invitations[0]?.email?.trim() ?? '';
+    const memberEmail = org.members[0]?.user.email?.trim() ?? '';
+    const email = (inviteEmail || attrEmail || memberEmail).toLowerCase();
+    return email || null;
   }
 
   private toCompanyFeatures(company: {
