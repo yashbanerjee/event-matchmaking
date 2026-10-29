@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,22 @@ type IntegrationGroup = {
   fields: Field[];
 };
 
+function settingValue(
+  settings: Array<{ key: string; value: unknown }> | undefined,
+  key: string,
+): unknown {
+  const row = settings?.find((s) => s.key === key);
+  if (!row) return undefined;
+  if (
+    row.value &&
+    typeof row.value === 'object' &&
+    'value' in (row.value as object)
+  ) {
+    return (row.value as { value: unknown }).value;
+  }
+  return row.value;
+}
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const { data, isLoading, error } = useAdminQuery<{
@@ -38,7 +54,32 @@ export default function SettingsPage() {
     integration: IntegrationGroup[];
   }>(['settings'], '/settings');
 
+  const forms = useQuery({
+    queryKey: ['forms-for-registration'],
+    queryFn: () =>
+      apiFetch<
+        Array<{
+          id: string;
+          name: string;
+          versions: Array<{ id: string; version: number; status: string }>;
+        }>
+      >('/forms', { token: getAccessToken() }),
+  });
+
+  const publishedForms = useMemo(
+    () =>
+      (forms.data ?? []).filter((form) =>
+        form.versions.some((v) => v.status === 'PUBLISHED'),
+      ),
+    [forms.data],
+  );
+
   const [draft, setDraft] = useState<Record<string, unknown>>({});
+  const [registration, setRegistration] = useState({
+    enabled: false,
+    formId: '',
+    notifyEmails: '',
+  });
   const [testTo, setTestTo] = useState('');
   const [testNote, setTestNote] = useState('');
   const [testError, setTestError] = useState('');
@@ -61,6 +102,14 @@ export default function SettingsPage() {
       }
     }
     setDraft(next);
+
+    setRegistration({
+      enabled: Boolean(settingValue(data.settings, 'registration.enabled')),
+      formId: String(settingValue(data.settings, 'registration.formId') ?? ''),
+      notifyEmails: String(
+        settingValue(data.settings, 'registration.notifyEmails') ?? '',
+      ),
+    });
   }, [data]);
 
   const toggle = useMutation({
@@ -113,6 +162,25 @@ export default function SettingsPage() {
     },
   });
 
+  const saveRegistration = useMutation({
+    mutationFn: () =>
+      apiFetch('/settings/integrations', {
+        method: 'PUT',
+        token: getAccessToken(),
+        body: JSON.stringify({
+          values: [
+            { key: 'registration.enabled', value: registration.enabled },
+            { key: 'registration.formId', value: registration.formId },
+            {
+              key: 'registration.notifyEmails',
+              value: registration.notifyEmails,
+            },
+          ],
+        }),
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings'] }),
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -127,6 +195,87 @@ export default function SettingsPage() {
 
       {isLoading && <p>Loading…</p>}
       {error && <p className="text-red-700">{(error as Error).message}</p>}
+
+      <Card className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-medium">Event registration</h2>
+            <p className="text-xs text-[var(--muted)]">
+              Public “Register for event” uses a published form, then email OTP
+              and password setup. Client/Guest is collected on the form flow.
+            </p>
+          </div>
+          <Button
+            onClick={() => saveRegistration.mutate()}
+            disabled={saveRegistration.isPending}
+          >
+            {saveRegistration.isPending ? 'Saving…' : 'Save registration'}
+          </Button>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={registration.enabled}
+            onChange={(e) =>
+              setRegistration((r) => ({ ...r, enabled: e.target.checked }))
+            }
+          />
+          Enable public registration
+        </label>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Registration form
+          </label>
+          <select
+            className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            value={registration.formId}
+            onChange={(e) =>
+              setRegistration((r) => ({ ...r, formId: e.target.value }))
+            }
+          >
+            <option value="">Select a published form…</option>
+            {publishedForms.map((form) => (
+              <option key={form.id} value={form.id}>
+                {form.name}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Latest published version is used. The Client/Guest role field is
+            added automatically.
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Notify admins (emails)
+          </label>
+          <Input
+            value={registration.notifyEmails}
+            onChange={(e) =>
+              setRegistration((r) => ({
+                ...r,
+                notifyEmails: e.target.value,
+              }))
+            }
+            placeholder="admin@example.com, ops@example.com"
+          />
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            Comma-separated. Leave blank to notify all active admin users.
+          </p>
+        </div>
+
+        {saveRegistration.isSuccess ? (
+          <p className="text-sm text-[var(--success)]">Registration settings saved.</p>
+        ) : null}
+        {saveRegistration.error ? (
+          <p className="text-sm text-[var(--danger)]">
+            {(saveRegistration.error as Error).message}
+          </p>
+        ) : null}
+      </Card>
 
       {data?.integration.map((group) => (
         <Card key={group.id} className="space-y-4">

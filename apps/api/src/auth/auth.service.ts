@@ -226,6 +226,28 @@ export class AuthService {
     return { ok: true };
   }
 
+  async createSessionForUser(userId: string, email: string) {
+    const tokens = await this.issueTokens(userId, email);
+    const memberships = await this.prisma.userRole.findMany({
+      where: { userId },
+      include: { role: true },
+    });
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    });
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        roles: memberships.map((item) => item.role.code),
+      },
+    };
+  }
+
   private async issueTokens(userId: string, email: string) {
     const accessToken = await this.jwt.signAsync(
       { sub: userId, email },

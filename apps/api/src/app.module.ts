@@ -23,6 +23,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { UsersModule } from './users/users.module';
 import { SettingsModule } from './settings/settings.module';
 import { OpsModule } from './ops/ops.module';
+import { RegistrationModule } from './registration/registration.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { OpsModule } from './ops/ops.module';
     UsersModule,
     SettingsModule,
     OpsModule,
+    RegistrationModule,
   ],
   providers: [
     {

@@ -11,7 +11,10 @@ export type EmailTemplateKind =
   | 'approved'
   | 'rejected'
   | 'meeting'
-  | 'meeting_update';
+  | 'meeting_update'
+  | 'registration_otp'
+  | 'registration_ack'
+  | 'registration_admin_notify';
 
 export type EmailAudience = 'vendor' | 'company' | 'admin' | 'recipient';
 
@@ -70,6 +73,24 @@ const THEMES: Record<EmailTemplateKind, Theme> = {
     accent: '#0369a1',
     accentSoft: '#e0f2fe',
     action: 'View meetings',
+  },
+  registration_otp: {
+    label: 'Email verification',
+    accent: '#0f766e',
+    accentSoft: '#ccfbf1',
+    action: 'Enter code',
+  },
+  registration_ack: {
+    label: 'Registration received',
+    accent: '#0f766e',
+    accentSoft: '#ccfbf1',
+    action: 'Open dashboard',
+  },
+  registration_admin_notify: {
+    label: 'New registration',
+    accent: '#0369a1',
+    accentSoft: '#e0f2fe',
+    action: 'Review submission',
   },
 };
 
@@ -456,6 +477,101 @@ export function renderMeetingEmail(input: {
     subject: isUpdate
       ? `Updated meeting: ${input.companyName} ↔ ${input.vendorName}`
       : `Meeting scheduled: ${input.companyName} ↔ ${input.vendorName}`,
+    ...rendered,
+  };
+}
+
+export function renderRegistrationOtpEmail(input: {
+  brandName?: string;
+  otp: string;
+  expiresMinutes?: number;
+}): { subject: string; html: string; text: string } {
+  const minutes = input.expiresMinutes ?? 10;
+  const rendered = renderBrandedEmail({
+    kind: 'registration_otp',
+    brandName: input.brandName,
+    title: 'Verify your email',
+    body: [
+      `Hello,`,
+      ``,
+      `Use this one-time code to continue your event registration.`,
+      ``,
+      `Code: ${input.otp}`,
+      ``,
+      `This code expires in ${minutes} minutes.`,
+    ].join('\n'),
+    details: [
+      { label: 'Verification code', value: input.otp },
+      { label: 'Expires in', value: `${minutes} minutes` },
+    ],
+    footerNote:
+      'If you did not start a registration, you can ignore this email.',
+  });
+  return {
+    subject: `${input.otp} is your registration code`,
+    ...rendered,
+  };
+}
+
+export function renderRegistrationAckEmail(input: {
+  brandName?: string;
+  firstName?: string | null;
+  roleLabel: string;
+  dashboardUrl: string;
+}): { subject: string; html: string; text: string } {
+  const name = input.firstName?.trim() || 'there';
+  const rendered = renderBrandedEmail({
+    kind: 'registration_ack',
+    brandName: input.brandName,
+    title: 'We received your registration',
+    body: [
+      `Hello ${name},`,
+      ``,
+      `Thanks for registering as a ${input.roleLabel}. Your profile form is with the event team for review.`,
+      ``,
+      `You can sign in to your dashboard now. Matching stays off until an administrator verifies your profile.`,
+    ].join('\n'),
+    actionUrl: input.dashboardUrl,
+    actionLabel: 'Open dashboard',
+    details: [{ label: 'Role', value: input.roleLabel }],
+    footerNote:
+      'You will hear from the event team if any answers need updates.',
+  });
+  return {
+    subject: 'Registration received — under review',
+    ...rendered,
+  };
+}
+
+export function renderRegistrationAdminNotifyEmail(input: {
+  brandName?: string;
+  organizationName: string;
+  email: string;
+  roleLabel: string;
+  reviewUrl: string;
+}): { subject: string; html: string; text: string } {
+  const rendered = renderBrandedEmail({
+    kind: 'registration_admin_notify',
+    audience: 'admin',
+    brandName: input.brandName,
+    title: 'New event registration to review',
+    body: [
+      `Hello,`,
+      ``,
+      `A new ${input.roleLabel.toLowerCase()} registered for the event and submitted a profile form.`,
+      ``,
+      `Please review and verify (or request improvements) in admin.`,
+    ].join('\n'),
+    actionUrl: input.reviewUrl,
+    actionLabel: 'Review submission',
+    details: [
+      { label: 'Organization', value: input.organizationName },
+      { label: 'Email', value: input.email },
+      { label: 'Role', value: input.roleLabel },
+    ],
+  });
+  return {
+    subject: `Review registration: ${input.organizationName}`,
     ...rendered,
   };
 }

@@ -238,6 +238,9 @@ async function main() {
     { key: 'ops.backupRetentionDays', value: 30 },
     { key: 'ops.rpoHours', value: 24 },
     { key: 'ops.rtoHours', value: 4 },
+    { key: 'registration.enabled', value: false },
+    { key: 'registration.formId', value: '' },
+    { key: 'registration.notifyEmails', value: '' },
   ];
 
   for (const item of integrationDefaults) {

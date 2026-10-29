@@ -42,9 +42,9 @@ export default function HomePage() {
               Sign in
             </Button>
           </Link>
-          <Link href="/register">
+          <Link href="/register/event">
             <Button size="sm" className="sm:h-10 sm:px-4">
-              Join
+              Register for event
             </Button>
           </Link>
         </div>
@@ -65,15 +65,24 @@ export default function HomePage() {
             site on mobile, tablet, and desktop.
           </p>
           <div className="flex flex-wrap gap-3 pt-1 sm:pt-2">
-            <Link href="/login">
-              <Button size="lg">Open app</Button>
+            <Link href="/register/event">
+              <Button size="lg">Register for event</Button>
             </Link>
-            <Link href="/register">
+            <Link href="/login">
               <Button size="lg" variant="outline">
-                Accept invitation
+                Sign in
               </Button>
             </Link>
           </div>
+          <p className="text-sm text-[var(--muted)]">
+            Have an invite link?{' '}
+            <Link
+              href="/register"
+              className="font-semibold text-[var(--accent)]"
+            >
+              Accept invitation
+            </Link>
+          </p>
         </div>
 
         <div

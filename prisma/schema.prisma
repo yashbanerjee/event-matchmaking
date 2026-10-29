@@ -320,6 +320,42 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+enum EventRegistrationStatus {
+  PENDING_OTP
+  OTP_VERIFIED
+  COMPLETED
+  EXPIRED
+}
+
+enum EventRegistrationRole {
+  CLIENT
+  GUEST
+}
+
+model EventRegistration {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email            String
+  role             EventRegistrationRole
+  formVersionId    String                   @db.Uuid
+  responses        Json                     @default("{}")
+  organizationName String?
+  otpHash          String?
+  otpExpiresAt     DateTime?
+  otpAttempts      Int                      @default(0)
+  otpSentAt        DateTime?
+  emailVerifiedAt  DateTime?
+  status           EventRegistrationStatus  @default(PENDING_OTP)
+  organizationId   String?                  @db.Uuid
+  userId           String?                  @db.Uuid
+  submissionId     String?                  @db.Uuid
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([email, status])
+  @@index([status])
+  @@map("event_registrations")
+}
+
 // ─── Organizations ───────────────────────────────────────────────────────────
 
 model Organization {

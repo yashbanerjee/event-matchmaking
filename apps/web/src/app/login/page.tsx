@@ -95,8 +95,11 @@ export default function LoginPage() {
           </form>
           <p className="mt-5 text-center text-sm text-[var(--muted)]">
             Have an invite?{' '}
-            <Link href="/register" className="font-semibold text-[var(--accent)]">
-              Accept invitation
+            <Link
+              href="/register/event"
+              className="font-semibold text-[var(--accent)]"
+            >
+              Register for event
             </Link>
           </p>
         </Card>
