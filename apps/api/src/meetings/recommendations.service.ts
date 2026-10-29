@@ -5,6 +5,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
 import type { AuthUser } from '../common/decorators';
 
+type RecommendationItem = {
+  organizationId: string;
+  name: string;
+  type: 'COMPANY' | 'VENDOR';
+  industry: string | null;
+  categories: string[];
+  capabilities: string[];
+  score: number;
+  explanation: string;
+  logoUrl: string | null;
+  featured: boolean;
+};
+
 @Injectable()
 export class RecommendationsService {
   constructor(
@@ -14,7 +27,7 @@ export class RecommendationsService {
 
   async forActor(actor: AuthUser, limit = 12) {
     const orgIds = actor.organizationIds ?? [];
-    if (!orgIds.length) return { items: [] };
+    if (!orgIds.length) return { items: [], featured: [], perspective: null };
 
     const equivalences = await this.filters.listEquivalences();
 
@@ -32,6 +45,7 @@ export class RecommendationsService {
           matchingEligible: true,
           approvalStatus: { in: ['VERIFIED', 'APPROVED'] },
           onboardingComplete: true,
+          organizationId: { notIn: orgIds },
         },
         include: { organization: true },
         take: 200,
@@ -40,7 +54,7 @@ export class RecommendationsService {
         companyOrg.company,
         companyOrg,
       );
-      const items = vendors
+      const scored: RecommendationItem[] = vendors
         .map((vendor) => {
           const score = calculateMatchScore(
             companyFeatures,
@@ -58,11 +72,19 @@ export class RecommendationsService {
             score: score.totalScore,
             explanation: score.explanation,
             logoUrl: this.logoOf(vendor.organization.customAttrs),
+            featured: vendor.featured,
           };
         })
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => {
+          if (a.featured !== b.featured) return a.featured ? -1 : 1;
+          return b.score - a.score;
+        });
+
+      const featured = scored.filter((item) => item.featured).slice(0, limit);
+      const items = scored
+        .filter((item) => !item.featured)
         .slice(0, limit);
-      return { items, perspective: 'COMPANY' as const };
+      return { items, featured, perspective: 'COMPANY' as const };
     }
 
     if (vendorOrg?.vendor) {
@@ -70,6 +92,7 @@ export class RecommendationsService {
         where: {
           matchingEligible: true,
           approvalStatus: { in: ['VERIFIED', 'APPROVED'] },
+          organizationId: { notIn: orgIds },
         },
         include: { organization: true },
         take: 200,
@@ -78,7 +101,7 @@ export class RecommendationsService {
         vendorOrg.vendor,
         vendorOrg,
       );
-      const items = companies
+      const scored: RecommendationItem[] = companies
         .map((company) => {
           const score = calculateMatchScore(
             this.toCompanyFeatures(company, company.organization),
@@ -96,14 +119,22 @@ export class RecommendationsService {
             score: score.totalScore,
             explanation: score.explanation,
             logoUrl: this.logoOf(company.organization.customAttrs),
+            featured: company.featured,
           };
         })
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => {
+          if (a.featured !== b.featured) return a.featured ? -1 : 1;
+          return b.score - a.score;
+        });
+
+      const featured = scored.filter((item) => item.featured).slice(0, limit);
+      const items = scored
+        .filter((item) => !item.featured)
         .slice(0, limit);
-      return { items, perspective: 'VENDOR' as const };
+      return { items, featured, perspective: 'VENDOR' as const };
     }
 
-    return { items: [] };
+    return { items: [], featured: [], perspective: null };
   }
 
   private logoOf(customAttrs: unknown): string | null {

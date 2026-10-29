@@ -27,8 +27,14 @@ export type OrgRow = {
     displayName?: string | null;
     approvalStatus?: string;
     matchingEligible?: boolean;
+    featured?: boolean;
     categories?: string[];
     capabilities?: string[];
+  } | null;
+  company?: {
+    approvalStatus?: string;
+    matchingEligible?: boolean;
+    featured?: boolean;
   } | null;
 };
 
@@ -139,6 +145,25 @@ export function OrgRowActions({
     },
   });
 
+  const isFeatured =
+    kind === 'vendor'
+      ? Boolean(org.vendor?.featured)
+      : Boolean(org.company?.featured);
+
+  const toggleFeatured = useMutation({
+    mutationFn: () =>
+      apiFetch(`/organizations/${org.id}/featured`, {
+        method: 'PATCH',
+        token: getAccessToken(),
+        body: JSON.stringify({ featured: !isFeatured }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ queryKey: ['organization', org.id] });
+      void qc.invalidateQueries({ queryKey: ['recommendations'] });
+    },
+  });
+
   const viewed = detail.data ?? org;
 
   return (
@@ -149,6 +174,19 @@ export function OrgRowActions({
         </Button>
         <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
           Edit
+        </Button>
+        <Button
+          size="sm"
+          variant={isFeatured ? 'secondary' : 'outline'}
+          disabled={toggleFeatured.isPending}
+          onClick={() => toggleFeatured.mutate()}
+          title={
+            isFeatured
+              ? 'Remove from admin suggestions'
+              : 'Show as admin suggestion on the counterpart panel'
+          }
+        >
+          {isFeatured ? 'Unfeature' : 'Feature'}
         </Button>
         <Button
           size="sm"
@@ -193,6 +231,14 @@ export function OrgRowActions({
             ['Region', viewed.region ?? '—'],
             ['Website', viewed.website ?? '—'],
             ['Address', viewed.address ?? '—'],
+            [
+              'Featured',
+              (kind === 'vendor'
+                ? viewed.vendor?.featured
+                : viewed.company?.featured)
+                ? 'Yes'
+                : 'No',
+            ],
             ...(kind === 'vendor'
               ? ([
                   ['Display name', viewed.vendor?.displayName ?? '—'],

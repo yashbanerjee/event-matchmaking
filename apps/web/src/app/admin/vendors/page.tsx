@@ -40,6 +40,7 @@ type OrgList = {
       displayName?: string | null;
       approvalStatus: string;
       matchingEligible: boolean;
+      featured?: boolean;
       categories?: string[];
       capabilities?: string[];
     };
@@ -361,6 +362,9 @@ export default function VendorsPage() {
                           />
                         ) : null}
                         {org.name}
+                        {org.vendor?.featured ? (
+                          <Badge variant="accent">Featured</Badge>
+                        ) : null}
                       </span>
                     </TD>
                     <TD className="text-[var(--muted)]">

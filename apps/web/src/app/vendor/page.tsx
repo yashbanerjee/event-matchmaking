@@ -91,7 +91,7 @@ export default function VendorOverviewPage() {
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
         title="Recommended companies"
-        description="Matched from your categories, capabilities, and operating regions."
+        description="Admin suggestions plus companies matched to your categories, capabilities, and regions."
       />
 
       <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">

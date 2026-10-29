@@ -125,7 +125,7 @@ export default function PortalPage() {
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
         title="Recommended vendors"
-        description="Matched from your industry, categories, and capability preferences."
+        description="Admin suggestions plus vendors matched to your industry, categories, and capabilities."
       />
     </PortalShell>
   );

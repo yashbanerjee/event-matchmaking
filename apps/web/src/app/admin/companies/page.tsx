@@ -38,7 +38,7 @@ type OrgList = {
     region?: string | null;
     website?: string | null;
     address?: string | null;
-    company?: { approvalStatus?: string } | null;
+    company?: { approvalStatus?: string; featured?: boolean } | null;
     latestSubmission?: {
       id: string;
       status: string;
@@ -459,6 +459,9 @@ export default function CompaniesPage() {
                             />
                           ) : null}
                           {org.name}
+                          {org.company?.featured ? (
+                            <Badge variant="accent">Featured</Badge>
+                          ) : null}
                         </span>
                       </TD>
                       <TD className="text-[#626F86]">

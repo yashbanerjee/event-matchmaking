@@ -205,6 +205,16 @@ export class OrganizationsController {
     return this.orgs.update(user, id, body);
   }
 
+  @Patch(':id/featured')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  setFeatured(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { featured: boolean },
+  ) {
+    return this.orgs.setFeatured(user, id, Boolean(body.featured));
+  }
+
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {

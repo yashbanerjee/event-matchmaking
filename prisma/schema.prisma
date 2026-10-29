@@ -385,6 +385,8 @@ model Company {
   /// INVITED | WAITING_FOR_REVIEW | IN_REVIEW | VERIFIED | RESEND_FOR_IMPROVEMENTS
   approvalStatus       String   @default("INVITED")
   matchingEligible     Boolean  @default(false)
+  /// Shown as an admin suggestion on vendor home recommendations.
+  featured             Boolean  @default(false)
   profileVersion       Int      @default(0)
   normalizedProfile    Json     @default("{}")
   createdAt            DateTime @default(now())
@@ -393,6 +395,7 @@ model Company {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([matchingEligible, approvalStatus])
+  @@index([featured, matchingEligible])
   @@map("companies")
 }
 
@@ -410,6 +413,8 @@ model Vendor {
   approvalStatus     String   @default("INVITED")
   onboardingComplete Boolean  @default(false)
   matchingEligible   Boolean  @default(false)
+  /// Shown as an admin suggestion on company/delegate home recommendations.
+  featured           Boolean  @default(false)
   profileVersion     Int      @default(0)
   normalizedProfile  Json     @default("{}")
   createdAt          DateTime @default(now())
@@ -418,6 +423,7 @@ model Vendor {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([matchingEligible, approvalStatus])
+  @@index([featured, matchingEligible])
   @@map("vendors")
 }
 

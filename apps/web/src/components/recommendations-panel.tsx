@@ -17,7 +17,79 @@ type Recommendation = {
   capabilities: string[];
   score: number;
   explanation: string;
+  featured?: boolean;
 };
+
+function SuggestionGrid({
+  items,
+  fromOrgId,
+  pending,
+  onRequest,
+  featured,
+}: {
+  items: Recommendation[];
+  fromOrgId?: string;
+  pending: boolean;
+  onRequest: (organizationId: string) => void;
+  featured?: boolean;
+}) {
+  return (
+    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+      {items.map((item, index) => (
+        <div
+          key={item.organizationId}
+          className={`animate-rise min-w-0 overflow-hidden rounded-2xl border p-4 ${
+            featured
+              ? 'border-[var(--accent)]/25 bg-[linear-gradient(180deg,#f0fdfa_0%,#ffffff_70%)]'
+              : 'border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)]'
+          }`}
+          style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
+        >
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <p className="truncate font-semibold" title={item.name}>
+                  {item.name}
+                </p>
+                {featured ? (
+                  <Badge variant="accent" className="shrink-0">
+                    Admin pick
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
+                {item.industry || item.type}
+              </p>
+            </div>
+            {!featured ? (
+              <Badge variant="secondary" className="shrink-0">
+                {Math.round(item.score)}%
+              </Badge>
+            ) : null}
+          </div>
+          {(item.categories.length > 0 || item.capabilities.length > 0) && (
+            <p
+              className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-[var(--muted)]"
+              title={[...item.categories, ...item.capabilities].join(' · ')}
+            >
+              {[...item.categories, ...item.capabilities]
+                .slice(0, 6)
+                .join(' · ')}
+            </p>
+          )}
+          <Button
+            className="mt-3 w-full sm:w-auto"
+            size="sm"
+            disabled={!fromOrgId || pending}
+            onClick={() => onRequest(item.organizationId)}
+          >
+            Request meeting
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function RecommendationsPanel({
   fromOrgId,
@@ -33,7 +105,11 @@ export function RecommendationsPanel({
   const recs = useQuery({
     queryKey: ['recommendations'],
     queryFn: () =>
-      apiFetch<{ items: Recommendation[] }>('/recommendations?limit=8', {
+      apiFetch<{
+        items: Recommendation[];
+        featured: Recommendation[];
+        perspective: 'COMPANY' | 'VENDOR' | null;
+      }>('/recommendations?limit=8', {
         token: getAccessToken(),
       }),
   });
@@ -53,7 +129,9 @@ export function RecommendationsPanel({
     },
   });
 
+  const featured = recs.data?.featured ?? [];
   const items = recs.data?.items ?? [];
+  const empty = featured.length === 0 && items.length === 0;
 
   return (
     <Card className="min-w-0 overflow-hidden">
@@ -68,52 +146,50 @@ export function RecommendationsPanel({
 
       {recs.isLoading ? (
         <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
-      ) : items.length === 0 ? (
+      ) : empty ? (
         <EmptyState
           title="No recommendations yet"
-          description="Complete your profile preferences (category, industry, capabilities) to see matches."
+          description="Complete your profile preferences, or ask an admin to feature matching partners."
         />
       ) : (
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-          {items.map((item, index) => (
-            <div
-              key={item.organizationId}
-              className="animate-rise min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
-              style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
-            >
-              <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold" title={item.name}>
-                    {item.name}
-                  </p>
-                  <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                    {item.industry || item.type}
-                  </p>
-                </div>
-                <Badge variant="accent" className="shrink-0">
-                  {Math.round(item.score)}%
-                </Badge>
-              </div>
-              {(item.categories.length > 0 || item.capabilities.length > 0) && (
-                <p
-                  className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-[var(--muted)]"
-                  title={[...item.categories, ...item.capabilities].join(' · ')}
-                >
-                  {[...item.categories, ...item.capabilities]
-                    .slice(0, 6)
-                    .join(' · ')}
+        <div className="space-y-6">
+          {featured.length > 0 ? (
+            <section className="min-w-0 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Admin suggestions</h3>
+                <p className="text-xs text-[var(--muted)]">
+                  Featured partners selected by the event team for you to
+                  consider.
                 </p>
-              )}
-              <Button
-                className="mt-3 w-full sm:w-auto"
-                size="sm"
-                disabled={!fromOrgId || request.isPending}
-                onClick={() => request.mutate(item.organizationId)}
-              >
-                Request meeting
-              </Button>
-            </div>
-          ))}
+              </div>
+              <SuggestionGrid
+                items={featured}
+                fromOrgId={fromOrgId}
+                pending={request.isPending}
+                onRequest={(id) => request.mutate(id)}
+                featured
+              />
+            </section>
+          ) : null}
+
+          {items.length > 0 ? (
+            <section className="min-w-0 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Matched to your preferences
+                </h3>
+                <p className="text-xs text-[var(--muted)]">
+                  Ranked from category, industry, and capability fit.
+                </p>
+              </div>
+              <SuggestionGrid
+                items={items}
+                fromOrgId={fromOrgId}
+                pending={request.isPending}
+                onRequest={(id) => request.mutate(id)}
+              />
+            </section>
+          ) : null}
         </div>
       )}
       {request.error ? (

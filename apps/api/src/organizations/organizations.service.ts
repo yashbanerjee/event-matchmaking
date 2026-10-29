@@ -850,6 +850,46 @@ export class OrganizationsService {
     return org;
   }
 
+  async setFeatured(actor: AuthUser, id: string, featured: boolean) {
+    const existing = await this.prisma.organization.findUnique({
+      where: { id },
+      include: { company: true, vendor: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Organization not found');
+    }
+    if (existing.type === 'PLATFORM') {
+      throw new BadRequestException('Platform organization cannot be featured');
+    }
+    if (!existing.company && !existing.vendor) {
+      throw new BadRequestException('Organization profile not found');
+    }
+
+    if (existing.company) {
+      await this.prisma.company.update({
+        where: { organizationId: id },
+        data: { featured },
+      });
+    }
+    if (existing.vendor) {
+      await this.prisma.vendor.update({
+        where: { organizationId: id },
+        data: { featured },
+      });
+    }
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: featured ? 'organization.feature' : 'organization.unfeature',
+      entityType: 'Organization',
+      entityId: id,
+      outcome: 'SUCCESS',
+      metadata: { featured, type: existing.type },
+    });
+
+    return this.get(id);
+  }
+
   async remove(actor: AuthUser, id: string) {
     const existing = await this.prisma.organization.findUnique({
       where: { id },
