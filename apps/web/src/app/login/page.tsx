@@ -73,7 +73,7 @@ export default function LoginPage() {
         <Card className="animate-rise mx-auto w-full max-w-md border-white/60 bg-white/90 p-7">
           <h2 className="text-2xl">Sign in</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Use your invited account credentials.
+            Use your account email and password.
           </p>
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
@@ -94,7 +94,7 @@ export default function LoginPage() {
             </Button>
           </form>
           <p className="mt-5 text-center text-sm text-[var(--muted)]">
-            Have an invite?{' '}
+            New here?{' '}
             <Link
               href="/register/event"
               className="font-semibold text-[var(--accent)]"
