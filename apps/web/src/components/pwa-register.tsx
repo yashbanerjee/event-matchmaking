@@ -44,7 +44,7 @@ export function PwaRegister() {
     <div className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow)] sm:inset-x-auto sm:right-4 sm:bottom-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold">Install Event Matchmaking</p>
+          <p className="text-sm font-semibold">Install Ethara Matchmaking</p>
           <p className="text-xs text-[var(--muted)]">
             Add to your home screen for quick access on phone, tablet, or
             desktop.

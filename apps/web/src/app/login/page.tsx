@@ -12,6 +12,7 @@ import { resolveParticipantHome } from '@/lib/portal-onboarding';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { BRAND, brandLabel } from '@/lib/brand';
 
 const schema = z.object({
   email: z.string().email(),
@@ -57,16 +58,16 @@ export default function LoginPage() {
         <div className="animate-rise space-y-4">
           <Link
             href="/"
-            className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]"
+            className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]"
           >
-            Event Matchmaking
+            {BRAND.name}
           </Link>
           <h1 className="max-w-md text-4xl leading-tight md:text-5xl">
-            Welcome back to your event workspace.
+            Welcome back to {brandLabel}.
           </h1>
           <p className="max-w-md text-[var(--muted)]">
-            Admins manage matching and schedules. Guests and clients use the
-            participant portal for confirmations and feedback.
+            {BRAND.tagline}. Admins manage matching and schedules. Guests and
+            clients use the portal for confirmations and feedback.
           </p>
         </div>
 

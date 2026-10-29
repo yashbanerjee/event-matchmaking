@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/api';
 import { setTokens } from '@/lib/auth-store';
+import { BRAND } from '@/lib/brand';
 import { resolveParticipantHome } from '@/lib/portal-onboarding';
 import { cn } from '@/lib/utils';
 
@@ -118,8 +119,8 @@ function RolePicker({
             className={cn(
               'rounded-2xl border px-4 py-3.5 text-left transition-all',
               selected
-                ? 'border-[var(--accent)] bg-[linear-gradient(180deg,#f0fdfa_0%,#ffffff_75%)] shadow-[0_10px_28px_rgba(15,118,110,0.12)] ring-1 ring-[var(--accent)]/25'
-                : 'border-[var(--border)] bg-white/80 hover:border-[var(--accent)]/35 hover:bg-white',
+                ? 'border-[var(--highlight)] bg-[linear-gradient(180deg,#fbf7e8_0%,#ffffff_75%)] shadow-[0_10px_28px_rgba(10,10,10,0.1)] ring-1 ring-[var(--highlight)]/30'
+                : 'border-[var(--border)] bg-white/80 hover:border-[var(--highlight)]/40 hover:bg-white',
             )}
           >
             <p className="font-semibold tracking-tight">{option.title}</p>
@@ -239,8 +240,8 @@ function EventRegisterForm() {
   if (!config.data?.enabled) {
     return (
       <Card className="animate-rise w-full max-w-lg border-white/70 bg-white/90 p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-          Event Matchmaking
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--highlight)]">
+          {BRAND.name}
         </p>
         <h1 className="mt-3 h-display text-3xl">Registration closed</h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
@@ -262,8 +263,8 @@ function EventRegisterForm() {
   if (!config.data.schema) {
     return (
       <Card className="animate-rise w-full max-w-lg border-white/70 bg-white/90 p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-          Event Matchmaking
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--highlight)]">
+          {BRAND.name}
         </p>
         <h1 className="mt-3 h-display text-3xl">Almost ready</h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
@@ -279,28 +280,28 @@ function EventRegisterForm() {
 
   return (
     <div className="animate-rise grid w-full max-w-6xl gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start">
-      <aside className="relative overflow-hidden rounded-[1.75rem] border border-white/50 bg-[linear-gradient(165deg,#0b1b2b_0%,#143049_48%,#0f766e_120%)] p-7 text-[var(--sidebar-fg)] shadow-[var(--shadow)] sm:p-8">
+      <aside className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(165deg,#0a0a0a_0%,#1a1a1a_55%,#3d3418_140%)] p-7 text-[var(--sidebar-fg)] shadow-[var(--shadow)] sm:p-8">
         <div
           aria-hidden
-          className="pointer-events-none absolute -right-16 top-10 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(204,251,241,0.28),transparent_68%)]"
+          className="pointer-events-none absolute -right-16 top-10 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(201,162,39,0.28),transparent_68%)]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(3,105,161,0.35),transparent_70%)]"
+          className="pointer-events-none absolute -bottom-20 left-8 h-48 w-48 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.08),transparent_70%)]"
         />
         <Link
           href="/"
-          className="relative text-xs font-semibold uppercase tracking-[0.24em] text-teal-200/90"
+          className="relative text-xs font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]"
         >
-          Event Matchmaking
+          {BRAND.name}
         </Link>
         <h1 className="relative mt-5 h-display max-w-sm text-3xl leading-tight text-white sm:text-4xl">
-          Join the event. Find the right conversations.
+          {BRAND.tagline}.
         </h1>
         <p className="relative mt-4 max-w-sm text-sm leading-relaxed text-[var(--sidebar-muted)]">
           Tell us who you are, verify your email, and set a password. Your
-          profile goes to the event team for review while you explore your
-          dashboard.
+          profile goes to the Ethara event team for review while you explore
+          your dashboard.
         </p>
         <ul className="relative mt-8 space-y-3 text-sm">
           {[
@@ -312,7 +313,7 @@ function EventRegisterForm() {
               key={item}
               className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5"
             >
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-300/20 text-[11px] font-bold text-teal-100">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--highlight)]/25 text-[11px] font-bold text-[var(--highlight)]">
                 ✓
               </span>
               <span className="text-[var(--sidebar-fg)]/90">{item}</span>
@@ -566,15 +567,15 @@ export default function EventRegisterPage() {
     <main className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 sm:py-12">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(15,118,110,0.16),transparent_42%),linear-gradient(210deg,rgba(3,105,161,0.14),transparent_40%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(201,162,39,0.14),transparent_42%),linear-gradient(210deg,rgba(10,10,10,0.08),transparent_40%)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 top-10 h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(15,118,110,0.22),transparent_68%)] blur-2xl animate-fade"
+        className="pointer-events-none absolute -right-24 top-10 h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(201,162,39,0.2),transparent_68%)] blur-2xl animate-fade"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-20 bottom-0 h-[22rem] w-[22rem] rounded-full bg-[radial-gradient(circle,rgba(3,105,161,0.18),transparent_70%)] blur-2xl"
+        className="pointer-events-none absolute -left-20 bottom-0 h-[22rem] w-[22rem] rounded-full bg-[radial-gradient(circle,rgba(10,10,10,0.1),transparent_70%)] blur-2xl"
       />
       <div className="relative mx-auto flex min-h-[80vh] w-full max-w-6xl items-center justify-center">
         <Suspense

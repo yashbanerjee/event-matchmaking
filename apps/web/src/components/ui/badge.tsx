@@ -6,7 +6,7 @@ const tones: Record<string, string> = {
   warning: 'bg-amber-50 text-amber-800 border-amber-200',
   danger: 'bg-rose-50 text-rose-700 border-rose-200',
   info: 'bg-sky-50 text-sky-800 border-sky-200',
-  accent: 'bg-[var(--accent-soft)] text-[var(--accent-hover)] border-teal-200',
+  accent: 'bg-[var(--highlight-soft)] text-[var(--foreground)] border-[color-mix(in_srgb,var(--highlight)_35%,white)]',
   secondary: 'bg-slate-50 text-slate-600 border-slate-200',
 };
 

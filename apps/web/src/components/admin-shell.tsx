@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 import { clearTokens } from '@/lib/auth-store';
+import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 
@@ -127,7 +128,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             Admin
           </p>
           <div className="h-display truncate text-base font-bold tracking-tight">
-            Event Matchmaking
+            {BRAND.name}
           </div>
         </div>
       </header>
@@ -150,11 +151,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-start justify-between gap-3 px-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--sidebar-muted)]">
-              Admin
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]">
+              {BRAND.name}
             </p>
             <div className="mt-1 h-display text-xl font-bold tracking-tight">
-              Event Matchmaking
+              {BRAND.product}
             </div>
           </div>
           <Button

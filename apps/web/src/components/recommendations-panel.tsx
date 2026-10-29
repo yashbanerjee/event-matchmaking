@@ -40,7 +40,7 @@ function SuggestionGrid({
           key={item.organizationId}
           className={`animate-rise min-w-0 overflow-hidden rounded-2xl border p-4 ${
             featured
-              ? 'border-[var(--accent)]/25 bg-[linear-gradient(180deg,#f0fdfa_0%,#ffffff_70%)]'
+              ? 'border-[var(--highlight)]/30 bg-[linear-gradient(180deg,#fbf7e8_0%,#ffffff_70%)]'
               : 'border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)]'
           }`}
           style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}

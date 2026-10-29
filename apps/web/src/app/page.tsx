@@ -1,22 +1,23 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { BRAND, brandLabel } from '@/lib/brand';
 
 const JOURNEY = [
   {
     title: 'Discover',
-    body: 'State your objective in natural language or structured choices — Buy, Sell, Partner, Invest, Find Expertise, Explore.',
+    body: 'State your objective — buy, sell, partner, invest, find expertise, or explore the floor.',
   },
   {
     title: 'Match',
-    body: 'See recommended counterparties with clear explanations — built for investor ↔ innovator fit.',
+    body: 'See recommended counterparties with clear explanations built for client ↔ guest fit.',
   },
   {
     title: 'Connect',
-    body: 'Send and accept meeting requests with admin control over who can see and contact whom.',
+    body: 'Send and accept meeting requests with organizer control over who can see and contact whom.',
   },
   {
     title: 'Meet',
-    body: 'Confirm when and where — including on-site table or location — from phone, tablet, or desktop.',
+    body: 'Confirm when and where — including on-site place — from phone, tablet, or desktop.',
   },
 ] as const;
 
@@ -25,16 +26,21 @@ export default function HomePage() {
     <main className="relative min-h-screen overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(15,118,110,0.18),transparent_42%),linear-gradient(210deg,rgba(3,105,161,0.16),transparent_40%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(201,162,39,0.16),transparent_42%),linear-gradient(210deg,rgba(10,10,10,0.08),transparent_40%)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(15,118,110,0.28),transparent_68%)] blur-2xl animate-fade"
+        className="pointer-events-none absolute -right-24 top-16 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(201,162,39,0.22),transparent_68%)] blur-2xl animate-fade"
       />
 
       <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-5 sm:px-6 sm:py-6">
-        <div className="h-display truncate text-lg font-bold tracking-tight sm:text-xl">
-          Event Matchmaking
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--highlight)]">
+            {BRAND.name}
+          </p>
+          <div className="h-display truncate text-lg font-bold tracking-tight sm:text-xl">
+            {BRAND.product}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link href="/login">
@@ -52,17 +58,19 @@ export default function HomePage() {
 
       <section className="relative z-10 mx-auto grid min-h-[70vh] w-full max-w-6xl items-center gap-10 px-4 pb-16 pt-4 sm:px-6 sm:pt-8 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="animate-rise space-y-5 sm:space-y-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)] sm:text-xs sm:tracking-[0.28em]">
-            Progressive web app
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--highlight)] sm:text-xs sm:tracking-[0.28em]">
+            {BRAND.tagline}
           </p>
-          <h1 className="max-w-xl text-4xl leading-[1.08] text-[var(--foreground)] sm:text-5xl md:text-6xl">
-            Find the right people. Turn it into a confirmed meeting.
+          <h1 className="max-w-xl text-4xl leading-[1.05] text-[var(--foreground)] sm:text-5xl md:text-6xl">
+            Making moments
+            <br />
+            that matter —
+            <br />
+            starting with the right meeting.
           </h1>
           <p className="max-w-lg text-sm leading-relaxed text-[var(--muted)] sm:text-base md:text-lg">
-            An installable conference workspace for discover, match, connect,
-            and meet — including investor–innovator matching, on-site scheduling,
-            and organizer reporting. Works embedded or linked from your event
-            site on mobile, tablet, and desktop.
+            {brandLabel} helps Ethara event teams discover, match, connect, and
+            confirm on-site meetings for clients and guests.
           </p>
           <div className="flex flex-wrap gap-3 pt-1 sm:pt-2">
             <Link href="/register/event">
@@ -74,15 +82,6 @@ export default function HomePage() {
               </Button>
             </Link>
           </div>
-          <p className="text-sm text-[var(--muted)]">
-            Have an invite link?{' '}
-            <Link
-              href="/register"
-              className="font-semibold text-[var(--accent)]"
-            >
-              Accept invitation
-            </Link>
-          </p>
         </div>
 
         <div
@@ -94,7 +93,7 @@ export default function HomePage() {
           </div>
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-[var(--muted)]">Conference flow</p>
+              <p className="text-sm text-[var(--muted)]">Event flow</p>
               <p className="mt-1 h-display text-xl sm:text-2xl">
                 Discover → Match → Connect → Meet
               </p>

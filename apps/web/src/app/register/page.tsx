@@ -107,14 +107,14 @@ export default function RegisterPage() {
     <main className="auth-pad relative min-h-screen overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_100%_0%,rgba(3,105,161,0.14),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_100%_0%,rgba(201,162,39,0.14),transparent_55%)]"
       />
       <div className="relative mx-auto flex min-h-[85vh] max-w-6xl flex-col items-center justify-center">
         <Link
           href="/"
-          className="mb-6 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--accent)]"
+          className="mb-6 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]"
         >
-          Event Matchmaking
+          Ethara
         </Link>
         <Suspense>
           <RegisterForm />

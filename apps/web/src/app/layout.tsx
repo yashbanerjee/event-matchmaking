@@ -4,6 +4,8 @@ import { Figtree, Syne } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { PwaRegister } from '@/components/pwa-register';
+import { DemoFooter } from '@/components/demo-footer';
+import { brandLabel, BRAND } from '@/lib/brand';
 
 const sans = Figtree({
   subsets: ['latin'],
@@ -17,15 +19,14 @@ const display = Syne({
   display: 'swap',
 });
 
-const APP_NAME = 'Event Matchmaking';
-const APP_DESCRIPTION =
-  'Discover who to meet, why you match, connect with requests, and confirm on-site meeting times — built for investors, innovators, and organizers.';
+const APP_NAME = brandLabel;
+const APP_DESCRIPTION = `${BRAND.tagline}. Event matchmaking demo for Ethara — discover, match, connect, and meet.`;
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
   title: {
     default: APP_NAME,
-    template: `%s · ${APP_NAME}`,
+    template: `%s · ${BRAND.name}`,
   },
   description: APP_DESCRIPTION,
   manifest: '/manifest.webmanifest',
@@ -48,8 +49,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#0f766e' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1b2b' },
+    { media: '(prefers-color-scheme: light)', color: '#0a0a0a' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -69,7 +70,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${display.variable}`} style={fontVars}>
         <Providers>
-          {children}
+          <div className="flex min-h-screen flex-col">
+            <div className="flex-1">{children}</div>
+            <DemoFooter />
+          </div>
           <PwaRegister />
         </Providers>
       </body>

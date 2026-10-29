@@ -1,39 +1,37 @@
 @import "tailwindcss";
 
 :root {
-  --background: #eef3f7;
-  --foreground: #0f1c27;
+  /* Ethara-inspired: black, white, warm gold */
+  --background: #f4f4f2;
+  --foreground: #0a0a0a;
   --card: #ffffff;
-  --card-elevated: #f8fbfd;
-  --border: #d5e0e8;
-  --muted: #5b6f7e;
-  --accent: #0f766e;
-  --accent-hover: #0d5f59;
-  --accent-foreground: #ecfdf8;
-  --accent-soft: #ccfbf1;
-  --highlight: #0369a1;
-  --highlight-soft: #e0f2fe;
+  --card-elevated: #fafaf8;
+  --border: #e2e0db;
+  --muted: #6b6b66;
+  --accent: #0a0a0a;
+  --accent-hover: #000000;
+  --accent-foreground: #ffffff;
+  --accent-soft: #ececeb;
+  --highlight: #c9a227;
+  --highlight-soft: #f7f0d8;
   --danger: #be123c;
   --success: #047857;
   --warning: #b45309;
-  --sidebar: #0b1b2b;
-  --sidebar-fg: #e8eef4;
-  --sidebar-muted: #8aa0b4;
-  --sidebar-active: #143049;
-  /* Override to resize the admin rail (e.g. 14rem, 240px, 18%). */
+  --sidebar: #0a0a0a;
+  --sidebar-fg: #f5f5f4;
+  --sidebar-muted: #a3a3a0;
+  --sidebar-active: #1c1c1c;
   --sidebar-width: 17rem;
-  --ring: #0f766e;
-  --shadow: 0 16px 40px rgba(15, 28, 39, 0.08);
+  --ring: #c9a227;
+  --shadow: 0 18px 44px rgba(10, 10, 10, 0.1);
   --radius: 16px;
   --font-display: "Syne", "Avenir Next", system-ui, sans-serif;
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
   --page-pad-x: 1.5rem;
   --page-pad-top: 1.5rem;
-  /* Extra bottom inset so lists, builders, and panels never hug the viewport edge */
   --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-/* Side-by-side shell whenever the viewport can fit rail + a usable main pane */
 .admin-shell {
   min-height: 100vh;
 }
@@ -69,9 +67,9 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(1100px 520px at 8% -8%, rgba(15, 118, 110, 0.16), transparent 55%),
-    radial-gradient(900px 480px at 100% 0%, rgba(3, 105, 161, 0.12), transparent 50%),
-    linear-gradient(180deg, #f5f8fb 0%, var(--background) 48%, #e7eef4 100%);
+    radial-gradient(1000px 480px at 6% -10%, rgba(201, 162, 39, 0.14), transparent 55%),
+    radial-gradient(900px 520px at 100% 0%, rgba(10, 10, 10, 0.06), transparent 48%),
+    linear-gradient(180deg, #fafaf8 0%, var(--background) 50%, #ebebe8 100%);
   color: var(--foreground);
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
@@ -92,7 +90,7 @@ h2,
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--highlight-soft);
   color: var(--foreground);
 }
 

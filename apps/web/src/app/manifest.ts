@@ -2,16 +2,16 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Event Matchmaking',
-    short_name: 'MatchMeet',
+    name: 'Ethara Event Matchmaking',
+    short_name: 'Ethara',
     description:
-      'Discover, match, connect, and meet — intelligent conference matchmaking for investors, innovators, and organizers.',
+      'Making moments that matter — Ethara event matchmaking demo for clients and guests.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
     orientation: 'any',
-    background_color: '#eef3f7',
-    theme_color: '#0f766e',
+    background_color: '#f4f4f2',
+    theme_color: '#0a0a0a',
     categories: ['business', 'productivity'],
     lang: 'en',
     icons: [

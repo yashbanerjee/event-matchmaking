@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
 import { clearTokens } from '@/lib/auth-store';
+import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -111,7 +112,7 @@ export function PortalShell({
             Client panel
           </p>
           <div className="h-display truncate text-base font-bold tracking-tight">
-            Event Matchmaking
+            {BRAND.name}
           </div>
         </div>
       </header>
@@ -134,11 +135,11 @@ export function PortalShell({
       >
         <div className="flex items-start justify-between gap-3 px-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--sidebar-muted)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]">
               Client panel
             </p>
             <div className="mt-1 h-display text-xl font-bold tracking-tight">
-              Event Matchmaking
+              {BRAND.name}
             </div>
             {email ? (
               <p className="mt-2 truncate text-xs text-[var(--sidebar-muted)]" title={email}>
