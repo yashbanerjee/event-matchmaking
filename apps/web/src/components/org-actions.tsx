@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { statusTone } from '@/lib/status';
+import { formatVendorStatus, statusTone } from '@/lib/status';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -222,55 +222,62 @@ export function OrgRowActions({
         {detail.error && (
           <p className="text-rose-700">{(detail.error as Error).message}</p>
         )}
-        <dl className="grid gap-3 sm:grid-cols-2">
-          {[
-            ['Code', viewed.code],
-            ['Status', viewed.status],
-            ['Industry', viewed.industry ?? '—'],
-            ['Country', viewed.country ?? '—'],
-            ['Region', viewed.region ?? '—'],
-            ['Website', viewed.website ?? '—'],
-            ['Address', viewed.address ?? '—'],
+        <dl className="overflow-hidden rounded-xl border border-[var(--border)]">
+          {(
             [
-              'Featured',
-              (kind === 'vendor'
-                ? viewed.vendor?.featured
-                : viewed.company?.featured)
-                ? 'Yes'
-                : 'No',
-            ],
-            ...(kind === 'vendor'
-              ? ([
-                  ['Display name', viewed.vendor?.displayName ?? '—'],
-                  [
-                    'Approval',
-                    viewed.vendor?.approvalStatus ?? '—',
-                  ],
-                  [
-                    'Eligible',
-                    viewed.vendor?.matchingEligible ? 'Yes' : 'No',
-                  ],
-                  [
-                    'Categories',
-                    (viewed.vendor?.categories ?? []).join(', ') || '—',
-                  ],
-                  [
-                    'Capabilities',
-                    (viewed.vendor?.capabilities ?? []).join(', ') || '—',
-                  ],
-                ] as Array<[string, string]>)
-              : []),
-          ].map(([label, value]) => (
+              ['Code', viewed.code],
+              ['Status', viewed.status, 'status'],
+              ['Industry', viewed.industry ?? '—'],
+              ['Country', viewed.country ?? '—'],
+              ['Region', viewed.region ?? '—'],
+              ['Website', viewed.website ?? '—'],
+              ['Address', viewed.address ?? '—'],
+              [
+                'Featured',
+                (kind === 'vendor'
+                  ? viewed.vendor?.featured
+                  : viewed.company?.featured)
+                  ? 'Yes'
+                  : 'No',
+              ],
+              ...(kind === 'vendor'
+                ? ([
+                    ['Display name', viewed.vendor?.displayName ?? '—'],
+                    [
+                      'Approval',
+                      viewed.vendor?.approvalStatus ?? '—',
+                      'status',
+                    ],
+                    [
+                      'Eligible',
+                      viewed.vendor?.matchingEligible ? 'Yes' : 'No',
+                    ],
+                    [
+                      'Categories',
+                      (viewed.vendor?.categories ?? []).join(', ') || '—',
+                    ],
+                    [
+                      'Capabilities',
+                      (viewed.vendor?.capabilities ?? []).join(', ') || '—',
+                    ],
+                  ] as Array<[string, string, string?]>)
+                : []),
+            ] as Array<[string, string, string?]>
+          ).map(([label, value, kindOf], index) => (
             <div
               key={label}
-              className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2"
+              className={`grid grid-cols-[8.5rem_minmax(0,1fr)] items-start gap-x-4 gap-y-1 px-4 py-3 text-left sm:grid-cols-[10rem_minmax(0,1fr)] ${
+                index > 0 ? 'border-t border-[var(--border)]' : ''
+              } ${index % 2 === 0 ? 'bg-white' : 'bg-[var(--card-elevated)]'}`}
             >
-              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <dt className="pt-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 {label}
               </dt>
-              <dd className="mt-1 text-sm font-medium">
-                {label === 'Status' || label === 'Approval' ? (
-                  <Badge variant={statusTone(String(value))}>{value}</Badge>
+              <dd className="min-w-0 break-words text-sm font-medium text-[var(--foreground)]">
+                {kindOf === 'status' ? (
+                  <Badge variant={statusTone(String(value))}>
+                    {formatVendorStatus(String(value))}
+                  </Badge>
                 ) : (
                   value
                 )}
@@ -282,11 +289,13 @@ export function OrgRowActions({
         {detail.data?.members && detail.data.members.length > 0 ? (
           <div className="mt-5">
             <h3 className="mb-2 text-sm font-semibold">Members</h3>
-            <ul className="space-y-2">
-              {detail.data.members.map((m) => (
+            <ul className="overflow-hidden rounded-xl border border-[var(--border)]">
+              {detail.data.members.map((m, index) => (
                 <li
                   key={m.user.id}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-sm"
+                  className={`px-4 py-3 text-left text-sm ${
+                    index > 0 ? 'border-t border-[var(--border)]' : ''
+                  }`}
                 >
                   <span className="font-medium">{m.user.email}</span>
                   <span className="text-[var(--muted)]">

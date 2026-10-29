@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormSchemaDefinition } from '@em/shared';
 import { apiFetch } from '@/lib/api';
@@ -19,7 +20,6 @@ import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
-import { SubmissionReviewModal } from '@/components/submission-review-modal';
 import { FormRenderer } from '@/components/form-renderer';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
@@ -127,11 +127,6 @@ export default function CompaniesPage() {
     schema: FormSchemaDefinition;
   } | null>(null);
   const [adminValues, setAdminValues] = useState<Record<string, unknown>>({});
-  const [formReview, setFormReview] = useState<{
-    id: string;
-    name: string;
-    submissionId?: string | null;
-  } | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -475,21 +470,19 @@ export default function CompaniesPage() {
                       </TD>
                       <TD className="text-right">
                         <div className="inline-flex flex-nowrap items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setFormReview({
-                                id: org.id,
-                                name: org.name,
-                                submissionId: org.latestSubmission?.id ?? null,
-                              })
+                          <Link
+                            href={
+                              org.latestSubmission?.id
+                                ? `/admin/companies/${org.id}/form?submissionId=${org.latestSubmission.id}`
+                                : `/admin/companies/${org.id}/form`
                             }
                           >
-                            {org.latestSubmission
-                              ? 'View form'
-                              : 'Form status'}
-                          </Button>
+                            <Button size="sm" variant="outline">
+                              {org.latestSubmission
+                                ? 'View form'
+                                : 'Form status'}
+                            </Button>
+                          </Link>
                           <OrgRowActions
                             org={org}
                             kind="company"
@@ -761,15 +754,6 @@ export default function CompaniesPage() {
         </div>
       </Modal>
 
-      <SubmissionReviewModal
-        open={Boolean(formReview)}
-        onClose={() => setFormReview(null)}
-        organizationId={formReview?.id ?? ''}
-        organizationName={formReview?.name ?? ''}
-        kind="company"
-        submissionId={formReview?.submissionId}
-        listQueryKey={[...queryKey]}
-      />
     </div>
   );
 }

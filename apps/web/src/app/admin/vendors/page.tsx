@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -18,7 +19,6 @@ import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
-import { SubmissionReviewModal } from '@/components/submission-review-modal';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
@@ -114,11 +114,6 @@ export default function VendorsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvResult, setCsvResult] = useState<string | null>(null);
-  const [formReview, setFormReview] = useState<{
-    id: string;
-    name: string;
-    submissionId?: string | null;
-  } | null>(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -386,21 +381,17 @@ export default function VendorsPage() {
                     </TD>
                     <TD className="text-right">
                       <div className="inline-flex flex-nowrap items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            setFormReview({
-                              id: org.id,
-                              name: org.name,
-                              submissionId: org.latestSubmission?.id ?? null,
-                            })
+                        <Link
+                          href={
+                            org.latestSubmission?.id
+                              ? `/admin/vendors/${org.id}/form?submissionId=${org.latestSubmission.id}`
+                              : `/admin/vendors/${org.id}/form`
                           }
                         >
-                          {canReview
-                            ? 'View form'
-                            : 'Form status'}
-                        </Button>
+                          <Button size="sm" variant="outline">
+                            {canReview ? 'View form' : 'Form status'}
+                          </Button>
+                        </Link>
                         {!verified && (
                           <Button
                             size="sm"
@@ -615,15 +606,6 @@ export default function VendorsPage() {
         </div>
       </Modal>
 
-      <SubmissionReviewModal
-        open={Boolean(formReview)}
-        onClose={() => setFormReview(null)}
-        organizationId={formReview?.id ?? ''}
-        organizationName={formReview?.name ?? ''}
-        kind="vendor"
-        submissionId={formReview?.submissionId}
-        listQueryKey={[...queryKey]}
-      />
     </div>
   );
 }
