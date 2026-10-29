@@ -1,15 +1,24 @@
 /**
- * Ethara event-matchmaking demo data aligned with
- * https://www.ethara.com/en/events
- *
- * Creates filter tags, venues/places, published forms, 3 clients + 3 guests,
- * verified profiles, meeting requests, and calendar meetings.
+ * Sample organizations aligned with https://www.ethara.com/en/events
+ * (filters, venues, forms, clients, guests, meetings).
  */
 import { Prisma, PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
-const DEMO_PASSWORD = 'DemoEthara1!';
+/** Shared password for the six sample accounts. */
+const SAMPLE_PASSWORD = 'EtharaEvents26!';
+
+/** Previous sample codes/emails to remove when refreshing data. */
+const LEGACY_SAMPLE_CODES = [
+  'ETH_CLI_01',
+  'ETH_CLI_02',
+  'ETH_CLI_03',
+  'ETH_GST_01',
+  'ETH_GST_02',
+  'ETH_GST_03',
+];
+const LEGACY_SAMPLE_EMAIL_SUFFIX = '@ethara-demo.com';
 
 type TagDef = { value: string; label: string };
 
@@ -181,13 +190,13 @@ type DemoGuest = {
 
 const CLIENTS: DemoClient[] = [
   {
-    code: 'ETH_CLI_01',
+    code: 'YASALAM',
     name: 'Yasalam Live Productions',
-    email: 'client1@ethara-demo.com',
+    email: 'layla.mansoori@yasalam.ae',
     firstName: 'Layla',
     lastName: 'Al Mansoori',
     industry: 'Live entertainment',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.yasalam.ae',
     preferredCategories: ['concerts', 'arts-culture', 'festivals'],
     requiredCapabilities: [
       'live-production',
@@ -199,18 +208,18 @@ const CLIENTS: DemoClient[] = [
     commercialTags: ['vip', 'sponsorship', 'corporate'],
     featured: true,
     about:
-      'Abu Dhabi promoter booking arena and after-race concerts with Ethara venues.',
+      'Abu Dhabi live entertainment company booking arena and after-race concerts across Ethara venues.',
     focusEvents:
-      'Hans Zimmer Live, Andrea Bocelli, Kings of Leon & Lewis Capaldi after-race',
+      'Hans Zimmer Live, Andrea Bocelli with Yasalam Classics, Kings of Leon & Lewis Capaldi after-race',
   },
   {
-    code: 'ETH_CLI_02',
+    code: 'GULFGP',
     name: 'Gulf Grand Prix Partners',
-    email: 'client2@ethara-demo.com',
+    email: 'omar.haddad@gulfgrandprix.ae',
     firstName: 'Omar',
     lastName: 'Haddad',
     industry: 'Sports & motorsport',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.gulfgrandprix.ae',
     preferredCategories: ['sports', 'festivals', 'concerts'],
     requiredCapabilities: [
       'sports-ops',
@@ -222,18 +231,18 @@ const CLIENTS: DemoClient[] = [
     commercialTags: ['corporate', 'sponsorship', 'rights-holder'],
     featured: true,
     about:
-      'Corporate hospitality and brand partners around F1 weekend activations.',
+      'Corporate hospitality and brand partnerships for motorsport weekends on Yas Island.',
     focusEvents:
       'Formula 1® Etihad Airways Abu Dhabi Grand Prix 2026 and after-race concerts',
   },
   {
-    code: 'ETH_CLI_03',
+    code: 'FAMMOM',
     name: 'Family Moments Agency',
-    email: 'client3@ethara-demo.com',
+    email: 'sara.khalil@familymoments.ae',
     firstName: 'Sara',
     lastName: 'Khalil',
     industry: 'Family entertainment',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.familymoments.ae',
     preferredCategories: ['family', 'gaming', 'festivals'],
     requiredCapabilities: [
       'family-programming',
@@ -245,21 +254,21 @@ const CLIENTS: DemoClient[] = [
     commercialTags: ['b2b', 'content-provider', 'corporate'],
     featured: false,
     about:
-      'Family and youth programming agency seeking Ethara arena partners.',
-    focusEvents: 'RAF Next Gen, family shows, and gaming activations',
+      'Family and youth programming agency producing arena activations and school-holiday shows.',
+    focusEvents: 'RAF Next Gen, family arena shows, and gaming activations',
   },
 ];
 
 const GUESTS: DemoGuest[] = [
   {
-    code: 'ETH_GST_01',
+    code: 'ZIMMERTOUR',
     name: 'Zimmer Tour Operations',
-    displayName: 'Zimmer Tour Ops',
-    email: 'guest1@ethara-demo.com',
+    displayName: 'Zimmer Tour Operations',
+    email: 'noah.richter@zimmertour.ae',
     firstName: 'Noah',
     lastName: 'Richter',
     industry: 'Touring production',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.zimmertour.ae',
     categories: ['concerts', 'arts-culture'],
     capabilities: [
       'live-production',
@@ -271,18 +280,18 @@ const GUESTS: DemoGuest[] = [
     commercialTags: ['vip', 'content-provider', 'sponsorship'],
     featured: true,
     about:
-      'Tour production team for arena classical / film-score concerts on Yas Island.',
+      'Tour production team for arena classical and film-score concerts on Yas Island.',
     focusEvents: 'Abu Dhabi Festival presents Hans Zimmer Live! · Etihad Arena',
   },
   {
-    code: 'ETH_GST_02',
+    code: 'MARINAEXP',
     name: 'Marina Circuit Experiences',
     displayName: 'Marina Circuit Experiences',
-    email: 'guest2@ethara-demo.com',
+    email: 'fatima.noor@marinaexperiences.ae',
     firstName: 'Fatima',
     lastName: 'Noor',
     industry: 'Motorsport experiences',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.marinaexperiences.ae',
     categories: ['sports', 'festivals', 'concerts'],
     capabilities: [
       'sports-ops',
@@ -300,19 +309,19 @@ const GUESTS: DemoGuest[] = [
     commercialTags: ['corporate', 'sponsorship', 'rights-holder'],
     featured: true,
     about:
-      'On-circuit hospitality, paddock access, and after-race concert logistics.',
+      'On-circuit hospitality, paddock access, and after-race concert logistics at Yas Marina.',
     focusEvents:
-      'F1 Abu Dhabi GP 2026 · Imagine Dragons / Chainsmokers after-race concerts',
+      'F1 Abu Dhabi GP 2026 · Imagine Dragons / The Chainsmokers after-race concerts',
   },
   {
-    code: 'ETH_GST_03',
+    code: 'RAFENT',
     name: 'RAF Combat Entertainment',
     displayName: 'RAF Combat Entertainment',
-    email: 'guest3@ethara-demo.com',
+    email: 'jordan.blake@rafcombat.ae',
     firstName: 'Jordan',
     lastName: 'Blake',
     industry: 'Combat sports & gaming',
-    website: 'https://www.ethara.com/en/events',
+    website: 'https://www.rafcombat.ae',
     categories: ['gaming', 'sports', 'family'],
     capabilities: [
       'live-production',
@@ -325,7 +334,7 @@ const GUESTS: DemoGuest[] = [
     commercialTags: ['b2b', 'content-provider', 'vip'],
     featured: false,
     about:
-      'Combat sports promoter delivering RAF main card and Next Gen youth programs.',
+      'Combat sports promoter delivering RAF main-card events and Next Gen youth programs.',
     focusEvents:
       'Real American Freestyle (RAF) Abu Dhabi · RAF Next Gen · Etihad Arena',
   },
@@ -372,7 +381,7 @@ function mapFieldType(type: string): Prisma.EnumFieldTypeFieldUpdateInput | stri
 }
 
 export async function seedEtharaDemo(prisma: PrismaClient) {
-  console.log('Seeding Ethara demo data (filters, places, 3 clients, 3 guests)…');
+  console.log('Seeding Ethara event sample data (filters, places, clients, guests)…');
 
   const companyRole = await prisma.role.findUniqueOrThrow({
     where: { code: 'COMPANY_USER' },
@@ -380,7 +389,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   const vendorRole = await prisma.role.findUniqueOrThrow({
     where: { code: 'VENDOR_USER' },
   });
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+  const passwordHash = await bcrypt.hash(SAMPLE_PASSWORD, 12);
 
   // ── Filters ──────────────────────────────────────────────────────────────
   const dimensionIds: Record<string, string> = {};
@@ -616,7 +625,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           status: 'PUBLISHED',
           publishedAt: existingVersion.publishedAt ?? new Date(),
           schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash: `ethara-demo-${input.code}-v1`,
+          schemaHash: `ethara-events-${input.code}-v1`,
         },
       });
       versionId = existingVersion.id;
@@ -628,7 +637,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           status: 'PUBLISHED',
           publishedAt: new Date(),
           schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash: `ethara-demo-${input.code}-v1`,
+          schemaHash: `ethara-events-${input.code}-v1`,
         },
       });
       versionId = created.id;
@@ -654,17 +663,17 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   }
 
   const clientForm = await upsertPublishedForm({
-    code: 'ETHARA_CLIENT_PROFILE',
-    name: 'Ethara Client Profile',
+    code: 'CLIENT_EVENT_PROFILE',
+    name: 'Client Event Profile',
     description:
       'Client onboarding for Ethara event matchmaking (concerts, sports, family).',
     targetType: 'COMPANY',
   });
   const guestForm = await upsertPublishedForm({
-    code: 'ETHARA_GUEST_PROFILE',
-    name: 'Ethara Guest Profile',
+    code: 'GUEST_EVENT_PROFILE',
+    name: 'Guest Event Profile',
     description:
-      'Guest / partner onboarding for Ethara venues and upcoming events.',
+      'Guest and partner onboarding for Ethara venues and upcoming events.',
     targetType: 'VENDOR',
   });
 
@@ -693,19 +702,28 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     update: {},
   });
 
-  // ── Cleanup previous demo meetings/requests for these orgs ───────────────
-  const demoCodes = [...CLIENTS.map((c) => c.code), ...GUESTS.map((g) => g.code)];
-  const existingDemoOrgs = await prisma.organization.findMany({
-    where: { code: { in: demoCodes } },
-    select: { id: true },
+  // ── Cleanup previous sample orgs (current + legacy) ──────────────────────
+  const sampleCodes = [
+    ...CLIENTS.map((c) => c.code),
+    ...GUESTS.map((g) => g.code),
+    ...LEGACY_SAMPLE_CODES,
+  ];
+  const existingSampleOrgs = await prisma.organization.findMany({
+    where: { code: { in: sampleCodes } },
+    select: { id: true, members: { select: { userId: true } } },
   });
-  const existingIds = existingDemoOrgs.map((o) => o.id);
-  if (existingIds.length) {
+  const existingIds = existingSampleOrgs.map((o) => o.id);
+  const legacyUserIds = [
+    ...new Set(existingSampleOrgs.flatMap((o) => o.members.map((m) => m.userId))),
+  ];
+
+  async function purgeOrgGraph(orgIds: string[]) {
+    if (!orgIds.length) return;
     const meetings = await prisma.meeting.findMany({
       where: {
         OR: [
-          { companyOrgId: { in: existingIds } },
-          { vendorOrgId: { in: existingIds } },
+          { companyOrgId: { in: orgIds } },
+          { vendorOrgId: { in: orgIds } },
         ],
       },
       select: { id: true },
@@ -728,24 +746,71 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     }
     await prisma.meetingRequest.deleteMany({
       where: {
-        OR: [
-          { fromOrgId: { in: existingIds } },
-          { toOrgId: { in: existingIds } },
-        ],
+        OR: [{ fromOrgId: { in: orgIds } }, { toOrgId: { in: orgIds } }],
+      },
+    });
+    await prisma.matchCandidate.deleteMany({
+      where: {
+        OR: [{ companyOrgId: { in: orgIds } }, { vendorOrgId: { in: orgIds } }],
+      },
+    });
+    await prisma.match.deleteMany({
+      where: {
+        OR: [{ companyOrgId: { in: orgIds } }, { vendorOrgId: { in: orgIds } }],
       },
     });
     await prisma.formSubmission.deleteMany({
-      where: { organizationId: { in: existingIds } },
+      where: { organizationId: { in: orgIds } },
     });
     await prisma.formAssignment.deleteMany({
-      where: { organizationId: { in: existingIds } },
+      where: { organizationId: { in: orgIds } },
     });
     await prisma.invitation.deleteMany({
-      where: { organizationId: { in: existingIds } },
+      where: { organizationId: { in: orgIds } },
     });
+    await prisma.document.deleteMany({
+      where: { organizationId: { in: orgIds } },
+    });
+    await prisma.eventRegistration.deleteMany({
+      where: { organizationId: { in: orgIds } },
+    });
+    await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
   }
 
-  async function upsertDemoUser(input: {
+  await purgeOrgGraph(existingIds);
+
+  const legacyUsers = await prisma.user.findMany({
+    where: {
+      OR: [
+        { id: { in: legacyUserIds } },
+        { email: { endsWith: LEGACY_SAMPLE_EMAIL_SUFFIX } },
+        {
+          email: {
+            in: [...CLIENTS, ...GUESTS].map((account) => account.email),
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  for (const user of legacyUsers) {
+    const remaining = await prisma.organizationMember.count({
+      where: { userId: user.id },
+    });
+    if (remaining > 0) continue;
+    await prisma.auditLog.updateMany({
+      where: { actorId: user.id },
+      data: { actorId: null },
+    });
+    await prisma.invitation.updateMany({
+      where: { acceptedById: user.id },
+      data: { acceptedById: null },
+    });
+    await prisma.eventRegistration.deleteMany({ where: { userId: user.id } });
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+
+  async function upsertSampleUser(input: {
     email: string;
     firstName: string;
     lastName: string;
@@ -805,7 +870,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
 
   // ── Clients ──────────────────────────────────────────────────────────────
   for (const client of CLIENTS) {
-    const user = await upsertDemoUser({
+    const user = await upsertSampleUser({
       email: client.email,
       firstName: client.firstName,
       lastName: client.lastName,
@@ -825,8 +890,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         website: client.website,
         timeZone: 'Asia/Dubai',
         customAttrs: {
-          demo: true,
-          etharaDemo: true,
           contactEmail: client.email,
           contactName: `${client.firstName} ${client.lastName}`,
           about: client.about,
@@ -842,8 +905,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         website: client.website,
         archivedAt: null,
         customAttrs: {
-          demo: true,
-          etharaDemo: true,
           contactEmail: client.email,
           contactName: `${client.firstName} ${client.lastName}`,
           about: client.about,
@@ -926,7 +987,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         status: 'APPROVED',
         submittedAt: new Date(),
         reviewedAt: new Date(),
-        reviewNotes: 'Demo verified for Ethara client walkthrough',
+        reviewNotes: 'Verified — profile complete for matchmaking',
         responses: responsesFor(clientForm.fields, responseData) as Prisma.InputJsonValue,
       },
     });
@@ -936,7 +997,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
 
   // ── Guests ───────────────────────────────────────────────────────────────
   for (const guest of GUESTS) {
-    const user = await upsertDemoUser({
+    const user = await upsertSampleUser({
       email: guest.email,
       firstName: guest.firstName,
       lastName: guest.lastName,
@@ -956,8 +1017,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         website: guest.website,
         timeZone: 'Asia/Dubai',
         customAttrs: {
-          demo: true,
-          etharaDemo: true,
           contactEmail: guest.email,
           contactName: `${guest.firstName} ${guest.lastName}`,
           about: guest.about,
@@ -973,8 +1032,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         website: guest.website,
         archivedAt: null,
         customAttrs: {
-          demo: true,
-          etharaDemo: true,
           contactEmail: guest.email,
           contactName: `${guest.firstName} ${guest.lastName}`,
           about: guest.about,
@@ -1063,7 +1120,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         status: 'APPROVED',
         submittedAt: new Date(),
         reviewedAt: new Date(),
-        reviewNotes: 'Demo verified for Ethara guest walkthrough',
+        reviewNotes: 'Verified — profile complete for matchmaking',
         responses: responsesFor(guestForm.fields, responseData) as Prisma.InputJsonValue,
       },
     });
@@ -1107,7 +1164,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         matchScore: input.score,
         timeZone: 'Asia/Dubai',
         venue: undefined,
-        idempotencyKey: `ethara-demo:${input.companyOrgId}:${input.vendorOrgId}:${input.startsAt.toISOString()}`,
+        idempotencyKey: `ethara-events:${input.companyOrgId}:${input.vendorOrgId}:${input.startsAt.toISOString()}`,
       },
     });
   }
@@ -1282,21 +1339,18 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   });
 
   console.log(`
-Ethara demo ready (inspired by https://www.ethara.com/en/events)
+Ethara sample accounts ready (aligned with https://www.ethara.com/en/events)
 
-Password for all demo users: ${DEMO_PASSWORD}
+Password for all sample users: ${SAMPLE_PASSWORD}
 
-Clients (portal /login → client dashboard):
+Clients:
   1) ${CLIENTS[0]!.email}  — ${CLIENTS[0]!.name}
   2) ${CLIENTS[1]!.email}  — ${CLIENTS[1]!.name}
   3) ${CLIENTS[2]!.email}  — ${CLIENTS[2]!.name}
 
-Guests (login → guest panel):
-  1) ${GUESTS[0]!.email}   — ${GUESTS[0]!.name}
-  2) ${GUESTS[1]!.email}   — ${GUESTS[1]!.name}
-  3) ${GUESTS[2]!.email}   — ${GUESTS[2]!.name}
-
-Also seeded: Ethara filter tags, venues/places, published client/guest forms,
-verified profiles, recommendations overlap, meeting requests, and calendar meetings.
+Guests:
+  1) ${GUESTS[0]!.email}  — ${GUESTS[0]!.name}
+  2) ${GUESTS[1]!.email}  — ${GUESTS[1]!.name}
+  3) ${GUESTS[2]!.email}  — ${GUESTS[2]!.name}
 `);
 }

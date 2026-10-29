@@ -18,6 +18,18 @@ function isDemoOrg(org) {
   if (email.endsWith('@ethara-demo.com')) return true;
   if (attrs.etharaDemo === true) return true;
   if (/^ETH_(CLI|GST)_/.test(org.code)) return true;
+  if (
+    [
+      'YASALAM',
+      'GULFGP',
+      'FAMMOM',
+      'ZIMMERTOUR',
+      'MARINAEXP',
+      'RAFENT',
+    ].includes(org.code)
+  ) {
+    return true;
+  }
   return false;
 }
 
