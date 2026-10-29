@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { PageHeader } from '@/components/page-header';
@@ -31,14 +32,15 @@ type FilterDimension = {
   tags: FilterTag[];
 };
 
-const PROFILE_KEYS = [
-  { value: 'categories', label: 'Categories (vendor)' },
-  { value: 'preferredCategories', label: 'Preferred categories (company)' },
-  { value: 'capabilities', label: 'Capabilities' },
-  { value: 'industry', label: 'Industry' },
-  { value: 'regions', label: 'Regions / area' },
-  { value: 'commercialTags', label: 'Commercial tags' },
-];
+function inferProfileKey(name: string, code?: string) {
+  const key = `${code ?? ''} ${name}`.toLowerCase();
+  if (key.includes('industr')) return 'industry';
+  if (key.includes('region') || key.includes('area')) return 'regions';
+  if (key.includes('capabilit')) return 'capabilities';
+  if (key.includes('commercial')) return 'commercialTags';
+  if (key.includes('prefer')) return 'preferredCategories';
+  return 'categories';
+}
 
 export default function AdminFiltersPage() {
   const qc = useQueryClient();
@@ -48,7 +50,6 @@ export default function AdminFiltersPage() {
     name: '',
     code: '',
     description: '',
-    profileKey: 'categories',
   });
   const [tagLabel, setTagLabel] = useState('');
 
@@ -73,17 +74,12 @@ export default function AdminFiltersPage() {
           name: dimForm.name.trim(),
           code: dimForm.code.trim() || undefined,
           description: dimForm.description.trim() || undefined,
-          profileKey: dimForm.profileKey,
+          profileKey: inferProfileKey(dimForm.name, dimForm.code),
         }),
       }),
     onSuccess: (created) => {
       setDimOpen(false);
-      setDimForm({
-        name: '',
-        code: '',
-        description: '',
-        profileKey: 'categories',
-      });
+      setDimForm({ name: '', code: '', description: '' });
       setSelectedId(created.id);
       void qc.invalidateQueries({ queryKey: ['filter-dimensions'] });
     },
@@ -125,10 +121,18 @@ export default function AdminFiltersPage() {
       void qc.invalidateQueries({ queryKey: ['filter-dimensions'] }),
   });
 
-  const profileLabel = useMemo(() => {
-    const key = selected?.profileKey;
-    return PROFILE_KEYS.find((p) => p.value === key)?.label ?? key;
-  }, [selected?.profileKey]);
+  function submitTag(event?: FormEvent) {
+    event?.preventDefault();
+    if (!tagLabel.trim() || addTag.isPending) return;
+    addTag.mutate();
+  }
+
+  function onTagKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitTag();
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -137,15 +141,23 @@ export default function AdminFiltersPage() {
         title="Filters"
         description="Create tag groups (category, industry, area, …). Attach them to form dropdowns, then map related tags on Matchmaking."
         actions={
-          <Button onClick={() => setDimOpen(true)}>Add filter group</Button>
+          <Button onClick={() => setDimOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add filter group
+          </Button>
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="h-fit">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Filter groups
-          </h2>
+      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <Card className="h-fit p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              Filter groups
+            </h2>
+            <span className="text-xs text-[var(--muted)]">
+              {items.length} group{items.length === 1 ? '' : 's'}
+            </span>
+          </div>
           {dimensions.isLoading ? (
             <p className="text-sm text-[var(--muted)]">Loading…</p>
           ) : items.length === 0 ? (
@@ -155,111 +167,148 @@ export default function AdminFiltersPage() {
             />
           ) : (
             <div className="space-y-1">
-              {items.map((dim) => (
-                <button
-                  key={dim.id}
-                  type="button"
-                  onClick={() => setSelectedId(dim.id)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
-                    selected?.id === dim.id
-                      ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-hover)]'
-                      : 'hover:bg-[var(--card-elevated)]'
-                  }`}
-                >
-                  <span>{dim.name}</span>
-                  <Badge variant="secondary">{dim.tags.length}</Badge>
-                </button>
-              ))}
+              {items.map((dim) => {
+                const active = selected?.id === dim.id;
+                return (
+                  <button
+                    key={dim.id}
+                    type="button"
+                    onClick={() => setSelectedId(dim.id)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${
+                      active
+                        ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-hover)] ring-1 ring-[var(--accent)]/20'
+                        : 'text-[var(--foreground)] hover:bg-[var(--card-elevated)]'
+                    }`}
+                  >
+                    <span className="truncate">{dim.name}</span>
+                    <Badge variant={active ? 'accent' : 'secondary'}>
+                      {dim.tags.length}
+                    </Badge>
+                  </button>
+                );
+              })}
             </div>
           )}
         </Card>
 
-        <Card>
+        <Card className="p-5">
           {!selected ? (
             <EmptyState
               title="Select a filter group"
               description="Or create one to start adding tags."
             />
           ) : (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold">{selected.name}</h2>
-                <p className="text-sm text-[var(--muted)]">
-                  Code <code>{selected.code}</code> · maps to {profileLabel}
-                </p>
-                {selected.description ? (
-                  <p className="mt-1 text-sm">{selected.description}</p>
-                ) : null}
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
+                <div>
+                  <h2 className="text-xl font-semibold tracking-tight">
+                    {selected.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Code{' '}
+                    <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs">
+                      {selected.code}
+                    </code>
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    {selected.tags.length} tag
+                    {selected.tags.length === 1 ? '' : 's'}
+                  </p>
+                  {selected.description ? (
+                    <p className="mt-2 max-w-2xl text-sm text-[var(--foreground)]/80">
+                      {selected.description}
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  placeholder="New tag label (e.g. Food, Hotel)"
-                  value={tagLabel}
-                  onChange={(e) => setTagLabel(e.target.value)}
-                />
-                <Button
-                  onClick={() => addTag.mutate()}
-                  disabled={!tagLabel.trim() || addTag.isPending}
-                >
-                  Add tag
-                </Button>
-              </div>
-              {addTag.error ? (
-                <p className="text-sm text-rose-700">
-                  {(addTag.error as Error).message}
+              <form onSubmit={submitTag} className="space-y-2">
+                <label className="block text-sm font-medium">Add a tag</label>
+                <div className="flex overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm focus-within:ring-2 focus-within:ring-[var(--ring)]">
+                  <Input
+                    className="h-11 flex-1 rounded-none border-0 shadow-none focus-visible:ring-0"
+                    placeholder="e.g. Food, Hotel, Investor"
+                    value={tagLabel}
+                    onChange={(e) => setTagLabel(e.target.value)}
+                    onKeyDown={onTagKeyDown}
+                  />
+                  <Button
+                    type="submit"
+                    className="h-11 shrink-0 rounded-none px-5"
+                    disabled={!tagLabel.trim() || addTag.isPending}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {addTag.isPending ? 'Adding…' : 'Add tag'}
+                  </Button>
+                </div>
+                <p className="text-xs text-[var(--muted)]">
+                  Press Enter to add. Tags appear as dropdown options on forms.
                 </p>
-              ) : null}
+                {addTag.error ? (
+                  <p className="text-sm text-rose-700">
+                    {(addTag.error as Error).message}
+                  </p>
+                ) : null}
+              </form>
 
               {selected.tags.length === 0 ? (
-                <EmptyState
-                  title="No tags"
-                  description="Add options that will appear in form dropdowns."
-                />
+                <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-elevated)]/60 px-4 py-10">
+                  <EmptyState
+                    title="No tags yet"
+                    description="Add the first option for this filter group."
+                  />
+                </div>
               ) : (
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>Label</TH>
-                      <TH>Value</TH>
-                      <TH>Status</TH>
-                      <TH />
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {selected.tags.map((tag) => (
-                      <TR key={tag.id}>
-                        <TD className="font-medium">{tag.label}</TD>
-                        <TD>
-                          <code className="text-xs">{tag.value}</code>
-                        </TD>
-                        <TD>
-                          <Badge
-                            variant={tag.isActive ? 'success' : 'secondary'}
-                          >
-                            {tag.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TD>
-                        <TD className="space-x-2 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => toggleTag.mutate(tag)}
-                          >
-                            {tag.isActive ? 'Disable' : 'Enable'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => deleteTag.mutate(tag.id)}
-                          >
-                            Delete
-                          </Button>
-                        </TD>
+                <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+                  <Table>
+                    <THead>
+                      <TR>
+                        <TH>Label</TH>
+                        <TH>Value</TH>
+                        <TH>Status</TH>
+                        <TH className="text-right">Actions</TH>
                       </TR>
-                    ))}
-                  </TBody>
-                </Table>
+                    </THead>
+                    <TBody>
+                      {selected.tags.map((tag) => (
+                        <TR key={tag.id}>
+                          <TD className="font-medium">{tag.label}</TD>
+                          <TD>
+                            <code className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
+                              {tag.value}
+                            </code>
+                          </TD>
+                          <TD>
+                            <Badge
+                              variant={tag.isActive ? 'success' : 'secondary'}
+                            >
+                              {tag.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TD>
+                          <TD>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => toggleTag.mutate(tag)}
+                                disabled={toggleTag.isPending}
+                              >
+                                {tag.isActive ? 'Disable' : 'Enable'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                onClick={() => deleteTag.mutate(tag.id)}
+                                disabled={deleteTag.isPending}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </div>
               )}
             </div>
           )}
@@ -285,7 +334,7 @@ export default function AdminFiltersPage() {
           </>
         }
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium">Name</label>
             <Input
@@ -294,11 +343,12 @@ export default function AdminFiltersPage() {
                 setDimForm({ ...dimForm, name: e.target.value })
               }
               placeholder="Category"
+              autoFocus
             />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Code (optional)
+              Code <span className="font-normal text-[var(--muted)]">(optional)</span>
             </label>
             <Input
               value={dimForm.code}
@@ -310,31 +360,16 @@ export default function AdminFiltersPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Profile field
+              Description{' '}
+              <span className="font-normal text-[var(--muted)]">(optional)</span>
             </label>
-            <select
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
-              value={dimForm.profileKey}
-              onChange={(e) =>
-                setDimForm({ ...dimForm, profileKey: e.target.value })
-              }
-            >
-              {PROFILE_KEYS.map((key) => (
-                <option key={key.value} value={key.value}>
-                  {key.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Description
-            </label>
-            <Input
+            <textarea
+              className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm shadow-sm placeholder:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               value={dimForm.description}
               onChange={(e) =>
                 setDimForm({ ...dimForm, description: e.target.value })
               }
+              placeholder="What this filter group is used for"
             />
           </div>
           {createDimension.error ? (
