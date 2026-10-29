@@ -893,6 +893,9 @@ export class OrganizationsService {
   async remove(actor: AuthUser, id: string) {
     const existing = await this.prisma.organization.findUnique({
       where: { id },
+      include: {
+        members: { select: { userId: true } },
+      },
     });
     if (!existing) {
       throw new NotFoundException('Organization not found');
@@ -901,25 +904,136 @@ export class OrganizationsService {
       throw new BadRequestException('Platform organization cannot be deleted');
     }
 
-    const org = await this.prisma.organization.update({
-      where: { id },
-      data: {
-        status: 'ARCHIVED',
-        archivedAt: new Date(),
-      },
+    const memberUserIds = [
+      ...new Set(existing.members.map((member) => member.userId)),
+    ];
+
+    await this.prisma.$transaction(async (tx) => {
+      const meetings = await tx.meeting.findMany({
+        where: {
+          OR: [{ companyOrgId: id }, { vendorOrgId: id }],
+        },
+        select: { id: true },
+      });
+      const meetingIds = meetings.map((meeting) => meeting.id);
+
+      if (meetingIds.length) {
+        await tx.meetingFeedback.deleteMany({
+          where: { meetingId: { in: meetingIds } },
+        });
+        await tx.followUpAction.deleteMany({
+          where: { meetingId: { in: meetingIds } },
+        });
+        await tx.meetingRequest.deleteMany({
+          where: { meetingId: { in: meetingIds } },
+        });
+        await tx.meetingOccupancy.deleteMany({
+          where: { meetingId: { in: meetingIds } },
+        });
+        await tx.meeting.deleteMany({
+          where: { id: { in: meetingIds } },
+        });
+      }
+
+      await tx.meetingFeedback.deleteMany({ where: { organizationId: id } });
+      await tx.followUpAction.deleteMany({ where: { organizationId: id } });
+      await tx.meetingRequest.deleteMany({
+        where: { OR: [{ fromOrgId: id }, { toOrgId: id }] },
+      });
+
+      await tx.matchCandidate.deleteMany({
+        where: { OR: [{ companyOrgId: id }, { vendorOrgId: id }] },
+      });
+      await tx.match.deleteMany({
+        where: { OR: [{ companyOrgId: id }, { vendorOrgId: id }] },
+      });
+
+      const submissions = await tx.formSubmission.findMany({
+        where: { organizationId: id },
+        select: { id: true },
+      });
+      if (submissions.length) {
+        await tx.submissionCorrection.deleteMany({
+          where: {
+            submissionId: { in: submissions.map((submission) => submission.id) },
+          },
+        });
+        await tx.formSubmission.deleteMany({
+          where: { organizationId: id },
+        });
+      }
+
+      await tx.formAssignment.deleteMany({ where: { organizationId: id } });
+      await tx.invitation.deleteMany({ where: { organizationId: id } });
+      await tx.document.deleteMany({ where: { organizationId: id } });
+      await tx.eventRegistration.deleteMany({ where: { organizationId: id } });
+
+      await tx.organization.delete({ where: { id } });
+
+      for (const userId of memberUserIds) {
+        const remaining = await tx.organizationMember.count({
+          where: { userId },
+        });
+        if (remaining > 0) continue;
+
+        const adminRole = await tx.userRole.findFirst({
+          where: {
+            userId,
+            role: { code: { in: ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'] } },
+          },
+        });
+        if (adminRole) continue;
+
+        await tx.auditLog.updateMany({
+          where: { actorId: userId },
+          data: { actorId: null },
+        });
+        await tx.invitation.updateMany({
+          where: { acceptedById: userId },
+          data: { acceptedById: null },
+        });
+        await tx.eventRegistration.deleteMany({ where: { userId } });
+        await tx.followUpAction.deleteMany({
+          where: { OR: [{ assigneeId: userId }, { createdById: userId }] },
+        });
+        await tx.meetingFeedback.deleteMany({ where: { reviewerUserId: userId } });
+        await tx.meetingParticipant.deleteMany({ where: { userId } });
+        await tx.meetingConfirmation.deleteMany({ where: { userId } });
+
+        const leftoverInvites = await tx.invitation.count({
+          where: { createdById: userId },
+        });
+        const leftoverSubmissions = await tx.formSubmission.count({
+          where: { submittedById: userId },
+        });
+        const leftoverCorrections = await tx.submissionCorrection.count({
+          where: { requestedById: userId },
+        });
+        if (leftoverInvites || leftoverSubmissions || leftoverCorrections) {
+          continue;
+        }
+
+        await tx.user.delete({ where: { id: userId } });
+      }
     });
 
     await this.audit.record({
       actorId: actor.id,
-      action: 'organization.delete',
+      action: 'organization.delete.permanent',
       entityType: 'Organization',
       entityId: id,
       outcome: 'SUCCESS',
-      before: { status: existing.status },
-      after: { status: org.status },
+      before: {
+        status: existing.status,
+        name: existing.name,
+        type: existing.type,
+        code: existing.code,
+      },
+      after: { deleted: true },
+      metadata: { memberUserIds },
     });
 
-    return { id: org.id, status: org.status, archivedAt: org.archivedAt };
+    return { id, deleted: true };
   }
 
   async approveVendor(actor: AuthUser, id: string) {

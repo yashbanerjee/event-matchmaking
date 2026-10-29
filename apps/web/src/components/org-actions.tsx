@@ -424,8 +424,8 @@ export function OrgRowActions({
       <ConfirmDialog
         open={confirmDelete}
         title={`Delete ${org.name}?`}
-        description="This archives the organization. It will no longer appear in active directories."
-        confirmLabel={remove.isPending ? 'Deleting…' : 'Delete'}
+        description="This permanently deletes the account, members without other orgs, forms, and related meetings. This cannot be undone."
+        confirmLabel={remove.isPending ? 'Deleting…' : 'Delete permanently'}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => remove.mutate()}
       />
