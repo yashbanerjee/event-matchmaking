@@ -30,6 +30,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema=prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:ethara": "tsx prisma/run-ethara-demo-seed.ts",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"

@@ -15,6 +15,9 @@ function isDemoOrg(org) {
   }
   const email = typeof attrs.contactEmail === 'string' ? attrs.contactEmail : '';
   if (email.endsWith('.example') || email.endsWith('@example.com')) return true;
+  if (email.endsWith('@ethara-demo.com')) return true;
+  if (attrs.etharaDemo === true) return true;
+  if (/^ETH_(CLI|GST)_/.test(org.code)) return true;
   return false;
 }
 

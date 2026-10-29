@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedEtharaDemo } from './seed-ethara-demo';
 
 const prisma = new PrismaClient();
 
@@ -212,8 +213,8 @@ async function main() {
   // Does not overwrite values an administrator already saved.
   const integrationDefaults: Array<{ key: string; value: unknown }> = [
     { key: 'email.provider', value: 'console' },
-    { key: 'email.fromName', value: 'Event Matchmaking' },
-    { key: 'email.from', value: 'noreply@example.com' },
+    { key: 'email.fromName', value: 'Ethara' },
+    { key: 'email.from', value: 'noreply@ethara.com' },
     { key: 'email.smtpHost', value: '' },
     { key: 'email.smtpPort', value: 587 },
     { key: 'email.smtpSecure', value: false },
@@ -283,7 +284,9 @@ async function main() {
     update: {},
   });
 
-  console.log(`Seed complete. Login: ${adminEmail}.`);
+  await seedEtharaDemo(prisma);
+
+  console.log(`Seed complete. Admin login: ${adminEmail}.`);
 }
 
 main()
