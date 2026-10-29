@@ -2,16 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MapPin } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { statusTone } from '@/lib/status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
 import { EmptyState } from '@/components/empty-state';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 
 type OrgBrief = { id: string; name: string; type: string };
 
@@ -30,13 +30,10 @@ type MeetingRequest = {
   meeting: { id: string; status: string } | null;
 };
 
-type Slot = { startsAt: string; endsAt: string };
-type Place = {
-  id: string;
-  name: string;
-  code: string;
-  location: string | null;
-};
+function formatPlace(place: MeetingRequest['place']) {
+  if (!place) return null;
+  return place.location ? `${place.name} · ${place.location}` : place.name;
+}
 
 export function MeetingRequestsPanel({
   myOrgIds,
@@ -45,9 +42,7 @@ export function MeetingRequestsPanel({
 }) {
   const qc = useQueryClient();
   const [scheduleFor, setScheduleFor] = useState<MeetingRequest | null>(null);
-  const [date, setDate] = useState('');
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
-  const [step, setStep] = useState<'slot' | 'place'>('slot');
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   const requests = useQuery({
     queryKey: ['meeting-requests'],
@@ -55,26 +50,6 @@ export function MeetingRequestsPanel({
       apiFetch<{ items: MeetingRequest[] }>('/meeting-requests', {
         token: getAccessToken(),
       }),
-  });
-
-  const slots = useQuery({
-    queryKey: ['meeting-slots', scheduleFor?.id, date],
-    enabled: Boolean(scheduleFor && date && step === 'slot'),
-    queryFn: () =>
-      apiFetch<{ durationMinutes: number; slots: Slot[] }>(
-        `/meeting-requests/slots?date=${date}&requestId=${scheduleFor!.id}`,
-        { token: getAccessToken() },
-      ),
-  });
-
-  const places = useQuery({
-    queryKey: ['places-available', selectedSlot?.startsAt],
-    enabled: Boolean(selectedSlot && step === 'place'),
-    queryFn: () =>
-      apiFetch<Place[]>(
-        `/places/available?startsAt=${encodeURIComponent(selectedSlot!.startsAt)}&endsAt=${encodeURIComponent(selectedSlot!.endsAt)}`,
-        { token: getAccessToken() },
-      ),
   });
 
   const accept = useMutation({
@@ -104,43 +79,123 @@ export function MeetingRequestsPanel({
         token: getAccessToken(),
         body: '{}',
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['meeting-requests'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['meeting-requests'] });
+      void qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+      void qc.invalidateQueries({ queryKey: ['vendor-meetings'] });
+    },
   });
 
   const propose = useMutation({
-    mutationFn: (placeId: string) => {
-      if (!scheduleFor || !selectedSlot) throw new Error('Missing schedule');
+    mutationFn: (input: { startsAt: string; placeId: string }) => {
+      if (!scheduleFor) throw new Error('Missing schedule');
       return apiFetch(`/meeting-requests/${scheduleFor.id}/propose`, {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify({
-          startsAt: selectedSlot.startsAt,
-          placeId,
+          startsAt: input.startsAt,
+          placeId: input.placeId,
         }),
       });
     },
     onSuccess: () => {
       setScheduleFor(null);
-      setSelectedSlot(null);
-      setDate('');
-      setStep('slot');
+      setScheduleError(null);
       void qc.invalidateQueries({ queryKey: ['meeting-requests'] });
     },
+    onError: (err) => setScheduleError((err as Error).message),
   });
 
   const items = requests.data?.items ?? [];
+  const canAct = useMemo(() => new Set(myOrgIds), [myOrgIds]);
 
-  const openSchedule = (req: MeetingRequest) => {
-    setScheduleFor(req);
-    setDate('');
-    setSelectedSlot(null);
-    setStep('slot');
+  const renderActions = (
+    req: MeetingRequest,
+    layout: 'mobile' | 'desktop',
+  ) => {
+    const isRecipient = canAct.has(req.toOrgId);
+    const isParty = canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
+    const proposer = req.proposedByOrgId;
+    const isOpponentConfirmer =
+      proposer &&
+      ((proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
+        (proposer === req.toOrgId && canAct.has(req.fromOrgId)));
+    const mobile = layout === 'mobile';
+    const full = mobile ? 'flex-1' : undefined;
+    const busy =
+      (accept.isPending && accept.variables === req.id) ||
+      (decline.isPending && decline.variables === req.id) ||
+      (confirm.isPending && confirm.variables === req.id);
+
+    if (req.status === 'PENDING' && isRecipient) {
+      return (
+        <>
+          <Button
+            size="sm"
+            className={full}
+            loading={accept.isPending && accept.variables === req.id}
+            disabled={busy}
+            onClick={() => accept.mutate(req.id)}
+          >
+            Accept
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className={full}
+            loading={decline.isPending && decline.variables === req.id}
+            disabled={busy}
+            onClick={() => decline.mutate(req.id)}
+          >
+            Decline
+          </Button>
+        </>
+      );
+    }
+
+    if (req.status === 'INTEREST_ACCEPTED' && isParty) {
+      return (
+        <Button
+          size="sm"
+          className={mobile ? 'w-full' : undefined}
+          onClick={() => {
+            setScheduleError(null);
+            setScheduleFor(req);
+          }}
+        >
+          Pick time & place
+        </Button>
+      );
+    }
+
+    if (req.status === 'AWAITING_CONFIRMATION' && isOpponentConfirmer) {
+      return (
+        <>
+          <Button
+            size="sm"
+            className={full}
+            loading={confirm.isPending && confirm.variables === req.id}
+            disabled={busy}
+            onClick={() => confirm.mutate(req.id)}
+          >
+            Confirm
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className={full}
+            loading={decline.isPending && decline.variables === req.id}
+            disabled={busy}
+            onClick={() => decline.mutate(req.id)}
+          >
+            Decline
+          </Button>
+        </>
+      );
+    }
+
+    return null;
   };
-
-  const canAct = useMemo(
-    () => new Set(myOrgIds),
-    [myOrgIds],
-  );
 
   return (
     <>
@@ -150,8 +205,8 @@ export function MeetingRequestsPanel({
             Meeting requests
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-            Accept interest, propose a time and place, then confirm the final
-            schedule.
+            Every request includes a free time slot and meeting place. Confirm
+            to lock the booking.
           </p>
         </div>
 
@@ -160,26 +215,19 @@ export function MeetingRequestsPanel({
         ) : items.length === 0 ? (
           <EmptyState
             title="No requests yet"
-            description="Send a request from recommendations, or wait for one from a counterpart."
+            description="Send a request from recommendations with a free time and place, or wait for one from a counterpart."
           />
         ) : (
           <>
             <div className="grid gap-3 sm:hidden">
               {items.map((req) => {
-                const isRecipient = canAct.has(req.toOrgId);
-                const isParty =
-                  canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
-                const proposer = req.proposedByOrgId;
-                const isOpponentConfirmer =
-                  proposer &&
-                  ((proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
-                    (proposer === req.toOrgId && canAct.has(req.fromOrgId)));
                 const counterpart = canAct.has(req.fromOrgId)
                   ? req.toOrg.name
                   : req.fromOrg.name;
                 const direction = canAct.has(req.fromOrgId)
                   ? 'Outgoing'
                   : 'Incoming';
+                const placeLabel = formatPlace(req.place);
 
                 return (
                   <div
@@ -210,62 +258,25 @@ export function MeetingRequestsPanel({
                         {req.status.replaceAll('_', ' ')}
                       </Badge>
                     </div>
-                    <p className="mt-3 text-xs text-[var(--muted)]">
-                      {req.proposedStartsAt
-                        ? `${new Date(req.proposedStartsAt).toLocaleString()}${
-                            req.place ? ` · ${req.place.name}` : ''
-                          }`
-                        : 'Time not proposed yet'}
-                    </p>
+                    <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
+                      <p>
+                        {req.proposedStartsAt
+                          ? new Date(req.proposedStartsAt).toLocaleString()
+                          : 'Time not proposed yet'}
+                      </p>
+                      {placeLabel ? (
+                        <p className="flex items-start gap-1.5 font-medium text-[var(--foreground)]">
+                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          <span>
+                            Meeting place: {placeLabel}
+                          </span>
+                        </p>
+                      ) : (
+                        <p>Meeting place not selected yet</p>
+                      )}
+                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {req.status === 'PENDING' && isRecipient ? (
-                        <>
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => accept.mutate(req.id)}
-                          >
-                            Accept
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => decline.mutate(req.id)}
-                          >
-                            Decline
-                          </Button>
-                        </>
-                      ) : null}
-                      {req.status === 'INTEREST_ACCEPTED' && isParty ? (
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          onClick={() => openSchedule(req)}
-                        >
-                          Pick time
-                        </Button>
-                      ) : null}
-                      {req.status === 'AWAITING_CONFIRMATION' &&
-                      isOpponentConfirmer ? (
-                        <>
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => confirm.mutate(req.id)}
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => decline.mutate(req.id)}
-                          >
-                            Decline
-                          </Button>
-                        </>
-                      ) : null}
+                      {renderActions(req, 'mobile')}
                     </div>
                   </div>
                 );
@@ -279,22 +290,14 @@ export function MeetingRequestsPanel({
                     <TH>From</TH>
                     <TH>To</TH>
                     <TH>Status</TH>
-                    <TH>Proposed</TH>
+                    <TH>When</TH>
+                    <TH>Meeting place</TH>
                     <TH />
                   </TR>
                 </THead>
                 <TBody>
                   {items.map((req) => {
-                    const isRecipient = canAct.has(req.toOrgId);
-                    const isParty =
-                      canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
-                    const proposer = req.proposedByOrgId;
-                    const isOpponentConfirmer =
-                      proposer &&
-                      ((proposer === req.fromOrgId &&
-                        canAct.has(req.toOrgId)) ||
-                        (proposer === req.toOrgId &&
-                          canAct.has(req.fromOrgId)));
+                    const placeLabel = formatPlace(req.place);
 
                     return (
                       <TR key={req.id}>
@@ -302,60 +305,26 @@ export function MeetingRequestsPanel({
                         <TD>{req.toOrg.name}</TD>
                         <TD>
                           <Badge variant={statusTone(req.status)}>
-                            {req.status}
+                            {req.status.replaceAll('_', ' ')}
                           </Badge>
                         </TD>
                         <TD className="text-sm">
                           {req.proposedStartsAt
-                            ? `${new Date(req.proposedStartsAt).toLocaleString()}${
-                                req.place ? ` · ${req.place.name}` : ''
-                              }`
+                            ? new Date(req.proposedStartsAt).toLocaleString()
                             : '—'}
                         </TD>
+                        <TD className="text-sm">
+                          {placeLabel ? (
+                            <span className="inline-flex items-start gap-1.5">
+                              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                              <span>{placeLabel}</span>
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </TD>
                         <TD className="space-x-2 whitespace-nowrap text-right">
-                          {req.status === 'PENDING' && isRecipient ? (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => accept.mutate(req.id)}
-                              >
-                                Accept
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => decline.mutate(req.id)}
-                              >
-                                Decline
-                              </Button>
-                            </>
-                          ) : null}
-                          {req.status === 'INTEREST_ACCEPTED' && isParty ? (
-                            <Button
-                              size="sm"
-                              onClick={() => openSchedule(req)}
-                            >
-                              Pick time
-                            </Button>
-                          ) : null}
-                          {req.status === 'AWAITING_CONFIRMATION' &&
-                          isOpponentConfirmer ? (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => confirm.mutate(req.id)}
-                              >
-                                Confirm
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => decline.mutate(req.id)}
-                              >
-                                Decline
-                              </Button>
-                            </>
-                          ) : null}
+                          {renderActions(req, 'desktop')}
                         </TD>
                       </TR>
                     );
@@ -367,118 +336,28 @@ export function MeetingRequestsPanel({
         )}
       </Card>
 
-      <Modal
+      <MeetingSchedulePicker
         open={Boolean(scheduleFor)}
-        title={step === 'slot' ? 'Select date & time' : 'Select place'}
-        description={
-          step === 'slot'
-            ? `Slots use the admin meeting duration (${slots.data?.durationMinutes ?? '…'} min).`
-            : 'Only places free at this time are listed.'
+        title="Pick time & meeting place"
+        counterpartName={
+          scheduleFor
+            ? canAct.has(scheduleFor.fromOrgId)
+              ? scheduleFor.toOrg.name
+              : scheduleFor.fromOrg.name
+            : undefined
         }
+        requestId={scheduleFor?.id}
+        submitting={propose.isPending}
+        error={scheduleError}
         onClose={() => {
+          if (propose.isPending) return;
           setScheduleFor(null);
-          setStep('slot');
-          setSelectedSlot(null);
+          setScheduleError(null);
         }}
-        wide
-        footer={
-          step === 'place' ? (
-            <Button variant="outline" onClick={() => setStep('slot')}>
-              Back to slots
-            </Button>
-          ) : null
-        }
-      >
-        {step === 'slot' ? (
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Date</label>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => {
-                  setDate(e.target.value);
-                  setSelectedSlot(null);
-                }}
-              />
-            </div>
-            {date && slots.isLoading ? (
-              <p className="text-sm text-[var(--muted)]">Loading slots…</p>
-            ) : null}
-            {date && slots.data ? (
-              <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
-                {slots.data.slots.map((slot) => (
-                  <button
-                    key={slot.startsAt}
-                    type="button"
-                    className="rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                    onClick={() => {
-                      setSelectedSlot(slot);
-                      setStep('place');
-                    }}
-                  >
-                    {new Date(slot.startsAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </button>
-                ))}
-                {slots.data.slots.length === 0 ? (
-                  <p className="col-span-full text-sm text-[var(--muted)]">
-                    No free slots on this day.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-[var(--muted)]">
-              Selected:{' '}
-              {selectedSlot
-                ? new Date(selectedSlot.startsAt).toLocaleString()
-                : '—'}
-            </p>
-            {places.isLoading ? (
-              <p className="text-sm text-[var(--muted)]">Loading places…</p>
-            ) : (
-              <div className="space-y-2">
-                {(places.data ?? []).map((place) => (
-                  <button
-                    key={place.id}
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] px-4 py-3 text-left hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                    disabled={propose.isPending}
-                    onClick={() => propose.mutate(place.id)}
-                  >
-                    <span>
-                      <span className="font-medium">{place.name}</span>
-                      {place.location ? (
-                        <span className="ml-2 text-sm text-[var(--muted)]">
-                          {place.location}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="text-xs text-[var(--muted)]">
-                      {place.code}
-                    </span>
-                  </button>
-                ))}
-                {(places.data ?? []).length === 0 ? (
-                  <p className="text-sm text-[var(--muted)]">
-                    No free places for this slot. Pick another time.
-                  </p>
-                ) : null}
-              </div>
-            )}
-            {propose.error ? (
-              <p className="text-sm text-rose-700">
-                {(propose.error as Error).message}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </Modal>
+        onConfirm={({ startsAt, placeId }) => {
+          propose.mutate({ startsAt, placeId });
+        }}
+      />
     </>
   );
 }

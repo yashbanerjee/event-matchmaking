@@ -104,7 +104,12 @@ export default function JobsPage() {
                 </TD>
                 <TD>
                   {['FAILED', 'DEAD_LETTERED'].includes(j.status) && (
-                    <Button size="sm" variant="outline" onClick={() => retry.mutate(j.id)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={retry.isPending && retry.variables === j.id}
+                      onClick={() => retry.mutate(j.id)}
+                    >
                       Retry
                     </Button>
                   )}

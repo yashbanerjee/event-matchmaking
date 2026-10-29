@@ -394,12 +394,9 @@ function EventRegisterForm() {
               <Button
                 className="w-full sm:w-auto sm:min-w-52"
                 size="lg"
-                disabled={
-                  start.isPending ||
-                  !email.trim() ||
+                loading={start.isPending} disabled={!email.trim() ||
                   !role ||
-                  !organizationName.trim()
-                }
+                  !organizationName.trim()}
                 onClick={() => {
                   setError('');
                   start.mutate();
@@ -438,7 +435,7 @@ function EventRegisterForm() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="lg"
-                  disabled={verify.isPending || otp.length !== 6}
+                  loading={verify.isPending} disabled={otp.length !== 6}
                   onClick={() => {
                     setError('');
                     verify.mutate();
@@ -448,7 +445,7 @@ function EventRegisterForm() {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={start.isPending}
+                  loading={start.isPending}
                   onClick={() => {
                     setError('');
                     start.mutate();
@@ -518,8 +515,8 @@ function EventRegisterForm() {
               <Button
                 className="w-full"
                 size="lg"
+                loading={complete.isPending}
                 disabled={
-                  complete.isPending ||
                   !firstName.trim() ||
                   !lastName.trim() ||
                   password.length < 4 ||

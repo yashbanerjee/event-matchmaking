@@ -250,14 +250,14 @@ export function SubmissionReviewView({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                disabled={markedCount === 0 || requestCorrection.isPending}
+                loading={requestCorrection.isPending} disabled={markedCount === 0}
                 onClick={() => requestCorrection.mutate()}
               >
                 Resend for improvements
               </Button>
               <Button
                 variant="outline"
-                disabled={reject.isPending || approve.isPending}
+                loading={reject.isPending || approve.isPending}
                 onClick={() => {
                   const reason = window.prompt(
                     'Optional reason to include in the rejection email:',
@@ -270,7 +270,7 @@ export function SubmissionReviewView({
                 Reject
               </Button>
               <Button
-                disabled={approve.isPending || reject.isPending}
+                loading={approve.isPending || reject.isPending}
                 onClick={() => approve.mutate()}
               >
                 Mark verified

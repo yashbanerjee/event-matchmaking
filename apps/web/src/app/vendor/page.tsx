@@ -9,6 +9,7 @@ import {
   OverviewMeetingCards,
   OverviewRequestCards,
   OverviewStatStrip,
+  OverviewWeekCalendar,
 } from '@/components/overview-home';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -19,6 +20,7 @@ type Meeting = {
   id: string;
   status: string;
   startsAt: string;
+  endsAt?: string | null;
   companyOrg: { name: string };
   vendorOrg: { name: string };
   place?: { name: string } | null;
@@ -88,15 +90,11 @@ export default function VendorOverviewPage() {
   }, [formItems]);
 
   const meetingStats = useMemo(() => {
-    const awaiting = meetingItems.filter(
-      (item) => item.status === 'AWAITING_CONFIRMATION',
-    ).length;
     const confirmed = meetingItems.filter(
       (item) => item.status === 'CONFIRMED',
     ).length;
     return {
       total: meetingItems.length,
-      awaiting,
       confirmed,
     };
   }, [meetingItems]);
@@ -113,8 +111,9 @@ export default function VendorOverviewPage() {
         id: m.id,
         status: m.status,
         startsAt: m.startsAt,
+        endsAt: m.endsAt ?? null,
         counterpartyName: m.companyOrg.name,
-        placeName: m.place?.name ?? m.location ?? null,
+        placeName: m.location ?? m.place?.name ?? null,
       }));
   }, [meetingItems]);
 
@@ -135,11 +134,11 @@ export default function VendorOverviewPage() {
   );
 
   return (
-    <>
+    <div className="space-y-4">
       <PageHeader
-        eyebrow="Guest workspace"
+        eyebrow="Guest"
         title="Home"
-        description="Your requests, meetings, forms, and recommended clients in one place."
+        description="Requests, meetings, and recommended clients — at a glance."
       />
 
       <OverviewStatStrip
@@ -155,24 +154,32 @@ export default function VendorOverviewPage() {
         ]}
       />
 
-      <OverviewRequestCards
-        items={openRequestItems}
-        requestsHref="/vendor/requests"
+      <OverviewWeekCalendar
+        meetings={upcomingMeetings}
+        requests={openRequestItems}
+        meetingsHref="/vendor/meetings"
         myOrgIds={orgIds}
       />
 
-      <OverviewMeetingCards
-        items={upcomingMeetings}
-        meetingsHref="/vendor/meetings"
-      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <OverviewRequestCards
+          items={openRequestItems}
+          requestsHref="/vendor/requests"
+          myOrgIds={orgIds}
+        />
+        <OverviewMeetingCards
+          items={upcomingMeetings}
+          meetingsHref="/vendor/meetings"
+        />
+      </div>
 
       <OverviewFormCards items={formCards} formsHref="/vendor/forms" />
 
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
         title="Recommended clients"
-        description="Admin suggestions plus clients matched to your categories, capabilities, and regions."
+        description="Admin suggestions plus clients matched to your categories and capabilities."
       />
-    </>
+    </div>
   );
 }

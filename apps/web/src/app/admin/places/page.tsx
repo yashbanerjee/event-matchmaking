@@ -251,6 +251,9 @@ export default function AdminPlacesPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      loading={
+                        toggle.isPending && toggle.variables?.id === place.id
+                      }
                       onClick={() => toggle.mutate(place)}
                     >
                       {place.isActive ? 'Deactivate' : 'Activate'}
@@ -258,7 +261,7 @@ export default function AdminPlacesPage() {
                     <Button
                       size="sm"
                       variant="danger"
-                      disabled={deletingId === place.id}
+                      loading={deletingId === place.id}
                       onClick={() => confirmDelete(place)}
                     >
                       {deletingId === place.id ? 'Deleting…' : 'Delete'}
@@ -292,7 +295,8 @@ export default function AdminPlacesPage() {
             </Button>
             <Button
               onClick={() => create.mutate()}
-              disabled={create.isPending || !form.name.trim()}
+              loading={create.isPending}
+              disabled={!form.name.trim()}
             >
               {create.isPending ? 'Saving…' : 'Save place'}
             </Button>
@@ -325,7 +329,8 @@ export default function AdminPlacesPage() {
             </Button>
             <Button
               onClick={() => update.mutate()}
-              disabled={update.isPending || !form.name.trim()}
+              loading={update.isPending}
+              disabled={!form.name.trim()}
             >
               {update.isPending ? 'Saving…' : 'Save changes'}
             </Button>

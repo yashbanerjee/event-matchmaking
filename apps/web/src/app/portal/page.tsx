@@ -13,6 +13,7 @@ import {
   OverviewMeetingCards,
   OverviewRequestCards,
   OverviewStatStrip,
+  OverviewWeekCalendar,
 } from '@/components/overview-home';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 import { ensurePushSubscription } from '@/lib/push-subscribe';
@@ -22,6 +23,7 @@ type Meeting = {
   id: string;
   status: string;
   startsAt: string;
+  endsAt?: string | null;
   companyOrg: { name: string };
   vendorOrg: { name: string };
   place?: { name: string } | null;
@@ -118,8 +120,9 @@ export default function PortalPage() {
         id: m.id,
         status: m.status,
         startsAt: m.startsAt,
+        endsAt: m.endsAt ?? null,
         counterpartyName: m.vendorOrg.name,
-        placeName: m.place?.name ?? m.location ?? null,
+        placeName: m.location ?? m.place?.name ?? null,
       }));
   }, [meetings.data?.items]);
 
@@ -150,46 +153,56 @@ export default function PortalPage() {
       email={me.data?.email}
       pendingForms={onboarding.data?.pendingCount}
     >
-      <PageHeader
-        eyebrow="Client / Delegate"
-        title="Home"
-        description="Your requests, meetings, forms, and recommended guests in one place."
-      />
+      <div className="space-y-4">
+        <PageHeader
+          eyebrow="Client"
+          title="Home"
+          description="Requests, meetings, and recommended guests — at a glance."
+        />
 
-      <OverviewStatStrip
-        items={[
-          {
-            label: 'Meetings',
-            value: meetings.data?.items.length ?? 0,
-            accent: true,
-          },
-          { label: 'Open requests', value: openRequestItems.length },
-          { label: 'Confirmed', value: confirmed },
-          {
-            label: 'Forms',
-            value: onboarding.data?.items.length ?? 0,
-          },
-        ]}
-      />
+        <OverviewStatStrip
+          items={[
+            {
+              label: 'Meetings',
+              value: meetings.data?.items.length ?? 0,
+              accent: true,
+            },
+            { label: 'Open requests', value: openRequestItems.length },
+            { label: 'Confirmed', value: confirmed },
+            {
+              label: 'Forms',
+              value: onboarding.data?.items.length ?? 0,
+            },
+          ]}
+        />
 
-      <OverviewRequestCards
-        items={openRequestItems}
-        requestsHref="/portal/requests"
-        myOrgIds={orgIds}
-      />
+        <OverviewWeekCalendar
+          meetings={upcomingMeetings}
+          requests={openRequestItems}
+          meetingsHref="/portal/meetings"
+          myOrgIds={orgIds}
+        />
 
-      <OverviewMeetingCards
-        items={upcomingMeetings}
-        meetingsHref="/portal/meetings"
-      />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <OverviewRequestCards
+            items={openRequestItems}
+            requestsHref="/portal/requests"
+            myOrgIds={orgIds}
+          />
+          <OverviewMeetingCards
+            items={upcomingMeetings}
+            meetingsHref="/portal/meetings"
+          />
+        </div>
 
-      <OverviewFormCards items={formCards} formsHref="/portal/onboarding" />
+        <OverviewFormCards items={formCards} formsHref="/portal/onboarding" />
 
-      <RecommendationsPanel
-        fromOrgId={me.data?.organizationIds?.[0]}
-        title="Recommended guests"
-        description="Admin suggestions plus guests matched to your industry, categories, and capabilities."
-      />
+        <RecommendationsPanel
+          fromOrgId={me.data?.organizationIds?.[0]}
+          title="Recommended guests"
+          description="Admin suggestions plus guests matched to your categories and capabilities."
+        />
+      </div>
     </PortalShell>
   );
 }

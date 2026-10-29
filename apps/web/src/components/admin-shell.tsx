@@ -7,6 +7,7 @@ import { Menu, X } from 'lucide-react';
 import { clearTokens } from '@/lib/auth-store';
 import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
+import { DemoNotice } from './demo-footer';
 import { Button } from './ui/button';
 
 const NAV_GROUPS = [
@@ -111,25 +112,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="admin-shell">
-      <header className="glass-panel sticky top-0 z-30 flex items-center gap-3 rounded-none border-x-0 border-t-0 px-4 py-3 sm:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 w-10 shrink-0 px-0"
-          aria-expanded={navOpen}
-          aria-controls="admin-sidebar"
-          aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
-          onClick={() => setNavOpen((open) => !open)}
-        >
-          {navOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-            Admin
-          </p>
-          <div className="h-display truncate text-base font-bold tracking-tight">
-            {BRAND.name}
+      <header className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-10 shrink-0 px-0"
+            aria-expanded={navOpen}
+            aria-controls="admin-sidebar"
+            aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            {navOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+              Admin
+            </p>
+            <div className="h-display truncate text-base font-bold tracking-tight">
+              {BRAND.name}
+            </div>
           </div>
+        </div>
+        <div className="border-t border-[var(--border)] px-4 py-1.5">
+          <DemoNotice />
         </div>
       </header>
 
@@ -172,6 +178,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <SidebarNav pathname={pathname} onNavigate={() => setNavOpen(false)} />
 
         <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+          <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Link href="/vendor" onClick={() => setNavOpen(false)}>
             <Button
               variant="ghost"

@@ -87,7 +87,7 @@ export default function CorrectionResubmitPage() {
           description="Only the fields below need updates. Comments from the review team are shown under each field."
           actions={
             <Button
-              disabled={submit.isPending || Boolean(message)}
+              loading={submit.isPending} disabled={Boolean(message)}
               onClick={() => submit.mutate()}
             >
               Submit updates

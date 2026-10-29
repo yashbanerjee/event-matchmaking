@@ -1294,19 +1294,27 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
   }
 
-  // 4) Pending interest request (no meeting yet): Yasalam → Marina Circuit
-  await prisma.meetingRequest.create({
-    data: {
-      fromOrgId: clientOrgs[0]!.orgId,
-      toOrgId: guestOrgs[1]!.orgId,
-      requestedById: clientOrgs[0]!.userId,
-      status: 'PENDING',
-      message:
-        'Exploring after-race concert crossover for Kings of Leon weekend at Etihad Live.',
-    },
-  });
+  // 4) Awaiting confirmation: Yasalam → Marina Circuit @ Etihad Live
+  {
+    const startsAt = daysFromNow(9, 17, 0);
+    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+    await prisma.meetingRequest.create({
+      data: {
+        fromOrgId: clientOrgs[0]!.orgId,
+        toOrgId: guestOrgs[1]!.orgId,
+        requestedById: clientOrgs[0]!.userId,
+        status: 'AWAITING_CONFIRMATION',
+        message:
+          'Exploring after-race concert crossover for Kings of Leon weekend at Etihad Live.',
+        proposedStartsAt: startsAt,
+        proposedEndsAt: endsAt,
+        proposedByOrgId: clientOrgs[0]!.orgId,
+        placeId: placeIds.ETIHAD_LIVE!,
+      },
+    });
+  }
 
-  // 5) Interest accepted + proposed slot: Gulf GP → Zimmer (cross category)
+  // 5) Awaiting confirmation: Gulf GP → Zimmer @ Etihad Arena
   {
     const startsAt = daysFromNow(12, 15, 0);
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
@@ -1315,13 +1323,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         fromOrgId: clientOrgs[1]!.orgId,
         toOrgId: guestOrgs[0]!.orgId,
         requestedById: clientOrgs[1]!.userId,
-        status: 'INTEREST_ACCEPTED',
+        status: 'AWAITING_CONFIRMATION',
         message:
           'Discuss VIP concert hospitality packages for GP weekend guests.',
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
-        proposedByOrgId: guestOrgs[0]!.orgId,
-        placeId: placeIds.ETIHAD_LIVE!,
+        proposedByOrgId: clientOrgs[1]!.orgId,
+        placeId: placeIds.ETIHAD_ARENA!,
       },
     });
   }

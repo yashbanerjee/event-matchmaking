@@ -184,12 +184,8 @@ export function TagMappingsPanel() {
           <Button
             className="mb-5"
             onClick={() => create.mutate()}
-            disabled={
-              !fromTagId ||
-              !toTagId ||
-              fromTagId === toTagId ||
-              create.isPending
-            }
+            loading={create.isPending}
+            disabled={!fromTagId || !toTagId || fromTagId === toTagId}
           >
             {create.isPending ? 'Linking…' : 'Link tags'}
           </Button>
@@ -256,7 +252,9 @@ export function TagMappingsPanel() {
                         size="sm"
                         variant="outline"
                         onClick={() => remove.mutate(row.id)}
-                        disabled={remove.isPending}
+                        loading={
+                          remove.isPending && remove.variables === row.id
+                        }
                       >
                         Remove
                       </Button>

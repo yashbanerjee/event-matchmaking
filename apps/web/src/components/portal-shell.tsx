@@ -8,6 +8,7 @@ import { clearTokens, getAccessToken } from '@/lib/auth-store';
 import { apiFetch } from '@/lib/api';
 import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
+import { DemoNotice } from './demo-footer';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { WorkspaceBottomNav } from './workspace-bottom-nav';
@@ -97,28 +98,33 @@ export function PortalShell({
 
   return (
     <div className="admin-shell workspace-shell has-mobile-tabs">
-      <header className="glass-panel sticky top-0 z-30 flex items-center gap-3 rounded-none border-x-0 border-t-0 px-4 py-3 sm:hidden">
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-            Client panel
-          </p>
-          <div className="h-display truncate text-base font-bold tracking-tight">
-            {BRAND.name}
+      <header className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+              Client panel
+            </p>
+            <div className="h-display truncate text-base font-bold tracking-tight">
+              {BRAND.name}
+            </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 shrink-0 gap-1.5 px-3"
+            aria-label="Sign out"
+            onClick={() => {
+              clearTokens();
+              router.push('/login');
+            }}
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="text-xs font-semibold">Out</span>
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 shrink-0 gap-1.5 px-3"
-          aria-label="Sign out"
-          onClick={() => {
-            clearTokens();
-            router.push('/login');
-          }}
-        >
-          <LogOut className="h-4 w-4" />
-          <span className="text-xs font-semibold">Out</span>
-        </Button>
+        <div className="border-t border-[var(--border)] px-4 py-1.5">
+          <DemoNotice />
+        </div>
       </header>
 
       <aside
@@ -148,7 +154,8 @@ export function PortalShell({
           openRequests={openRequests}
         />
 
-        <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+        <div className="mt-auto space-y-3 border-t border-white/10 pt-4">
+          <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Button
             variant="outline"
             className="w-full border-white/20 bg-transparent text-[var(--sidebar-fg)] hover:bg-white/10"

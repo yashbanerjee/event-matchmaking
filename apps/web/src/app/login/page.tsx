@@ -90,7 +90,11 @@ export default function LoginPage() {
                 {error}
               </p>
             )}
-            <Button className="w-full" type="submit" disabled={form.formState.isSubmitting}>
+            <Button
+              className="w-full"
+              type="submit"
+              loading={form.formState.isSubmitting}
+            >
               {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>

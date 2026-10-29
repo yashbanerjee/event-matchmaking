@@ -209,7 +209,7 @@ export default function FormsPage() {
               Cancel
             </Button>
             <Button
-              disabled={!name.trim() || create.isPending}
+              loading={create.isPending} disabled={!name.trim()}
               onClick={() => create.mutate()}
             >
               Create draft

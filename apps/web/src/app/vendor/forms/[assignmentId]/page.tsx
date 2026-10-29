@@ -190,7 +190,7 @@ export default function VendorFormDetailPage() {
         {selected.action !== 'view' ? (
           <div className="flex justify-end">
             <Button
-              disabled={submit.isPending}
+              loading={submit.isPending}
               onClick={() => submit.mutate()}
             >
               {submit.isPending

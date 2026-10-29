@@ -247,7 +247,7 @@ export default function PortalOnboardingPage() {
               {selected.action !== 'view' ? (
                 <div className="flex justify-end">
                   <Button
-                    disabled={submit.isPending}
+                    loading={submit.isPending}
                     onClick={() => submit.mutate()}
                   >
                     {submit.isPending

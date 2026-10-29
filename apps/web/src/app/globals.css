@@ -75,9 +75,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  padding-bottom: calc(
-    var(--demo-footer-height) + env(safe-area-inset-bottom, 0px)
-  );
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background:
     radial-gradient(1000px 480px at 6% -10%, rgba(38, 226, 198, 0.22), transparent 55%),
     radial-gradient(900px 520px at 100% 0%, rgba(10, 10, 10, 0.05), transparent 48%),
@@ -86,6 +84,14 @@ body {
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 1024px) {
+  body {
+    padding-bottom: calc(
+      var(--demo-footer-height) + env(safe-area-inset-bottom, 0px)
+    );
+  }
 }
 
 a {

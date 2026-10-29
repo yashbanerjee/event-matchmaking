@@ -179,7 +179,7 @@ export function OrgRowActions({
         <Button
           size="sm"
           variant={isFeatured ? 'secondary' : 'outline'}
-          disabled={toggleFeatured.isPending}
+          loading={toggleFeatured.isPending}
           onClick={() => toggleFeatured.mutate()}
           title={
             isFeatured
@@ -326,7 +326,8 @@ export function OrgRowActions({
             </Button>
             <Button
               onClick={() => save.mutate()}
-              disabled={save.isPending || !form.name.trim()}
+              loading={save.isPending}
+              disabled={!form.name.trim()}
             >
               {save.isPending ? 'Saving…' : 'Save changes'}
             </Button>
@@ -426,6 +427,7 @@ export function OrgRowActions({
         title={`Delete ${org.name}?`}
         description="This permanently deletes the account, members without other orgs, forms, and related meetings. This cannot be undone."
         confirmLabel={remove.isPending ? 'Deleting…' : 'Delete permanently'}
+        loading={remove.isPending}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => remove.mutate()}
       />

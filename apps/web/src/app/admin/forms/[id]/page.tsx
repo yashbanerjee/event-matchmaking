@@ -252,15 +252,15 @@ export default function FormBuilderPage() {
               <Button
                 variant="outline"
                 onClick={() => save.mutate()}
-                disabled={save.isPending}
+                loading={save.isPending}
               >
-                Save draft
+                {save.isPending ? 'Saving…' : 'Save draft'}
               </Button>
               <Button
                 onClick={() => publish.mutate()}
-                disabled={publish.isPending}
+                loading={publish.isPending}
               >
-                Publish
+                {publish.isPending ? 'Publishing…' : 'Publish'}
               </Button>
             </div>
           }

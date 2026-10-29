@@ -124,10 +124,11 @@ export class MeetingsService {
         return fb;
       });
 
-      const location =
-        meeting.place?.name ??
-        meeting.venue?.trim() ??
-        null;
+      const location = meeting.place
+        ? meeting.place.location
+          ? `${meeting.place.name} · ${meeting.place.location}`
+          : meeting.place.name
+        : meeting.venue?.trim() || null;
 
       let invitedByLabel = 'Admin created meeting';
       let invitedByUser: {

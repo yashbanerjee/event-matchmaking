@@ -216,13 +216,13 @@ export function SubmissionReviewModal({
             <>
               <Button
                 variant="outline"
-                disabled={markedCount === 0 || requestCorrection.isPending}
+                loading={requestCorrection.isPending} disabled={markedCount === 0}
                 onClick={() => requestCorrection.mutate()}
               >
                 Resend for improvements
               </Button>
               <Button
-                disabled={approve.isPending}
+                loading={approve.isPending}
                 onClick={() => approve.mutate()}
               >
                 Mark verified

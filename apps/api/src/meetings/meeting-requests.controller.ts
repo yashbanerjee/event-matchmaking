@@ -60,7 +60,14 @@ export class MeetingRequestsController {
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   create(
     @CurrentUser() user: AuthUser,
-    @Body() body: { fromOrgId: string; toOrgId: string; message?: string },
+    @Body()
+    body: {
+      fromOrgId: string;
+      toOrgId: string;
+      message?: string;
+      startsAt?: string;
+      placeId?: string;
+    },
   ) {
     return this.requests.create(user, body);
   }

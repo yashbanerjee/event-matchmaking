@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -7,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/empty-state';
+import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 
 type Recommendation = {
   organizationId: string;
@@ -23,25 +25,25 @@ type Recommendation = {
 function SuggestionGrid({
   items,
   fromOrgId,
-  pending,
+  pendingOrgId,
   onRequest,
   featured,
 }: {
   items: Recommendation[];
   fromOrgId?: string;
-  pending: boolean;
-  onRequest: (organizationId: string) => void;
+  pendingOrgId?: string | null;
+  onRequest: (item: Recommendation) => void;
   featured?: boolean;
 }) {
   return (
-    <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+    <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item, index) => (
         <div
           key={item.organizationId}
-          className={`animate-rise min-w-0 overflow-hidden rounded-2xl border p-4 ${
+          className={`animate-rise min-w-0 overflow-hidden rounded-xl border p-3 ${
             featured
-              ? 'border-[var(--highlight)]/30 bg-[linear-gradient(180deg,#fbf7e8_0%,#ffffff_70%)]'
-              : 'border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)]'
+              ? 'border-[var(--accent)]/35 bg-[linear-gradient(180deg,#e7fcf8_0%,#ffffff_70%)]'
+              : 'border-[var(--border)] bg-white'
           }`}
           style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
         >
@@ -80,8 +82,8 @@ function SuggestionGrid({
           <Button
             className="mt-3 w-full sm:w-auto"
             size="sm"
-            disabled={!fromOrgId || pending}
-            onClick={() => onRequest(item.organizationId)}
+            disabled={!fromOrgId || Boolean(pendingOrgId)}
+            onClick={() => onRequest(item)}
           >
             Request meeting
           </Button>
@@ -101,6 +103,8 @@ export function RecommendationsPanel({
   description: string;
 }) {
   const qc = useQueryClient();
+  const [target, setTarget] = useState<Recommendation | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const recs = useQuery({
     queryKey: ['recommendations'],
@@ -115,18 +119,32 @@ export function RecommendationsPanel({
   });
 
   const request = useMutation({
-    mutationFn: (toOrgId: string) => {
+    mutationFn: (input: {
+      toOrgId: string;
+      startsAt: string;
+      placeId: string;
+    }) => {
       if (!fromOrgId) throw new Error('Missing organization');
       return apiFetch('/meeting-requests', {
         method: 'POST',
         token: getAccessToken(),
-        body: JSON.stringify({ fromOrgId, toOrgId }),
+        body: JSON.stringify({
+          fromOrgId,
+          toOrgId: input.toOrgId,
+          startsAt: input.startsAt,
+          placeId: input.placeId,
+        }),
       });
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['meeting-requests'] });
-      void qc.invalidateQueries({ queryKey: ['recommendations'] });
+    onSuccess: async () => {
+      setTarget(null);
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
+      await qc.invalidateQueries({ queryKey: ['recommendations'] });
+      await qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+      await qc.invalidateQueries({ queryKey: ['vendor-meetings'] });
     },
+    onError: (err) => setError((err as Error).message),
   });
 
   const featured = recs.data?.featured ?? [];
@@ -134,69 +152,84 @@ export function RecommendationsPanel({
   const empty = featured.length === 0 && items.length === 0;
 
   return (
-    <Card className="min-w-0 overflow-hidden">
-      <div className="mb-4 min-w-0">
-        <h2 className="h-display text-lg font-semibold tracking-tight">
-          {title}
-        </h2>
-        <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-          {description}
-        </p>
-      </div>
+    <>
+      <Card className="min-w-0 overflow-hidden p-4">
+        <div className="mb-3 min-w-0">
+          <h2 className="h-display text-base font-semibold tracking-tight">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+            {description} Pick a free time and meeting place when you request.
+          </p>
+        </div>
 
-      {recs.isLoading ? (
-        <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
-      ) : empty ? (
-        <EmptyState
-          title="No recommendations yet"
-          description="Complete your profile preferences, or ask an admin to feature matching partners."
-        />
-      ) : (
-        <div className="space-y-6">
-          {featured.length > 0 ? (
-            <section className="min-w-0 space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">Admin suggestions</h3>
-                <p className="text-xs text-[var(--muted)]">
-                  Featured partners selected by the event team for you to
-                  consider.
-                </p>
-              </div>
-              <SuggestionGrid
-                items={featured}
-                fromOrgId={fromOrgId}
-                pending={request.isPending}
-                onRequest={(id) => request.mutate(id)}
-                featured
-              />
-            </section>
-          ) : null}
+        {recs.isLoading ? (
+          <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
+        ) : empty ? (
+          <EmptyState
+            title="No recommendations yet"
+            description="Complete your profile preferences, or ask an admin to feature matching partners."
+          />
+        ) : (
+          <div className="space-y-4">
+            {featured.length > 0 ? (
+              <section className="min-w-0 space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                  Admin suggestions
+                </h3>
+                <SuggestionGrid
+                  items={featured}
+                  fromOrgId={fromOrgId}
+                  pendingOrgId={target?.organizationId}
+                  onRequest={(item) => {
+                    setError(null);
+                    setTarget(item);
+                  }}
+                  featured
+                />
+              </section>
+            ) : null}
 
-          {items.length > 0 ? (
-            <section className="min-w-0 space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold">
+            {items.length > 0 ? (
+              <section className="min-w-0 space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
                   Matched to your preferences
                 </h3>
-                <p className="text-xs text-[var(--muted)]">
-                  Ranked from category, industry, and capability fit.
-                </p>
-              </div>
-              <SuggestionGrid
-                items={items}
-                fromOrgId={fromOrgId}
-                pending={request.isPending}
-                onRequest={(id) => request.mutate(id)}
-              />
-            </section>
-          ) : null}
-        </div>
-      )}
-      {request.error ? (
-        <p className="mt-3 break-words text-sm text-rose-700">
-          {(request.error as Error).message}
-        </p>
-      ) : null}
-    </Card>
+                <SuggestionGrid
+                  items={items}
+                  fromOrgId={fromOrgId}
+                  pendingOrgId={target?.organizationId}
+                  onRequest={(item) => {
+                    setError(null);
+                    setTarget(item);
+                  }}
+                />
+              </section>
+            ) : null}
+          </div>
+        )}
+      </Card>
+
+      <MeetingSchedulePicker
+        open={Boolean(target)}
+        title={`Request meeting${target ? ` · ${target.name}` : ''}`}
+        counterpartName={target?.name}
+        submitting={request.isPending}
+        error={error}
+        onClose={() => {
+          if (request.isPending) return;
+          setTarget(null);
+          setError(null);
+        }}
+        onConfirm={({ startsAt, placeId }) => {
+          if (!target) return;
+          request.mutate({
+            toOrgId: target.organizationId,
+            startsAt,
+            placeId,
+          });
+        }}
+      />
+    </>
   );
 }

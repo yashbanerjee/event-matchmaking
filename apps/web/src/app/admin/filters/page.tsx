@@ -234,7 +234,7 @@ export default function AdminFiltersPage() {
                   <Button
                     type="submit"
                     className="h-11 shrink-0 rounded-none px-5"
-                    disabled={!tagLabel.trim() || addTag.isPending}
+                    loading={addTag.isPending} disabled={!tagLabel.trim()}
                   >
                     <Plus className="h-4 w-4" />
                     {addTag.isPending ? 'Adding…' : 'Add tag'}
@@ -290,7 +290,10 @@ export default function AdminFiltersPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => toggleTag.mutate(tag)}
-                                disabled={toggleTag.isPending}
+                                loading={
+                                  toggleTag.isPending &&
+                                  toggleTag.variables?.id === tag.id
+                                }
                               >
                                 {tag.isActive ? 'Disable' : 'Enable'}
                               </Button>
@@ -298,7 +301,10 @@ export default function AdminFiltersPage() {
                                 size="sm"
                                 variant="danger"
                                 onClick={() => deleteTag.mutate(tag.id)}
-                                disabled={deleteTag.isPending}
+                                loading={
+                                  deleteTag.isPending &&
+                                  deleteTag.variables === tag.id
+                                }
                               >
                                 Delete
                               </Button>
@@ -327,7 +333,8 @@ export default function AdminFiltersPage() {
             </Button>
             <Button
               onClick={() => createDimension.mutate()}
-              disabled={!dimForm.name.trim() || createDimension.isPending}
+              loading={createDimension.isPending}
+              disabled={!dimForm.name.trim()}
             >
               {createDimension.isPending ? 'Saving…' : 'Create'}
             </Button>

@@ -532,7 +532,7 @@ export function MeetingsCalendar({
                 : ''}
             </p>
             <p>
-              <span className="text-[var(--muted)]">Location: </span>
+              <span className="text-[var(--muted)]">Meeting place: </span>
               {selected.location || '—'}
             </p>
             {selected.meta
@@ -595,6 +595,12 @@ export function toCalendarEvents(input: {
       meta: {
         Client: m.companyOrg.name,
         Guest: m.vendorOrg.name,
+        ...(m.location || m.place?.name || m.venue
+          ? {
+              'Meeting place':
+                m.location || m.place?.name || m.venue || '',
+            }
+          : {}),
       },
     }));
 
@@ -613,10 +619,21 @@ export function toCalendarEvents(input: {
       startsAt: r.proposedStartsAt!,
       endsAt: r.proposedEndsAt,
       status: r.status,
-      location: r.place?.name || r.place?.location || null,
+      location: r.place
+        ? r.place.location
+          ? `${r.place.name} · ${r.place.location}`
+          : r.place.name
+        : null,
       meta: {
         From: r.fromOrg.name,
         To: r.toOrg.name,
+        ...(r.place
+          ? {
+              'Meeting place': r.place.location
+                ? `${r.place.name} · ${r.place.location}`
+                : r.place.name,
+            }
+          : {}),
       },
     }));
 

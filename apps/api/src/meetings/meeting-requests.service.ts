@@ -61,13 +61,102 @@ export class MeetingRequestsService {
     return { items };
   }
 
+  private async assertPlaceFree(input: {
+    placeId: string;
+    startsAt: Date;
+    endsAt: Date;
+    excludeRequestId?: string;
+  }) {
+    const place = await this.prisma.place.findFirst({
+      where: { id: input.placeId, isActive: true },
+    });
+    if (!place) {
+      throw new BadRequestException('Place not available');
+    }
+
+    const placeBusy = await this.prisma.meeting.findFirst({
+      where: {
+        placeId: place.id,
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        startsAt: { lt: input.endsAt },
+        endsAt: { gt: input.startsAt },
+      },
+    });
+    if (placeBusy) {
+      throw new BadRequestException(
+        `${place.name} is already booked for that time. Choose another free place.`,
+      );
+    }
+
+    const proposalBusy = await this.prisma.meetingRequest.findFirst({
+      where: {
+        placeId: place.id,
+        status: 'AWAITING_CONFIRMATION',
+        ...(input.excludeRequestId
+          ? { id: { not: input.excludeRequestId } }
+          : {}),
+        proposedStartsAt: { lt: input.endsAt },
+        proposedEndsAt: { gt: input.startsAt },
+      },
+    });
+    if (proposalBusy) {
+      throw new BadRequestException(
+        `${place.name} is already held by another proposed meeting. Choose another free place.`,
+      );
+    }
+
+    return place;
+  }
+
+  private async assertPartiesFree(input: {
+    orgIds: string[];
+    startsAt: Date;
+    endsAt: Date;
+  }) {
+    const partyBusy = await this.prisma.meeting.findFirst({
+      where: {
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        startsAt: { lt: input.endsAt },
+        endsAt: { gt: input.startsAt },
+        OR: [
+          { companyOrgId: { in: input.orgIds } },
+          { vendorOrgId: { in: input.orgIds } },
+        ],
+      },
+    });
+    if (partyBusy) {
+      throw new BadRequestException(
+        'Client or guest already has a meeting in that window',
+      );
+    }
+  }
+
   async create(
     actor: AuthUser,
-    input: { fromOrgId: string; toOrgId: string; message?: string },
+    input: {
+      fromOrgId: string;
+      toOrgId: string;
+      message?: string;
+      startsAt?: string;
+      placeId?: string;
+    },
   ) {
     this.assertMember(actor, input.fromOrgId);
     if (input.fromOrgId === input.toOrgId) {
       throw new BadRequestException('Cannot request a meeting with yourself');
+    }
+
+    const hasStarts = Boolean(input.startsAt?.trim());
+    const hasPlace = Boolean(input.placeId?.trim());
+    if (hasStarts !== hasPlace) {
+      throw new BadRequestException(
+        'Meeting requests must include both a start time and a free place',
+      );
+    }
+    if (!hasStarts || !hasPlace) {
+      throw new BadRequestException(
+        'Select a free time slot and meeting place before sending the request',
+      );
     }
 
     const [fromOrg, toOrg] = await Promise.all([
@@ -101,17 +190,42 @@ export class MeetingRequestsService {
       );
     }
 
+    const duration = await this.config.getNumber(
+      'ops.meetingDurationMinutes',
+      15,
+    );
+    const startsAt = new Date(input.startsAt!);
+    if (Number.isNaN(startsAt.getTime())) {
+      throw new BadRequestException('Invalid start time');
+    }
+    const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+    const place = await this.assertPlaceFree({
+      placeId: input.placeId!,
+      startsAt,
+      endsAt,
+    });
+    await this.assertPartiesFree({
+      orgIds: [input.fromOrgId, input.toOrgId],
+      startsAt,
+      endsAt,
+    });
+
     const created = await this.prisma.meetingRequest.create({
       data: {
         fromOrgId: input.fromOrgId,
         toOrgId: input.toOrgId,
         requestedById: actor.id,
         message: input.message?.trim() || null,
-        status: 'PENDING',
+        status: 'AWAITING_CONFIRMATION',
+        proposedStartsAt: startsAt,
+        proposedEndsAt: endsAt,
+        proposedByOrgId: input.fromOrgId,
+        placeId: place.id,
       },
       include: {
         fromOrg: true,
         toOrg: true,
+        place: true,
       },
     });
 
@@ -121,9 +235,14 @@ export class MeetingRequestsService {
       entityType: 'MeetingRequest',
       entityId: created.id,
       outcome: 'SUCCESS',
+      metadata: {
+        placeId: place.id,
+        placeName: place.name,
+        startsAt: startsAt.toISOString(),
+      },
     });
 
-    void this.notifyOrgs(created.id, 'request_created').catch((err) =>
+    void this.notifyOrgs(created.id, 'schedule_proposed').catch((err) =>
       this.logger.warn(err.message),
     );
 
@@ -207,39 +326,17 @@ export class MeetingRequestsService {
     }
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
 
-    const place = await this.prisma.place.findFirst({
-      where: { id: input.placeId, isActive: true },
+    const place = await this.assertPlaceFree({
+      placeId: input.placeId,
+      startsAt,
+      endsAt,
+      excludeRequestId: id,
     });
-    if (!place) throw new BadRequestException('Place not available');
-
-    const placeBusy = await this.prisma.meeting.findFirst({
-      where: {
-        placeId: place.id,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        startsAt: { lt: endsAt },
-        endsAt: { gt: startsAt },
-      },
+    await this.assertPartiesFree({
+      orgIds: [request.fromOrgId, request.toOrgId],
+      startsAt,
+      endsAt,
     });
-    if (placeBusy) {
-      throw new BadRequestException('Place is already booked for that time');
-    }
-
-    const partyBusy = await this.prisma.meeting.findFirst({
-      where: {
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        startsAt: { lt: endsAt },
-        endsAt: { gt: startsAt },
-        OR: [
-          { companyOrgId: { in: [request.fromOrgId, request.toOrgId] } },
-          { vendorOrgId: { in: [request.fromOrgId, request.toOrgId] } },
-        ],
-      },
-    });
-    if (partyBusy) {
-      throw new BadRequestException(
-        'Company or vendor already has a meeting in that window',
-      );
-    }
 
     const proposedByOrgId = orgIds.includes(request.fromOrgId)
       ? request.fromOrgId
@@ -305,8 +402,16 @@ export class MeetingRequestsService {
       (request.proposedEndsAt.getTime() - request.proposedStartsAt.getTime()) /
         60_000,
     );
-    const place = await this.prisma.place.findUnique({
-      where: { id: request.placeId },
+    const place = await this.assertPlaceFree({
+      placeId: request.placeId,
+      startsAt: request.proposedStartsAt,
+      endsAt: request.proposedEndsAt,
+      excludeRequestId: id,
+    });
+    await this.assertPartiesFree({
+      orgIds: [request.fromOrgId, request.toOrgId],
+      startsAt: request.proposedStartsAt,
+      endsAt: request.proposedEndsAt,
     });
 
     const meeting = await this.prisma.$transaction(async (tx) => {
@@ -318,9 +423,9 @@ export class MeetingRequestsService {
           startsAt: request.proposedStartsAt!,
           endsAt: request.proposedEndsAt!,
           durationMinutes: duration,
-          timeZone: 'UTC',
+          timeZone: 'Asia/Dubai',
           mode: 'IN_PERSON',
-          venue: place?.name ?? null,
+          venue: place.name,
           status: 'CONFIRMED',
           idempotencyKey: `peer-meeting:${request.id}`,
         },
@@ -527,7 +632,14 @@ export class MeetingRequestsService {
               ]
             : []),
           ...(request.place
-            ? [{ label: 'Place', value: request.place.name }]
+            ? [
+                {
+                  label: 'Meeting place',
+                  value: request.place.location
+                    ? `${request.place.name} · ${request.place.location}`
+                    : request.place.name,
+                },
+              ]
             : []),
         ],
       });

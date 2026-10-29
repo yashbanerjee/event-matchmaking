@@ -495,7 +495,7 @@ export default function AdminMeetingsPage() {
                 <TH>Client</TH>
                 <TH>Guest</TH>
                 <TH>Starts</TH>
-                <TH>Location</TH>
+                <TH>Meeting place</TH>
                 <TH>Invited by</TH>
                 <TH>Status</TH>
                 <TH />
@@ -542,12 +542,10 @@ export default function AdminMeetingsPage() {
                         size="sm"
                         variant="danger"
                         onClick={() => confirmDelete(m)}
-                        disabled={
-                          deletingId === m.id ||
-                          ['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(
-                            m.status,
-                          )
-                        }
+                        loading={deletingId === m.id}
+                        disabled={['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(
+                          m.status,
+                        )}
                       >
                         {deletingId === m.id ? 'Deleting…' : 'Delete'}
                       </Button>
@@ -626,12 +624,9 @@ export default function AdminMeetingsPage() {
               Cancel
             </Button>
             <Button
-              disabled={
-                saveMeeting.isPending ||
-                !editForm.companyOrgId ||
+              loading={saveMeeting.isPending} disabled={!editForm.companyOrgId ||
                 !editForm.vendorOrgId ||
-                !editForm.startsAt
-              }
+                !editForm.startsAt}
               onClick={() => saveMeeting.mutate()}
             >
               {saveMeeting.isPending ? 'Saving…' : 'Save'}
@@ -722,12 +717,9 @@ export default function AdminMeetingsPage() {
               Cancel
             </Button>
             <Button
-              disabled={
-                createMeeting.isPending ||
-                !createForm.companyOrgId ||
+              loading={createMeeting.isPending} disabled={!createForm.companyOrgId ||
                 !createForm.vendorOrgId ||
-                !createForm.startsAt
-              }
+                !createForm.startsAt}
               onClick={() => createMeeting.mutate()}
             >
               {createMeeting.isPending ? 'Creating…' : 'Create confirmed'}

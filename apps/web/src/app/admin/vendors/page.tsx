@@ -396,6 +396,9 @@ export default function VendorsPage() {
                           <Button
                             size="sm"
                             variant="secondary"
+                            loading={
+                              approve.isPending && approve.variables === org.id
+                            }
                             onClick={() => approve.mutate(org.id)}
                           >
                             Verify
@@ -436,9 +439,8 @@ export default function VendorsPage() {
             </Button>
             <Button
               onClick={() => invite.mutate()}
-              disabled={
-                invite.isPending || !form.name.trim() || !form.email.trim()
-              }
+              loading={invite.isPending}
+              disabled={!form.name.trim() || !form.email.trim()}
             >
               {invite.isPending ? 'Sending…' : 'Add & send email'}
             </Button>
@@ -549,7 +551,8 @@ export default function VendorsPage() {
             </Button>
             <Button
               onClick={() => importCsv.mutate()}
-              disabled={importCsv.isPending || !csvText.trim()}
+              loading={importCsv.isPending}
+              disabled={!csvText.trim()}
             >
               {importCsv.isPending ? 'Importing…' : 'Import & invite'}
             </Button>

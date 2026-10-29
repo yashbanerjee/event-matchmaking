@@ -90,8 +90,12 @@ export default function InvitationsPage() {
           <option value="ADMIN">Administrator</option>
           <option value="OPERATIONS_MANAGER">Operations manager</option>
         </select>
-        <Button onClick={() => create.mutate()} disabled={!form.email || !form.organizationId}>
-          Send invitation
+        <Button
+          onClick={() => create.mutate()}
+          loading={create.isPending}
+          disabled={!form.email || !form.organizationId}
+        >
+          {create.isPending ? 'Sending…' : 'Send invitation'}
         </Button>
         {createdToken && (
           <p className="text-xs break-all bg-slate-100 p-2 rounded">

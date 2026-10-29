@@ -162,7 +162,7 @@ export class PlacesService {
       orderBy: { name: 'asc' },
     });
 
-    const busy = await this.prisma.meeting.findMany({
+    const busyMeetings = await this.prisma.meeting.findMany({
       where: {
         placeId: { not: null },
         status: { notIn: ['CANCELLED', 'NO_SHOW'] },
@@ -171,8 +171,22 @@ export class PlacesService {
       },
       select: { placeId: true },
     });
+
+    // Also reserve places held by proposed (not-yet-confirmed) meeting requests.
+    const busyProposals = await this.prisma.meetingRequest.findMany({
+      where: {
+        placeId: { not: null },
+        status: 'AWAITING_CONFIRMATION',
+        proposedStartsAt: { lt: endsAt },
+        proposedEndsAt: { gt: startsAt },
+      },
+      select: { placeId: true },
+    });
+
     const busyIds = new Set(
-      busy.map((m) => m.placeId).filter((id): id is string => Boolean(id)),
+      [...busyMeetings, ...busyProposals]
+        .map((row) => row.placeId)
+        .filter((id): id is string => Boolean(id)),
     );
 
     return places.filter((p) => !busyIds.has(p.id));

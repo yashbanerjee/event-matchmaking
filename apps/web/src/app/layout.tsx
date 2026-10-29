@@ -70,8 +70,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${display.variable}`} style={fontVars}>
         <Providers>
-          {children}
           <DemoFooter />
+          {children}
           <PwaRegister />
         </Providers>
       </body>

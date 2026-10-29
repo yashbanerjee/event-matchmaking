@@ -207,7 +207,7 @@ export default function SettingsPage() {
           </div>
           <Button
             onClick={() => saveRegistration.mutate()}
-            disabled={saveRegistration.isPending}
+            loading={saveRegistration.isPending}
           >
             {saveRegistration.isPending ? 'Saving…' : 'Save registration'}
           </Button>
@@ -290,9 +290,13 @@ export default function SettingsPage() {
             </div>
             <Button
               onClick={() => saveGroup.mutate(group)}
-              disabled={saveGroup.isPending}
+              loading={
+                saveGroup.isPending && saveGroup.variables?.id === group.id
+              }
             >
-              {saveGroup.isPending ? 'Saving…' : 'Save group'}
+              {saveGroup.isPending && saveGroup.variables?.id === group.id
+                ? 'Saving…'
+                : 'Save group'}
             </Button>
           </div>
           <div className="space-y-3">
@@ -399,7 +403,7 @@ export default function SettingsPage() {
                 </div>
                 <Button
                   type="button"
-                  disabled={testMail.isPending || !testTo.trim()}
+                  loading={testMail.isPending} disabled={!testTo.trim()}
                   onClick={() => testMail.mutate()}
                 >
                   {testMail.isPending ? 'Sending…' : 'Send test'}

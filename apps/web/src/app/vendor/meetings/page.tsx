@@ -206,7 +206,7 @@ export default function VendorMeetingsPage() {
                 <TH>Starts</TH>
                 <TH>Ends</TH>
                 <TH>Duration</TH>
-                <TH>Location</TH>
+                <TH>Meeting place</TH>
                 <TH>Status</TH>
                 <TH />
               </TR>
@@ -241,6 +241,9 @@ export default function VendorMeetingsPage() {
                       {item.status === 'AWAITING_CONFIRMATION' ? (
                         <Button
                           size="sm"
+                          loading={
+                            confirm.isPending && confirm.variables === item.id
+                          }
                           onClick={() => confirm.mutate(item.id)}
                         >
                           Confirm

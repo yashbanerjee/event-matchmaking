@@ -126,7 +126,8 @@ export function MeetingFeedbackModal({
           </Button>
           <Button
             onClick={() => submit.mutate()}
-            disabled={submit.isPending || !meetingId}
+            loading={submit.isPending}
+            disabled={!meetingId}
           >
             {submit.isPending ? 'Submitting…' : 'Submit feedback'}
           </Button>

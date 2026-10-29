@@ -518,8 +518,8 @@ export default function CompaniesPage() {
             </Button>
             <Button
               onClick={submitAdd}
+              loading={addPending}
               disabled={
-                addPending ||
                 !form.name.trim() ||
                 !form.email.trim() ||
                 (!form.sendInvitation &&
@@ -676,7 +676,7 @@ export default function CompaniesPage() {
               Cancel
             </Button>
             <Button
-              disabled={completeAdminFill.isPending}
+              loading={completeAdminFill.isPending}
               onClick={() => completeAdminFill.mutate()}
             >
               {completeAdminFill.isPending
@@ -724,7 +724,8 @@ export default function CompaniesPage() {
             </Button>
             <Button
               onClick={() => importCsv.mutate()}
-              disabled={importCsv.isPending || !csvText.trim()}
+              loading={importCsv.isPending}
+              disabled={!csvText.trim()}
             >
               {importCsv.isPending ? 'Importing…' : 'Import & invite'}
             </Button>

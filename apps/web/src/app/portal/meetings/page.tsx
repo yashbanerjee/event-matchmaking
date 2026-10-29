@@ -243,7 +243,7 @@ export default function PortalMeetingsPage() {
                 <TR>
                   <TH>Guest</TH>
                   <TH>Starts</TH>
-                  <TH>Location</TH>
+                  <TH>Meeting place</TH>
                   <TH>Status</TH>
                   <TH />
                 </TR>
@@ -266,6 +266,9 @@ export default function PortalMeetingsPage() {
                         {m.status === 'AWAITING_CONFIRMATION' ? (
                           <Button
                             size="sm"
+                            loading={
+                              confirm.isPending && confirm.variables === m.id
+                            }
                             onClick={() => confirm.mutate(m.id)}
                           >
                             Confirm
