@@ -107,7 +107,7 @@ export default function CompaniesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState(
-    'name,email,phone,phoneCountryCode\nAcme Manufacturing,buyer@example.com,501234567,+971',
+    'name,email,phone,phoneCountryCode\n',
   );
   const [csvResult, setCsvResult] = useState<string | null>(null);
   const [form, setForm] = useState({

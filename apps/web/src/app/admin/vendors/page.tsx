@@ -128,7 +128,7 @@ export default function VendorsPage() {
     formVersionId: '',
   });
   const [csvText, setCsvText] = useState(
-    'name,email,phone,phoneCountryCode\nAcme Supplies,vendor@example.com,501234567,+971',
+    'name,email,phone,phoneCountryCode\n',
   );
 
   useEffect(() => {
