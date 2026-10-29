@@ -20,10 +20,14 @@ type MeetingRow = {
   endsAt?: string | null;
   durationMinutes?: number | null;
   matchScore: number | null;
+  venue?: string | null;
+  location?: string | null;
+  invitedByLabel?: string | null;
   companyOrgId: string;
   vendorOrgId: string;
   companyOrg: { id: string; name: string };
   vendorOrg: { id: string; name: string };
+  place?: { id: string; name: string; location: string | null } | null;
 };
 
 type OrgOption = { id: string; name: string; code: string };
@@ -395,7 +399,7 @@ export default function AdminMeetingsPage() {
         {!meetings.isLoading && rows.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">
             {activeMeetings.length === 0
-              ? 'No meetings yet. Generate from Matchmaking or create a manual meeting.'
+              ? 'No meetings yet. Create a manual meeting or wait for peer requests to be confirmed.'
               : 'No meetings match these filters.'}
           </p>
         ) : (
@@ -405,48 +409,66 @@ export default function AdminMeetingsPage() {
                 <TH>Company</TH>
                 <TH>Vendor</TH>
                 <TH>Starts</TH>
-                <TH>Score</TH>
+                <TH>Location</TH>
+                <TH>Invited by</TH>
                 <TH>Status</TH>
                 <TH />
               </TR>
             </THead>
             <TBody>
-              {rows.map((m) => (
-                <TR key={m.id}>
-                  <TD className="font-medium">{m.companyOrg.name}</TD>
-                  <TD>{m.vendorOrg.name}</TD>
-                  <TD>{new Date(m.startsAt).toLocaleString()}</TD>
-                  <TD>{m.matchScore?.toFixed(1) ?? '—'}</TD>
-                  <TD>
-                    <Badge variant={statusTone(m.status)}>
-                      {m.status.replaceAll('_', ' ')}
-                    </Badge>
-                  </TD>
-                  <TD className="space-x-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openEdit(m)}
-                      disabled={['COMPLETED', 'NO_SHOW'].includes(m.status)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => confirmDelete(m)}
-                      disabled={
-                        deletingId === m.id ||
-                        ['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(
-                          m.status,
-                        )
-                      }
-                    >
-                      {deletingId === m.id ? 'Deleting…' : 'Delete'}
-                    </Button>
-                  </TD>
-                </TR>
-              ))}
+              {rows.map((m) => {
+                const location =
+                  m.location ||
+                  m.place?.name ||
+                  m.venue ||
+                  '—';
+                const invitedBy = m.invitedByLabel || 'Admin created meeting';
+                const isAdminCreated =
+                  invitedBy === 'Admin created meeting';
+                return (
+                  <TR key={m.id}>
+                    <TD className="font-medium">{m.companyOrg.name}</TD>
+                    <TD>{m.vendorOrg.name}</TD>
+                    <TD>{new Date(m.startsAt).toLocaleString()}</TD>
+                    <TD>{location}</TD>
+                    <TD>
+                      {isAdminCreated ? (
+                        <Badge variant="secondary">Admin created meeting</Badge>
+                      ) : (
+                        <span className="text-sm">{invitedBy}</span>
+                      )}
+                    </TD>
+                    <TD>
+                      <Badge variant={statusTone(m.status)}>
+                        {m.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </TD>
+                    <TD className="space-x-2 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(m)}
+                        disabled={['COMPLETED', 'NO_SHOW'].includes(m.status)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => confirmDelete(m)}
+                        disabled={
+                          deletingId === m.id ||
+                          ['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(
+                            m.status,
+                          )
+                        }
+                      >
+                        {deletingId === m.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </TD>
+                  </TR>
+                );
+              })}
             </TBody>
           </Table>
         )}

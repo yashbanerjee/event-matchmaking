@@ -59,6 +59,13 @@ export class MeetingsService {
         include: {
           companyOrg: true,
           vendorOrg: true,
+          place: true,
+          meetingRequest: {
+            include: {
+              fromOrg: { select: { id: true, name: true, type: true } },
+              toOrg: { select: { id: true, name: true, type: true } },
+            },
+          },
           confirmations: true,
           feedbacks: {
             select: {
@@ -77,10 +84,29 @@ export class MeetingsService {
       this.prisma.meeting.count({ where }),
     ]);
 
+    const requesterIds = [
+      ...new Set(
+        items
+          .map((m) => m.meetingRequest?.requestedById)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const requesters = requesterIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: requesterIds } },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        })
+      : [];
+    const requesterById = new Map(requesters.map((u) => [u.id, u]));
+
     // Enforce feedback visibility: confidential comments hidden from counterpart
-    const sanitized = items.map((meeting) => ({
-      ...meeting,
-      feedbacks: meeting.feedbacks.map((fb) => {
+    const sanitized = items.map((meeting) => {
+      const feedbacks = meeting.feedbacks.map((fb) => {
         const isOwnOrg = user.organizationIds.includes(fb.organizationId);
         const canSeeAll = user.permissions.includes('feedback:read_all');
         if (fb.isConfidential && !isOwnOrg && !canSeeAll) {
@@ -96,8 +122,54 @@ export class MeetingsService {
           };
         }
         return fb;
-      }),
-    }));
+      });
+
+      const location =
+        meeting.place?.name ??
+        meeting.venue?.trim() ??
+        null;
+
+      let invitedByLabel = 'Admin created meeting';
+      let invitedByUser: {
+        id: string;
+        email: string;
+        name: string;
+      } | null = null;
+
+      const request = meeting.meetingRequest;
+      if (request) {
+        const requester = requesterById.get(request.requestedById);
+        const name = requester
+          ? [requester.firstName, requester.lastName]
+              .filter(Boolean)
+              .join(' ')
+              .trim() || requester.email
+          : 'Unknown user';
+        invitedByLabel = `${name} · ${request.fromOrg.name}`;
+        invitedByUser = requester
+          ? {
+              id: requester.id,
+              email: requester.email,
+              name,
+            }
+          : null;
+      }
+
+      return {
+        ...meeting,
+        feedbacks,
+        location,
+        invitedByLabel,
+        invitedByUser,
+        invitedByOrg: request
+          ? {
+              id: request.fromOrg.id,
+              name: request.fromOrg.name,
+              type: request.fromOrg.type,
+            }
+          : null,
+      };
+    });
 
     return { items: sanitized, page, pageSize, total };
   }

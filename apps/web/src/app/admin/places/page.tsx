@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -33,8 +33,11 @@ const emptyForm = {
 
 export default function AdminPlacesPage() {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [edit, setEdit] = useState<Place | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [error, setError] = useState<string | null>(null);
 
   const places = useQuery({
     queryKey: ['places'],
@@ -56,10 +59,38 @@ export default function AdminPlacesPage() {
         }),
       }),
     onSuccess: () => {
-      setOpen(false);
+      setCreating(false);
       setForm(emptyForm);
+      setError(null);
       void qc.invalidateQueries({ queryKey: ['places'] });
     },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : (err as Error).message),
+  });
+
+  const update = useMutation({
+    mutationFn: () => {
+      if (!edit) throw new Error('No place selected');
+      return apiFetch<Place>(`/places/${edit.id}`, {
+        method: 'PATCH',
+        token: getAccessToken(),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          code: form.code.trim() || undefined,
+          description: form.description.trim() || null,
+          capacity: form.capacity ? Number(form.capacity) : null,
+          location: form.location.trim() || null,
+        }),
+      });
+    },
+    onSuccess: () => {
+      setEdit(null);
+      setForm(emptyForm);
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['places'] });
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : (err as Error).message),
   });
 
   const toggle = useMutation({
@@ -70,9 +101,100 @@ export default function AdminPlacesPage() {
         body: JSON.stringify({ isActive: !place.isActive }),
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['places'] }),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : (err as Error).message),
+  });
+
+  const remove = useMutation({
+    mutationFn: (placeId: string) =>
+      apiFetch(`/places/${placeId}`, {
+        method: 'DELETE',
+        token: getAccessToken(),
+      }),
+    onMutate: (id) => setDeletingId(id),
+    onSuccess: () => {
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['places'] });
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : (err as Error).message),
+    onSettled: () => setDeletingId(null),
   });
 
   const items = places.data ?? [];
+
+  function openCreate() {
+    setForm(emptyForm);
+    setError(null);
+    setCreating(true);
+  }
+
+  function openEdit(place: Place) {
+    setEdit(place);
+    setForm({
+      name: place.name,
+      code: place.code,
+      description: place.description ?? '',
+      capacity: place.capacity != null ? String(place.capacity) : '',
+      location: place.location ?? '',
+    });
+    setError(null);
+  }
+
+  function confirmDelete(place: Place) {
+    const ok = window.confirm(
+      `Delete place "${place.name}"? Meetings that used it will keep their times but lose this place link.`,
+    );
+    if (!ok) return;
+    remove.mutate(place.id);
+  }
+
+  const formFields = (
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">Name</label>
+        <Input
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder="Table A1"
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">
+          Code (optional)
+        </label>
+        <Input
+          value={form.code}
+          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          placeholder="A1"
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">Location</label>
+        <Input
+          value={form.location}
+          onChange={(e) => setForm({ ...form, location: e.target.value })}
+          placeholder="Hall B"
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">Capacity</label>
+        <Input
+          type="number"
+          value={form.capacity}
+          onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium">Description</label>
+        <Input
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
+      </div>
+      {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -80,12 +202,13 @@ export default function AdminPlacesPage() {
         eyebrow="Match & meet"
         title="Places"
         description="Meeting tables and rooms. Only free places are offered when parties pick a slot."
-        actions={
-          <Button onClick={() => setOpen(true)}>Add place</Button>
-        }
+        actions={<Button onClick={openCreate}>Add place</Button>}
       />
 
       <Card>
+        {error && !creating && !edit ? (
+          <p className="mb-3 text-sm text-rose-700">{error}</p>
+        ) : null}
         {places.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading…</p>
         ) : items.length === 0 ? (
@@ -117,13 +240,28 @@ export default function AdminPlacesPage() {
                       {place.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </TD>
-                  <TD className="text-right">
+                  <TD className="space-x-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEdit(place)}
+                    >
+                      Edit
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => toggle.mutate(place)}
                     >
                       {place.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={deletingId === place.id}
+                      onClick={() => confirmDelete(place)}
+                    >
+                      {deletingId === place.id ? 'Deleting…' : 'Delete'}
                     </Button>
                   </TD>
                 </TR>
@@ -134,13 +272,22 @@ export default function AdminPlacesPage() {
       </Card>
 
       <Modal
-        open={open}
+        open={creating}
         title="Add place"
         description="Places appear when a party proposes a time for a meeting."
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setCreating(false);
+          setError(null);
+        }}
         footer={
           <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreating(false);
+                setError(null);
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -152,58 +299,40 @@ export default function AdminPlacesPage() {
           </>
         }
       >
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Name</label>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Table A1"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Code (optional)
-            </label>
-            <Input
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              placeholder="A1"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Location</label>
-            <Input
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              placeholder="Hall B"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Capacity</label>
-            <Input
-              type="number"
-              value={form.capacity}
-              onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              Description
-            </label>
-            <Input
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-            />
-          </div>
-          {create.error ? (
-            <p className="text-sm text-rose-700">
-              {(create.error as Error).message}
-            </p>
-          ) : null}
-        </div>
+        {formFields}
+      </Modal>
+
+      <Modal
+        open={Boolean(edit)}
+        title="Edit place"
+        description="Update table or room details used for on-site meetings."
+        onClose={() => {
+          setEdit(null);
+          setForm(emptyForm);
+          setError(null);
+        }}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEdit(null);
+                setForm(emptyForm);
+                setError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => update.mutate()}
+              disabled={update.isPending || !form.name.trim()}
+            >
+              {update.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        {formFields}
       </Modal>
     </div>
   );

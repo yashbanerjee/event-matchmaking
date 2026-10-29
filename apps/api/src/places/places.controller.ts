@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -67,6 +68,7 @@ export class PlacesController {
     @Body()
     body: {
       name?: string;
+      code?: string;
       description?: string | null;
       capacity?: number | null;
       location?: string | null;
@@ -74,5 +76,11 @@ export class PlacesController {
     },
   ) {
     return this.places.update(user, id, body);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.places.remove(user, id);
   }
 }

@@ -68,6 +68,7 @@ export class PlacesService {
     id: string,
     input: {
       name?: string;
+      code?: string;
       description?: string | null;
       capacity?: number | null;
       location?: string | null;
@@ -77,10 +78,25 @@ export class PlacesService {
     const existing = await this.prisma.place.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Place not found');
 
+    const nextCode =
+      input.code !== undefined
+        ? input.code.trim().toUpperCase() || existing.code
+        : undefined;
+    if (nextCode && nextCode !== existing.code) {
+      const clash = await this.prisma.place.findFirst({
+        where: { code: nextCode, id: { not: id } },
+        select: { id: true },
+      });
+      if (clash) {
+        throw new BadRequestException('A place with this code already exists');
+      }
+    }
+
     const place = await this.prisma.place.update({
       where: { id },
       data: {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(nextCode !== undefined ? { code: nextCode } : {}),
         ...(input.description !== undefined
           ? { description: input.description }
           : {}),
@@ -99,6 +115,34 @@ export class PlacesService {
     });
 
     return place;
+  }
+
+  async remove(actor: AuthUser, id: string) {
+    const existing = await this.prisma.place.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Place not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.meeting.updateMany({
+        where: { placeId: id },
+        data: { placeId: null },
+      });
+      await tx.meetingRequest.updateMany({
+        where: { placeId: id },
+        data: { placeId: null },
+      });
+      await tx.place.delete({ where: { id } });
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'place.delete',
+      entityType: 'Place',
+      entityId: id,
+      outcome: 'SUCCESS',
+      metadata: { name: existing.name, code: existing.code },
+    });
+
+    return { id, deleted: true as const };
   }
 
   /** Places free for the given window (no overlapping non-cancelled meeting). */
