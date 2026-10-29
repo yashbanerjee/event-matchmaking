@@ -1,6 +1,6 @@
 /**
- * Branded HTML email templates aligned with the Event Matchmaking admin UI
- * (teal accent, soft blue-gray atmosphere, navy text).
+ * Ethara-branded HTML email templates
+ * (black / warm gold / soft stone — aligned with the web product UI).
  */
 
 export type EmailTemplateKind =
@@ -22,87 +22,104 @@ type Theme = {
   label: string;
   accent: string;
   accentSoft: string;
+  accentText: string;
   action: string;
 };
 
 const THEMES: Record<EmailTemplateKind, Theme> = {
   invitation: {
     label: 'Invitation',
-    accent: '#0f766e',
-    accentSoft: '#ccfbf1',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
     action: 'Accept invitation',
   },
   correction: {
     label: 'Updates requested',
     accent: '#b45309',
     accentSoft: '#fef3c7',
+    accentText: '#ffffff',
     action: 'Update marked fields',
   },
   test: {
     label: 'SMTP test',
-    accent: '#0369a1',
-    accentSoft: '#e0f2fe',
-    action: 'Open Event Matchmaking',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
+    action: 'Open Ethara',
   },
   notice: {
     label: 'Notice',
-    accent: '#0f766e',
-    accentSoft: '#ccfbf1',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
     action: 'Open portal',
   },
   approved: {
     label: 'Verified',
     accent: '#047857',
     accentSoft: '#d1fae5',
+    accentText: '#ffffff',
     action: 'View profile',
   },
   rejected: {
     label: 'Action needed',
     accent: '#be123c',
     accentSoft: '#ffe4e6',
+    accentText: '#ffffff',
     action: 'Review submission',
   },
   meeting: {
     label: 'Meeting scheduled',
-    accent: '#0f766e',
-    accentSoft: '#ccfbf1',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
     action: 'View meetings',
   },
   meeting_update: {
     label: 'Meeting updated',
-    accent: '#0369a1',
-    accentSoft: '#e0f2fe',
+    accent: '#0a0a0a',
+    accentSoft: '#ececeb',
+    accentText: '#ffffff',
     action: 'View meetings',
   },
   registration_otp: {
     label: 'Email verification',
-    accent: '#0f766e',
-    accentSoft: '#ccfbf1',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
     action: 'Enter code',
   },
   registration_ack: {
     label: 'Registration received',
-    accent: '#0f766e',
-    accentSoft: '#ccfbf1',
+    accent: '#c9a227',
+    accentSoft: '#f7f0d8',
+    accentText: '#0a0a0a',
     action: 'Open dashboard',
   },
   registration_admin_notify: {
     label: 'New registration',
-    accent: '#0369a1',
-    accentSoft: '#e0f2fe',
+    accent: '#0a0a0a',
+    accentSoft: '#ececeb',
+    accentText: '#ffffff',
     action: 'Review submission',
   },
 };
 
 const BRAND = {
-  name: 'Event Matchmaking',
-  foreground: '#0f1c27',
-  muted: '#5b6f7e',
-  border: '#d5e0e8',
+  name: 'Ethara',
+  product: 'Event Matchmaking',
+  tagline: 'Making moments that matter',
+  foreground: '#0a0a0a',
+  muted: '#6b6b66',
+  border: '#e2e0db',
   card: '#ffffff',
-  pageBg: '#eef3f7',
-  sidebar: '#0b1b2b',
-  highlight: '#0369a1',
+  pageBg: '#f4f4f2',
+  header: '#0a0a0a',
+  headerMuted: '#a3a3a0',
+  gold: '#c9a227',
+  goldSoft: '#f7f0d8',
+  highlight: '#c9a227',
 };
 
 export function escapeHtml(value: string) {
@@ -121,14 +138,18 @@ export function escapeHtml(value: string) {
 function audienceLabel(audience: EmailAudience) {
   switch (audience) {
     case 'vendor':
-      return 'a vendor contact';
+      return 'a guest contact';
     case 'company':
-      return 'a company contact';
+      return 'a client contact';
     case 'admin':
       return 'an administrator';
     default:
       return 'you';
   }
+}
+
+function roleDisplayLabel(kind: 'vendor' | 'company') {
+  return kind === 'company' ? 'Client' : 'Guest';
 }
 
 export function renderBrandedEmail(input: {
@@ -147,12 +168,21 @@ export function renderBrandedEmail(input: {
   details?: Array<{ label: string; value: string }>;
   /** Optional bullet / numbered list under the body */
   list?: string[];
+  /** Large centered highlight (OTP codes, confirmation numbers) */
+  highlightCode?: { value: string; caption?: string };
   footerNote?: string;
 }): { html: string; text: string } {
   const theme = THEMES[input.kind] ?? THEMES.notice;
   const brandName = input.brandName?.trim() || BRAND.name;
   const action = input.actionLabel?.trim() || theme.action;
   const audience = input.audience ?? 'recipient';
+  const mark = brandName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2) || 'E';
 
   const paragraphs = input.body
     .split(/\n{2,}/)
@@ -166,6 +196,9 @@ export function renderBrandedEmail(input: {
     input.title,
     '',
     input.body,
+    input.highlightCode
+      ? `\n${input.highlightCode.caption || 'Code'}: ${input.highlightCode.value}`
+      : '',
     input.list?.length
       ? `\n${input.list.map((item, i) => `${i + 1}. ${item}`).join('\n')}`
       : '',
@@ -179,20 +212,36 @@ export function renderBrandedEmail(input: {
   const bodyHtml = paragraphs
     .map(
       (paragraph) =>
-        `<p style="margin:0 0 14px;line-height:1.55;color:${BRAND.foreground};font-size:15px;">${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`,
+        `<p style="margin:0 0 16px;line-height:1.65;color:${BRAND.foreground};font-size:15px;">${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`,
     )
     .join('');
 
+  const highlightHtml = input.highlightCode
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 22px;">
+        <tr>
+          <td align="center" style="background:linear-gradient(180deg,${theme.accentSoft} 0%,#fffdf5 100%);border:1px solid ${BRAND.border};border-radius:18px;padding:28px 20px;">
+            ${
+              input.highlightCode.caption
+                ? `<p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${BRAND.muted};">${escapeHtml(input.highlightCode.caption)}</p>`
+                : ''
+            }
+            <p style="margin:0;font-family:'Syne','Avenir Next',Arial,sans-serif;font-size:40px;line-height:1;letter-spacing:.28em;font-weight:700;color:${BRAND.foreground};">${escapeHtml(input.highlightCode.value)}</p>
+            <div style="margin:18px auto 0;width:48px;height:3px;border-radius:999px;background:${theme.accent};"></div>
+          </td>
+        </tr>
+      </table>`
+    : '';
+
   const listHtml =
     input.list && input.list.length
-      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 16px;background:${theme.accentSoft};border:1px solid ${BRAND.border};border-radius:12px;">
-          <tr><td style="padding:14px 16px;">
-            <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${theme.accent};">Details</p>
-            <ol style="margin:0;padding-left:18px;color:${BRAND.foreground};font-size:14px;line-height:1.55;">
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;background:${theme.accentSoft};border:1px solid ${BRAND.border};border-radius:16px;">
+          <tr><td style="padding:18px 18px 14px;">
+            <p style="margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:${theme.accent === BRAND.gold ? '#8a7018' : theme.accent};">Details</p>
+            <ol style="margin:0;padding-left:18px;color:${BRAND.foreground};font-size:14px;line-height:1.6;">
               ${input.list
                 .map(
                   (item) =>
-                    `<li style="margin:0 0 8px;">${escapeHtml(item).replace(/\n/g, '<br>')}</li>`,
+                    `<li style="margin:0 0 10px;padding-left:4px;">${escapeHtml(item).replace(/\n/g, '<br>')}</li>`,
                 )
                 .join('')}
             </ol>
@@ -202,12 +251,12 @@ export function renderBrandedEmail(input: {
 
   const detailsHtml =
     input.details && input.details.length
-      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 16px;border:1px solid ${BRAND.border};border-radius:12px;overflow:hidden;">
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;border:1px solid ${BRAND.border};border-radius:16px;overflow:hidden;">
           ${input.details
             .map(
               (row, index) => `<tr>
-                <td style="padding:10px 14px;background:${index % 2 === 0 ? '#f8fbfd' : '#ffffff'};border-top:${index === 0 ? '0' : `1px solid ${BRAND.border}`};width:36%;font-size:12px;font-weight:600;color:${BRAND.muted};text-transform:uppercase;letter-spacing:.04em;">${escapeHtml(row.label)}</td>
-                <td style="padding:10px 14px;background:${index % 2 === 0 ? '#f8fbfd' : '#ffffff'};border-top:${index === 0 ? '0' : `1px solid ${BRAND.border}`};font-size:14px;color:${BRAND.foreground};">${escapeHtml(row.value)}</td>
+                <td style="padding:13px 16px;background:${index % 2 === 0 ? '#fafaf8' : '#ffffff'};border-top:${index === 0 ? '0' : `1px solid ${BRAND.border}`};width:38%;font-size:11px;font-weight:700;color:${BRAND.muted};text-transform:uppercase;letter-spacing:.08em;vertical-align:top;">${escapeHtml(row.label)}</td>
+                <td style="padding:13px 16px;background:${index % 2 === 0 ? '#fafaf8' : '#ffffff'};border-top:${index === 0 ? '0' : `1px solid ${BRAND.border}`};font-size:14px;font-weight:600;color:${BRAND.foreground};">${escapeHtml(row.value)}</td>
               </tr>`,
             )
             .join('')}
@@ -215,18 +264,18 @@ export function renderBrandedEmail(input: {
       : '';
 
   const buttonHtml = input.actionUrl
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;">
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:10px 0 6px;">
         <tr>
-          <td style="border-radius:10px;background:${theme.accent};">
-            <a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:700;color:#ecfdf8;text-decoration:none;border-radius:10px;">${escapeHtml(action)}</a>
+          <td style="border-radius:999px;background:${theme.accent};box-shadow:0 10px 24px rgba(10,10,10,0.12);">
+            <a href="${escapeHtml(input.actionUrl)}" style="display:inline-block;padding:14px 26px;font-size:14px;font-weight:700;color:${theme.accentText};text-decoration:none;border-radius:999px;letter-spacing:.01em;">${escapeHtml(action)}</a>
           </td>
         </tr>
       </table>
-      <p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:${BRAND.muted};word-break:break-all;">Or paste this link into your browser:<br><a href="${escapeHtml(input.actionUrl)}" style="color:${BRAND.highlight};">${escapeHtml(input.actionUrl)}</a></p>`
+      <p style="margin:14px 0 0;font-size:12px;line-height:1.55;color:${BRAND.muted};word-break:break-all;">Or paste this link into your browser:<br><a href="${escapeHtml(input.actionUrl)}" style="color:${BRAND.highlight};font-weight:600;">${escapeHtml(input.actionUrl)}</a></p>`
     : '';
 
   const contextHtml = input.contextName
-    ? `<p style="margin:10px 0 0;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:${theme.accentSoft};opacity:.9;">${escapeHtml(input.contextName)}</p>`
+    ? `<p style="margin:8px 0 0;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:${BRAND.gold};">${escapeHtml(input.contextName)}</p>`
     : '';
 
   const footer =
@@ -238,48 +287,81 @@ export function renderBrandedEmail(input: {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
     <title>${escapeHtml(input.title)}</title>
   </head>
-  <body style="margin:0;padding:0;background:${BRAND.pageBg};color:${BRAND.foreground};font-family:'Segoe UI',Figtree,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,#f5f8fb 0%,${BRAND.pageBg} 48%,#e7eef4 100%);padding:28px 14px;">
+  <body style="margin:0;padding:0;background:${BRAND.pageBg};color:${BRAND.foreground};font-family:'Figtree','Segoe UI',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.pageBg};padding:32px 14px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:${BRAND.card};border:1px solid ${BRAND.border};border-radius:16px;overflow:hidden;box-shadow:0 16px 40px rgba(15,28,39,0.08);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:${BRAND.card};border:1px solid ${BRAND.border};border-radius:22px;overflow:hidden;box-shadow:0 22px 50px rgba(10,10,10,0.10);">
             <tr>
-              <td style="background:${BRAND.sidebar};padding:22px 24px 20px;">
+              <td style="background:${BRAND.header};padding:0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td>
-                      <div style="display:inline-block;width:36px;height:36px;border-radius:10px;background:${theme.accent};color:#ecfdf8;font-weight:800;font-size:14px;line-height:36px;text-align:center;">EM</div>
-                      <p style="margin:12px 0 0;font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#e8eef4;">${escapeHtml(brandName)}</p>
-                      ${contextHtml}
-                    </td>
-                    <td align="right" valign="top">
-                      <span style="display:inline-block;background:${theme.accent};color:#ecfdf8;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(theme.label)}</span>
+                    <td style="height:4px;background:linear-gradient(90deg,${BRAND.gold} 0%,#e8d48a 50%,${BRAND.gold} 100%);font-size:0;line-height:0;">&nbsp;</td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding:26px 28px 24px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td valign="middle">
+                            <table role="presentation" cellpadding="0" cellspacing="0">
+                              <tr>
+                                <td style="width:42px;height:42px;border-radius:14px;background:${BRAND.gold};color:${BRAND.foreground};font-family:'Syne','Avenir Next',Arial,sans-serif;font-weight:800;font-size:15px;line-height:42px;text-align:center;">${escapeHtml(mark)}</td>
+                                <td style="padding-left:14px;">
+                                  <p style="margin:0;font-family:'Syne','Avenir Next',Arial,sans-serif;font-size:20px;font-weight:700;letter-spacing:-0.03em;color:#f5f5f4;">${escapeHtml(brandName)}</p>
+                                  <p style="margin:4px 0 0;font-size:12px;color:${BRAND.headerMuted};letter-spacing:.02em;">${escapeHtml(BRAND.tagline)}</p>
+                                </td>
+                              </tr>
+                            </table>
+                            ${contextHtml}
+                          </td>
+                          <td align="right" valign="top" style="padding-left:12px;">
+                            <span style="display:inline-block;background:rgba(201,162,39,0.16);color:${BRAND.gold};border:1px solid rgba(201,162,39,0.35);border-radius:999px;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;">${escapeHtml(theme.label)}</span>
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
             <tr>
-              <td style="height:4px;background:${theme.accent};font-size:0;line-height:0;">&nbsp;</td>
-            </tr>
-            <tr>
-              <td style="padding:24px 24px 8px;">
-                <h1 style="margin:0;font-size:22px;line-height:1.3;letter-spacing:-0.02em;color:${BRAND.foreground};font-weight:700;">${escapeHtml(input.title)}</h1>
+              <td style="padding:30px 28px 10px;">
+                <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${BRAND.gold};">${escapeHtml(theme.label)}</p>
+                <h1 style="margin:0;font-family:'Syne','Avenir Next',Arial,sans-serif;font-size:26px;line-height:1.25;letter-spacing:-0.03em;color:${BRAND.foreground};font-weight:700;">${escapeHtml(input.title)}</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:8px 24px 28px;">
+              <td style="padding:14px 28px 32px;">
                 ${bodyHtml}
+                ${highlightHtml}
                 ${listHtml}
                 ${detailsHtml}
                 ${buttonHtml}
-                <p style="margin:28px 0 0;padding-top:16px;border-top:1px solid ${BRAND.border};font-size:12px;line-height:1.5;color:${BRAND.muted};">${escapeHtml(footer)}</p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+                  <tr>
+                    <td style="padding-top:18px;border-top:1px solid ${BRAND.border};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+                      ${escapeHtml(footer)}
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
-          <p style="margin:16px 0 0;font-size:11px;color:${BRAND.muted};">&copy; ${new Date().getFullYear()} ${escapeHtml(brandName)}</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin-top:18px;">
+            <tr>
+              <td align="center" style="padding:0 8px;">
+                <p style="margin:0;font-family:'Syne','Avenir Next',Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:-0.02em;color:${BRAND.foreground};">${escapeHtml(brandName)}</p>
+                <p style="margin:6px 0 0;font-size:11px;line-height:1.5;color:${BRAND.muted};">${escapeHtml(BRAND.product)} · ${escapeHtml(BRAND.tagline)}</p>
+                <p style="margin:10px 0 0;font-size:11px;color:${BRAND.muted};">&copy; ${new Date().getFullYear()} ${escapeHtml(brandName)}. All rights reserved.</p>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
     </table>
@@ -301,26 +383,27 @@ export function renderInvitationEmail(input: {
     input.expiresAt instanceof Date
       ? input.expiresAt
       : new Date(input.expiresAt);
-  const label = input.kind === 'company' ? 'company' : 'vendor';
+  const roleLabel = roleDisplayLabel(input.kind);
+  const brandName = input.brandName?.trim() || BRAND.name;
   const rendered = renderBrandedEmail({
     kind: 'invitation',
     audience: input.kind,
-    brandName: input.brandName,
+    brandName,
     contextName: input.organizationName,
     title: `You're invited to join ${input.organizationName}`,
     body: [
       `Hello,`,
       ``,
-      `You have been invited to register as a ${label} on ${input.brandName?.trim() || BRAND.name}.`,
+      `You have been invited to register as a ${roleLabel.toLowerCase()} on ${brandName}.`,
       input.formAttached
-        ? `After you open the link, you can complete your profile form and submit it for review.`
+        ? `Open the link below to complete your profile form and submit it for review.`
         : `Use the button below to create your account and get started.`,
     ].join('\n'),
     actionUrl: input.registrationUrl,
     actionLabel: 'Accept invitation',
     details: [
       { label: 'Organization', value: input.organizationName },
-      { label: 'Role', value: input.kind === 'company' ? 'Company' : 'Vendor' },
+      { label: 'Role', value: roleLabel },
       {
         label: 'Expires',
         value: expires.toUTCString(),
@@ -461,8 +544,8 @@ export function renderMeetingEmail(input: {
     actionUrl: input.portalUrl,
     actionLabel: 'View meetings',
     details: [
-      { label: 'Company', value: input.companyName },
-      { label: 'Vendor', value: input.vendorName },
+      { label: 'Client', value: input.companyName },
+      { label: 'Guest', value: input.vendorName },
       { label: 'Starts', value: formatMeetingWhen(input.startsAt) },
       { label: 'Ends', value: formatMeetingWhen(input.endsAt) },
       { label: 'Duration', value: `${input.durationMinutes} minutes` },
@@ -494,16 +577,13 @@ export function renderRegistrationOtpEmail(input: {
     body: [
       `Hello,`,
       ``,
-      `Use this one-time code to continue your event registration.`,
-      ``,
-      `Code: ${input.otp}`,
-      ``,
-      `This code expires in ${minutes} minutes.`,
+      `Use this one-time code to continue your event registration. Enter it on the verification step to keep going.`,
     ].join('\n'),
-    details: [
-      { label: 'Verification code', value: input.otp },
-      { label: 'Expires in', value: `${minutes} minutes` },
-    ],
+    highlightCode: {
+      value: input.otp,
+      caption: 'Your verification code',
+    },
+    details: [{ label: 'Expires in', value: `${minutes} minutes` }],
     footerNote:
       'If you did not start a registration, you can ignore this email.',
   });

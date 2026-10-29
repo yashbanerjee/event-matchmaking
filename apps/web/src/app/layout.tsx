@@ -70,10 +70,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${display.variable}`} style={fontVars}>
         <Providers>
-          <div className="flex min-h-screen flex-col">
-            <div className="flex-1">{children}</div>
-            <DemoFooter />
-          </div>
+          {children}
+          <DemoFooter />
           <PwaRegister />
         </Providers>
       </body>
