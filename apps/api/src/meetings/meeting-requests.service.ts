@@ -29,9 +29,24 @@ export class MeetingRequestsService {
     return actor.organizationIds ?? [];
   }
 
+  private isPlatformAdmin(actor: AuthUser) {
+    return (actor.roles ?? []).some((role) =>
+      ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role),
+    );
+  }
+
   private assertMember(actor: AuthUser, orgId: string) {
+    if (this.isPlatformAdmin(actor)) return;
     if (!this.actorOrgIds(actor).includes(orgId)) {
       throw new ForbiddenException('Not a member of this organization');
+    }
+  }
+
+  private assertPartyOrAdmin(actor: AuthUser, fromOrgId: string, toOrgId: string) {
+    if (this.isPlatformAdmin(actor)) return;
+    const orgIds = this.actorOrgIds(actor);
+    if (!orgIds.includes(fromOrgId) && !orgIds.includes(toOrgId)) {
+      throw new ForbiddenException();
     }
   }
 
@@ -270,13 +285,7 @@ export class MeetingRequestsService {
 
   async decline(actor: AuthUser, id: string, reason?: string) {
     const request = await this.getRequestOrThrow(id);
-    const orgIds = this.actorOrgIds(actor);
-    if (
-      !orgIds.includes(request.toOrgId) &&
-      !orgIds.includes(request.fromOrgId)
-    ) {
-      throw new ForbiddenException();
-    }
+    this.assertPartyOrAdmin(actor, request.fromOrgId, request.toOrgId);
     if (['SCHEDULED', 'DECLINED', 'CANCELLED'].includes(request.status)) {
       throw new BadRequestException('Request can no longer be declined');
     }
@@ -303,13 +312,8 @@ export class MeetingRequestsService {
   ) {
     const request = await this.getRequestOrThrow(id);
     // Either side can propose after interest is accepted.
+    this.assertPartyOrAdmin(actor, request.fromOrgId, request.toOrgId);
     const orgIds = this.actorOrgIds(actor);
-    if (
-      !orgIds.includes(request.fromOrgId) &&
-      !orgIds.includes(request.toOrgId)
-    ) {
-      throw new ForbiddenException();
-    }
     if (request.status !== 'INTEREST_ACCEPTED') {
       throw new BadRequestException(
         'Accept the meeting interest before proposing a time and place',
@@ -338,9 +342,11 @@ export class MeetingRequestsService {
       endsAt,
     });
 
-    const proposedByOrgId = orgIds.includes(request.fromOrgId)
+    const proposedByOrgId = this.isPlatformAdmin(actor)
       ? request.fromOrgId
-      : request.toOrgId;
+      : orgIds.includes(request.fromOrgId)
+        ? request.fromOrgId
+        : request.toOrgId;
 
     const updated = await this.prisma.meetingRequest.update({
       where: { id },
@@ -362,14 +368,15 @@ export class MeetingRequestsService {
 
   async confirmSchedule(actor: AuthUser, id: string) {
     const request = await this.getRequestOrThrow(id);
+    this.assertPartyOrAdmin(actor, request.fromOrgId, request.toOrgId);
     const orgIds = this.actorOrgIds(actor);
-    if (
-      !orgIds.includes(request.fromOrgId) &&
-      !orgIds.includes(request.toOrgId)
-    ) {
-      throw new ForbiddenException();
-    }
-    if (request.status !== 'AWAITING_CONFIRMATION') {
+    const canConfirmScheduledStatus =
+      request.status === 'AWAITING_CONFIRMATION' ||
+      (request.status === 'INTEREST_ACCEPTED' &&
+        Boolean(request.proposedStartsAt) &&
+        Boolean(request.proposedEndsAt) &&
+        Boolean(request.placeId));
+    if (!canConfirmScheduledStatus) {
       throw new BadRequestException('Nothing to confirm');
     }
     if (!request.proposedStartsAt || !request.proposedEndsAt || !request.placeId) {
@@ -381,7 +388,10 @@ export class MeetingRequestsService {
       (orgIds.includes(request.fromOrgId) ? request.toOrgId : request.fromOrgId);
     const confirmerOrgId =
       proposerOrgId === request.fromOrgId ? request.toOrgId : request.fromOrgId;
-    if (!orgIds.includes(confirmerOrgId)) {
+    if (
+      !this.isPlatformAdmin(actor) &&
+      !orgIds.includes(confirmerOrgId)
+    ) {
       throw new ForbiddenException(
         'Only the other party can confirm this schedule proposal',
       );

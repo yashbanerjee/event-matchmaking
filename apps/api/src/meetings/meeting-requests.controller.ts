@@ -52,7 +52,7 @@ export class MeetingRequestsController {
   ) {
     return this.recommendationsService.forActor(
       user,
-      limit ? Number(limit) : 12,
+      limit ? Number(limit) : 10,
     );
   }
 

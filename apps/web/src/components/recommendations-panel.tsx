@@ -113,7 +113,7 @@ export function RecommendationsPanel({
         items: Recommendation[];
         featured: Recommendation[];
         perspective: 'COMPANY' | 'VENDOR' | null;
-      }>('/recommendations?limit=8', {
+      }>('/recommendations?limit=10', {
         token: getAccessToken(),
       }),
   });

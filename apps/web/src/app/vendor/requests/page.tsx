@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -12,18 +13,30 @@ export default function VendorRequestsPage() {
     queryFn: () =>
       apiFetch<{
         email: string;
+        roles: string[];
         organizationIds: string[];
       }>('/auth/me', { token: getAccessToken() }),
   });
+
+  const isAdmin = useMemo(
+    () =>
+      (me.data?.roles ?? []).some((role) =>
+        ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role),
+      ),
+    [me.data?.roles],
+  );
 
   return (
     <>
       <PageHeader
         eyebrow="Guest workspace"
         title="Meeting requests"
-        description="Accept interest from clients, propose a time and place, or confirm proposals sent to you."
+        description="Accept or decline requests sent to you. Confirming locks the meeting place and time."
       />
-      <MeetingRequestsPanel myOrgIds={me.data?.organizationIds ?? []} />
+      <MeetingRequestsPanel
+        myOrgIds={me.data?.organizationIds ?? []}
+        isAdmin={isAdmin}
+      />
     </>
   );
 }

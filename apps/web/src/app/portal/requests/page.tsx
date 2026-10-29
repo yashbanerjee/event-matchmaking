@@ -28,6 +28,7 @@ export default function PortalRequestsPage() {
     queryFn: () =>
       apiFetch<{
         email: string;
+        roles: string[];
         organizationIds: string[];
       }>('/auth/me', { token: getAccessToken() }),
   });
@@ -37,6 +38,10 @@ export default function PortalRequestsPage() {
     enabled: ready,
     queryFn: () => fetchOnboarding(),
   });
+
+  const isAdmin = (me.data?.roles ?? []).some((role) =>
+    ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role),
+  );
 
   if (!ready) return null;
 
@@ -48,9 +53,12 @@ export default function PortalRequestsPage() {
       <PageHeader
         eyebrow="Client / Delegate"
         title="Meeting requests"
-        description="Accept interest, pick a duration slot and free place, then wait for confirmation."
+        description="Accept or decline meeting requests. Confirming locks the meeting place and time."
       />
-      <MeetingRequestsPanel myOrgIds={me.data?.organizationIds ?? []} />
+      <MeetingRequestsPanel
+        myOrgIds={me.data?.organizationIds ?? []}
+        isAdmin={isAdmin}
+      />
     </PortalShell>
   );
 }

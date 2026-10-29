@@ -35,10 +35,16 @@ function formatPlace(place: MeetingRequest['place']) {
   return place.location ? `${place.name} · ${place.location}` : place.name;
 }
 
+function hasSchedule(req: MeetingRequest) {
+  return Boolean(req.proposedStartsAt && req.proposedEndsAt && req.place);
+}
+
 export function MeetingRequestsPanel({
   myOrgIds,
+  isAdmin = false,
 }: {
   myOrgIds: string[];
+  isAdmin?: boolean;
 }) {
   const qc = useQueryClient();
   const [scheduleFor, setScheduleFor] = useState<MeetingRequest | null>(null);
@@ -113,19 +119,35 @@ export function MeetingRequestsPanel({
     req: MeetingRequest,
     layout: 'mobile' | 'desktop',
   ) => {
-    const isRecipient = canAct.has(req.toOrgId);
-    const isParty = canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
+    const isRecipient = isAdmin || canAct.has(req.toOrgId);
+    const isParty =
+      isAdmin || canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
     const proposer = req.proposedByOrgId;
     const isOpponentConfirmer =
-      proposer &&
-      ((proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
-        (proposer === req.toOrgId && canAct.has(req.fromOrgId)));
+      isAdmin ||
+      (proposer
+        ? (proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
+          (proposer === req.toOrgId && canAct.has(req.fromOrgId))
+        : canAct.has(req.toOrgId));
     const mobile = layout === 'mobile';
     const full = mobile ? 'flex-1' : undefined;
     const busy =
       (accept.isPending && accept.variables === req.id) ||
       (decline.isPending && decline.variables === req.id) ||
       (confirm.isPending && confirm.variables === req.id);
+
+    const declineBtn = (
+      <Button
+        size="sm"
+        variant="outline"
+        className={full}
+        loading={decline.isPending && decline.variables === req.id}
+        disabled={busy}
+        onClick={() => decline.mutate(req.id)}
+      >
+        Decline
+      </Button>
+    );
 
     if (req.status === 'PENDING' && isRecipient) {
       return (
@@ -139,36 +161,16 @@ export function MeetingRequestsPanel({
           >
             Accept
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className={full}
-            loading={decline.isPending && decline.variables === req.id}
-            disabled={busy}
-            onClick={() => decline.mutate(req.id)}
-          >
-            Decline
-          </Button>
+          {declineBtn}
         </>
       );
     }
 
-    if (req.status === 'INTEREST_ACCEPTED' && isParty) {
-      return (
-        <Button
-          size="sm"
-          className={mobile ? 'w-full' : undefined}
-          onClick={() => {
-            setScheduleError(null);
-            setScheduleFor(req);
-          }}
-        >
-          Pick time & place
-        </Button>
-      );
-    }
+    const awaitingConfirm =
+      req.status === 'AWAITING_CONFIRMATION' ||
+      (req.status === 'INTEREST_ACCEPTED' && hasSchedule(req));
 
-    if (req.status === 'AWAITING_CONFIRMATION' && isOpponentConfirmer) {
+    if (awaitingConfirm && isOpponentConfirmer) {
       return (
         <>
           <Button
@@ -178,20 +180,39 @@ export function MeetingRequestsPanel({
             disabled={busy}
             onClick={() => confirm.mutate(req.id)}
           >
-            Confirm
+            Accept
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className={full}
-            loading={decline.isPending && decline.variables === req.id}
-            disabled={busy}
-            onClick={() => decline.mutate(req.id)}
-          >
-            Decline
-          </Button>
+          {declineBtn}
         </>
       );
+    }
+
+    if (req.status === 'INTEREST_ACCEPTED' && !hasSchedule(req) && isParty) {
+      return (
+        <>
+          <Button
+            size="sm"
+            className={full}
+            onClick={() => {
+              setScheduleError(null);
+              setScheduleFor(req);
+            }}
+          >
+            Pick time & place
+          </Button>
+          {isRecipient || isAdmin ? declineBtn : null}
+        </>
+      );
+    }
+
+    // Proposer (or either party) can still decline while waiting.
+    if (
+      ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
+        req.status,
+      ) &&
+      isParty
+    ) {
+      return declineBtn;
     }
 
     return null;
@@ -205,8 +226,8 @@ export function MeetingRequestsPanel({
             Meeting requests
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-            Every request includes a free time slot and meeting place. Confirm
-            to lock the booking.
+            Accept or decline incoming requests. Confirming locks the meeting
+            place and time.
           </p>
         </div>
 
@@ -228,6 +249,7 @@ export function MeetingRequestsPanel({
                   ? 'Outgoing'
                   : 'Incoming';
                 const placeLabel = formatPlace(req.place);
+                const actions = renderActions(req, 'mobile');
 
                 return (
                   <div
@@ -267,17 +289,15 @@ export function MeetingRequestsPanel({
                       {placeLabel ? (
                         <p className="flex items-start gap-1.5 font-medium text-[var(--foreground)]">
                           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                          <span>
-                            Meeting place: {placeLabel}
-                          </span>
+                          <span>Meeting place: {placeLabel}</span>
                         </p>
                       ) : (
                         <p>Meeting place not selected yet</p>
                       )}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {renderActions(req, 'mobile')}
-                    </div>
+                    {actions ? (
+                      <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -292,7 +312,7 @@ export function MeetingRequestsPanel({
                     <TH>Status</TH>
                     <TH>When</TH>
                     <TH>Meeting place</TH>
-                    <TH />
+                    <TH className="text-right">Actions</TH>
                   </TR>
                 </THead>
                 <TBody>

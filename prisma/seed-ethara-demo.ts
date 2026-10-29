@@ -340,6 +340,77 @@ const GUESTS: DemoGuest[] = [
   },
 ];
 
+/** Extra verified accounts so each side can see up to 10 category recommendations. */
+const EXTRA_CATEGORY_SETS: string[][] = [
+  ['concerts', 'arts-culture'],
+  ['sports', 'festivals'],
+  ['family', 'gaming'],
+  ['concerts', 'festivals'],
+  ['sports', 'gaming'],
+  ['arts-culture', 'family'],
+  ['festivals', 'concerts'],
+];
+
+const EXTRA_CAPABILITY_SETS: string[][] = [
+  ['live-production', 'artist-liaison', 'vip-hospitality'],
+  ['sports-ops', 'sponsorship', 'broadcast'],
+  ['family-programming', 'ticketing', 'security-crowd'],
+  ['festival-ops', 'live-production', 'sponsorship'],
+  ['broadcast', 'vip-hospitality', 'ticketing'],
+  ['artist-liaison', 'family-programming', 'security-crowd'],
+  ['sports-ops', 'festival-ops', 'live-production'],
+];
+
+const EXTRA_REGION_SETS: string[][] = [
+  ['etihad-arena', 'abu-dhabi'],
+  ['yas-marina-circuit', 'etihad-live'],
+  ['coca-cola-arena', 'abu-dhabi'],
+  ['etihad-live', 'yas-gateway-park'],
+  ['space42-arena', 'abu-dhabi'],
+  ['yas-conference-centre', 'abu-dhabi'],
+  ['manarat-al-saadiyat', 'abu-dhabi'],
+];
+
+for (let i = 0; i < EXTRA_CATEGORY_SETS.length; i += 1) {
+  const n = i + 4;
+  const cats = EXTRA_CATEGORY_SETS[i]!;
+  const caps = EXTRA_CAPABILITY_SETS[i]!;
+  const regions = EXTRA_REGION_SETS[i]!;
+  CLIENTS.push({
+    code: `ETHCLI${String(n).padStart(2, '0')}`,
+    name: `Ethara Client ${n}`,
+    email: `client${n}@ethara-sample.ae`,
+    firstName: 'Client',
+    lastName: `${n}`,
+    industry: 'Event partnerships',
+    website: `https://www.ethara-sample.ae/client-${n}`,
+    preferredCategories: cats,
+    requiredCapabilities: caps,
+    regions,
+    commercialTags: ['corporate', 'b2b'],
+    featured: false,
+    about: `Demo client ${n} for category matchmaking (up to 10 recommendations).`,
+    focusEvents: `Category demo focus: ${cats.join(', ')}`,
+  });
+  GUESTS.push({
+    code: `ETHGST${String(n).padStart(2, '0')}`,
+    name: `Ethara Guest ${n}`,
+    displayName: `Ethara Guest ${n}`,
+    email: `guest${n}@ethara-sample.ae`,
+    firstName: 'Guest',
+    lastName: `${n}`,
+    industry: 'Event services',
+    website: `https://www.ethara-sample.ae/guest-${n}`,
+    categories: cats,
+    capabilities: caps,
+    operatingRegions: regions,
+    commercialTags: ['corporate', 'b2b'],
+    featured: false,
+    about: `Demo guest ${n} for category matchmaking (up to 10 recommendations).`,
+    focusEvents: `Category demo focus: ${cats.join(', ')}`,
+  });
+}
+
 function field(
   sectionId: string,
   order: number,
@@ -1351,14 +1422,14 @@ Ethara sample accounts ready (aligned with https://www.ethara.com/en/events)
 
 Password for all sample users: ${SAMPLE_PASSWORD}
 
-Clients:
-  1) ${CLIENTS[0]!.email}  — ${CLIENTS[0]!.name}
-  2) ${CLIENTS[1]!.email}  — ${CLIENTS[1]!.name}
-  3) ${CLIENTS[2]!.email}  — ${CLIENTS[2]!.name}
+Full-flow pair (strong category match — concerts / arts-culture):
+  Client: ${CLIENTS[0]!.email}  /  ${SAMPLE_PASSWORD}
+  Guest:  ${GUESTS[0]!.email}  /  ${SAMPLE_PASSWORD}
 
-Guests:
-  1) ${GUESTS[0]!.email}  — ${GUESTS[0]!.name}
-  2) ${GUESTS[1]!.email}  — ${GUESTS[1]!.name}
-  3) ${GUESTS[2]!.email}  — ${GUESTS[2]!.name}
+Clients (${CLIENTS.length} total, recommendations capped at 10):
+${CLIENTS.map((c, i) => `  ${i + 1}) ${c.email}  — ${c.name}`).join('\n')}
+
+Guests (${GUESTS.length} total, recommendations capped at 10):
+${GUESTS.map((g, i) => `  ${i + 1}) ${g.email}  — ${g.name}`).join('\n')}
 `);
 }

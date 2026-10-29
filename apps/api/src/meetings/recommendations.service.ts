@@ -25,7 +25,8 @@ export class RecommendationsService {
     private readonly filters: FiltersService,
   ) {}
 
-  async forActor(actor: AuthUser, limit = 12) {
+  async forActor(actor: AuthUser, limit = 10) {
+    const max = Math.min(Math.max(Number(limit) || 10, 1), 10);
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) return { items: [], featured: [], perspective: null };
 
@@ -82,11 +83,10 @@ export class RecommendationsService {
           return b.score - a.score;
         });
 
-      const featured = scored.filter((item) => item.featured).slice(0, limit);
-      const items = scored
-        .filter((item) => !item.featured)
-        .slice(0, limit);
-      return { items, featured, perspective: 'COMPANY' as const };
+      return {
+        ...this.splitRecommendations(scored, max),
+        perspective: 'COMPANY' as const,
+      };
     }
 
     if (vendorOrg?.vendor) {
@@ -131,14 +131,23 @@ export class RecommendationsService {
           return b.score - a.score;
         });
 
-      const featured = scored.filter((item) => item.featured).slice(0, limit);
-      const items = scored
-        .filter((item) => !item.featured)
-        .slice(0, limit);
-      return { items, featured, perspective: 'VENDOR' as const };
+      return {
+        ...this.splitRecommendations(scored, max),
+        perspective: 'VENDOR' as const,
+      };
     }
 
     return { items: [], featured: [], perspective: null };
+  }
+
+  /** Featured first, then category matches — hard cap of `max` total (default 10). */
+  private splitRecommendations(scored: RecommendationItem[], max: number) {
+    const featured = scored.filter((item) => item.featured).slice(0, max);
+    const remaining = Math.max(0, max - featured.length);
+    const items = scored
+      .filter((item) => !item.featured)
+      .slice(0, remaining);
+    return { items, featured };
   }
 
   private logoOf(customAttrs: unknown): string | null {
