@@ -773,6 +773,37 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     update: {},
   });
 
+  // Meeting booking period (clients/guests can only schedule inside this range)
+  const windowStart = new Date();
+  windowStart.setUTCHours(0, 0, 0, 0);
+  const windowEnd = new Date(windowStart);
+  windowEnd.setUTCDate(windowEnd.getUTCDate() + 90);
+  const toYmd = (d: Date) => d.toISOString().slice(0, 10);
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.meetingWindowStart' },
+    create: {
+      key: 'ops.meetingWindowStart',
+      value: { value: toYmd(windowStart) },
+    },
+    update: { value: { value: toYmd(windowStart) } },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.meetingWindowEnd' },
+    create: {
+      key: 'ops.meetingWindowEnd',
+      value: { value: toYmd(windowEnd) },
+    },
+    update: { value: { value: toYmd(windowEnd) } },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.meetingDurationMinutes' },
+    create: {
+      key: 'ops.meetingDurationMinutes',
+      value: { value: 15 },
+    },
+    update: {},
+  });
+
   // ── Cleanup previous sample orgs (current + legacy) ──────────────────────
   const sampleCodes = [
     ...CLIENTS.map((c) => c.code),

@@ -72,6 +72,9 @@ export const envSchema = z.object({
     .string()
     .transform((v) => v === 'true')
     .default('false'),
+  MEETING_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
+  MEETING_WINDOW_START: z.string().optional().default(''),
+  MEETING_WINDOW_END: z.string().optional().default(''),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   RPO_HOURS: z.coerce.number().positive().default(24),
   RTO_HOURS: z.coerce.number().positive().default(4),

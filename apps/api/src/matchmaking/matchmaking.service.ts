@@ -728,6 +728,10 @@ export class MatchmakingService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
+    if (input.startsAt) {
+      const bookingWindow = await this.config.getMeetingBookingWindow();
+      this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
+    }
     const endsAt = new Date(
       startsAt.getTime() + meeting.durationMinutes * 60_000,
     );
@@ -969,6 +973,8 @@ export class MatchmakingService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
+    const bookingWindow = await this.config.getMeetingBookingWindow();
+    this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
 
     const durationMinutes =
       input.durationMinutes && input.durationMinutes > 0

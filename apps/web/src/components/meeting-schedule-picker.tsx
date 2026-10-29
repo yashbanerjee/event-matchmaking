@@ -24,6 +24,8 @@ export function MeetingSchedulePicker({
   description,
   counterpartName,
   requestId,
+  fromOrgId,
+  toOrgId,
   submitting,
   error,
   onClose,
@@ -35,6 +37,9 @@ export function MeetingSchedulePicker({
   counterpartName?: string;
   /** When proposing on an existing request, pass its id for slot filtering. */
   requestId?: string | null;
+  /** Both org ids — required for mutual free-slot calculation on new requests. */
+  fromOrgId?: string | null;
+  toOrgId?: string | null;
   submitting?: boolean;
   error?: string | null;
   onClose: () => void;
@@ -50,27 +55,64 @@ export function MeetingSchedulePicker({
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [step, setStep] = useState<'slot' | 'place'>('slot');
 
+  const today = new Date().toISOString().slice(0, 10);
+  const canQuerySlots = Boolean(requestId || (fromOrgId && toOrgId));
+
+  const bookingWindow = useQuery({
+    queryKey: ['meeting-booking-window'],
+    enabled: open,
+    queryFn: () =>
+      apiFetch<{
+        start: string | null;
+        end: string | null;
+        durationMinutes: number;
+      }>('/meeting-requests/booking-window', { token: getAccessToken() }),
+  });
+
+  const minDate =
+    bookingWindow.data?.start && bookingWindow.data.start > today
+      ? bookingWindow.data.start
+      : today;
+  const maxDate = bookingWindow.data?.end ?? undefined;
+
   const slots = useQuery({
-    queryKey: ['meeting-slots', requestId, date],
-    enabled: open && Boolean(date) && step === 'slot',
+    queryKey: ['meeting-slots', requestId, fromOrgId, toOrgId, date],
+    enabled: open && Boolean(date) && step === 'slot' && canQuerySlots,
     queryFn: () => {
       const params = new URLSearchParams({ date });
       if (requestId) params.set('requestId', requestId);
-      return apiFetch<{ durationMinutes: number; slots: ScheduleSlot[] }>(
-        `/meeting-requests/slots?${params.toString()}`,
-        { token: getAccessToken() },
-      );
+      if (fromOrgId) params.set('fromOrgId', fromOrgId);
+      if (toOrgId) params.set('toOrgId', toOrgId);
+      return apiFetch<{
+        durationMinutes: number;
+        slots: ScheduleSlot[];
+        windowStart?: string | null;
+        windowEnd?: string | null;
+      }>(`/meeting-requests/slots?${params.toString()}`, {
+        token: getAccessToken(),
+      });
     },
   });
 
   const places = useQuery({
-    queryKey: ['places-available', selectedSlot?.startsAt, selectedSlot?.endsAt],
+    queryKey: [
+      'places-available',
+      selectedSlot?.startsAt,
+      selectedSlot?.endsAt,
+      requestId,
+    ],
     enabled: open && Boolean(selectedSlot) && step === 'place',
-    queryFn: () =>
-      apiFetch<SchedulePlace[]>(
-        `/places/available?startsAt=${encodeURIComponent(selectedSlot!.startsAt)}&endsAt=${encodeURIComponent(selectedSlot!.endsAt)}`,
+    queryFn: () => {
+      const params = new URLSearchParams({
+        startsAt: selectedSlot!.startsAt,
+        endsAt: selectedSlot!.endsAt,
+      });
+      if (requestId) params.set('excludeRequestId', requestId);
+      return apiFetch<SchedulePlace[]>(
+        `/places/available?${params.toString()}`,
         { token: getAccessToken() },
-      ),
+      );
+    },
   });
 
   const reset = () => {
@@ -95,8 +137,8 @@ export function MeetingSchedulePicker({
       description={
         description ||
         (counterpartName
-          ? `Choose a free time and meeting place with ${counterpartName}.`
-          : 'Choose a free time and an available meeting place.')
+          ? `Only times when both you and ${counterpartName} are free are shown, then only free meeting places.`
+          : 'Only mutual free times and free meeting places are shown.')
       }
       onClose={close}
       wide
@@ -133,20 +175,43 @@ export function MeetingSchedulePicker({
     >
       {step === 'slot' ? (
         <div className="space-y-4">
+          {bookingWindow.data?.start || bookingWindow.data?.end ? (
+            <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-xs text-[var(--muted)]">
+              Booking period
+              {bookingWindow.data.start
+                ? ` from ${bookingWindow.data.start}`
+                : ''}
+              {bookingWindow.data.end ? ` through ${bookingWindow.data.end}` : ''}
+              .
+            </p>
+          ) : null}
           <div>
             <label className="mb-1.5 block text-sm font-medium">Date</label>
             <Input
               type="date"
               value={date}
-              min={new Date().toISOString().slice(0, 10)}
+              min={minDate}
+              max={maxDate}
               onChange={(e) => {
                 setDate(e.target.value);
                 setSelectedSlot(null);
               }}
             />
           </div>
-          {date && slots.isLoading ? (
-            <p className="text-sm text-[var(--muted)]">Loading free slots…</p>
+          {!canQuerySlots ? (
+            <p className="text-sm text-rose-700">
+              Missing organizations for mutual availability.
+            </p>
+          ) : null}
+          {date && canQuerySlots && slots.isLoading ? (
+            <p className="text-sm text-[var(--muted)]">
+              Loading times when both parties are free…
+            </p>
+          ) : null}
+          {date && slots.error ? (
+            <p className="text-sm text-rose-700">
+              {(slots.error as Error).message}
+            </p>
           ) : null}
           {date && slots.data ? (
             <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
@@ -169,14 +234,19 @@ export function MeetingSchedulePicker({
               ))}
               {slots.data.slots.length === 0 ? (
                 <p className="col-span-full text-sm text-[var(--muted)]">
-                  No free slots on this day.
+                  No mutual free slots on this day (both parties free with a
+                  free place).
                 </p>
               ) : null}
             </div>
           ) : null}
-          {slots.data?.durationMinutes ? (
+          {slots.data?.durationMinutes ||
+          bookingWindow.data?.durationMinutes ? (
             <p className="text-xs text-[var(--muted)]">
-              Each slot is {slots.data.durationMinutes} minutes.
+              Each slot is{' '}
+              {slots.data?.durationMinutes ??
+                bookingWindow.data?.durationMinutes}{' '}
+              minutes.
             </p>
           ) : null}
         </div>
@@ -191,8 +261,8 @@ export function MeetingSchedulePicker({
             </p>
           </div>
           <p className="text-sm text-[var(--muted)]">
-            Only places that are free for this slot are shown. Pick one meeting
-            place to continue.
+            Places already booked or held by another open request are hidden.
+            Declined requests free the place again.
           </p>
           {places.isLoading ? (
             <p className="text-sm text-[var(--muted)]">Loading free places…</p>

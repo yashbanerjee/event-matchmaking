@@ -214,6 +214,8 @@ export function RecommendationsPanel({
         open={Boolean(target)}
         title={`Request meeting${target ? ` · ${target.name}` : ''}`}
         counterpartName={target?.name}
+        fromOrgId={fromOrgId}
+        toOrgId={target?.organizationId}
         submitting={request.isPending}
         error={error}
         onClose={() => {

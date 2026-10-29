@@ -40,8 +40,11 @@ export class PlacesController {
   available(
     @Query('startsAt') startsAt: string,
     @Query('endsAt') endsAt: string,
+    @Query('excludeRequestId') excludeRequestId?: string,
   ) {
-    return this.places.available(new Date(startsAt), new Date(endsAt));
+    return this.places.available(new Date(startsAt), new Date(endsAt), {
+      excludeRequestId: excludeRequestId || undefined,
+    });
   }
 
   @Post()

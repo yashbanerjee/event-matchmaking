@@ -145,8 +145,15 @@ export class PlacesService {
     return { id, deleted: true as const };
   }
 
-  /** Places free for the given window (no overlapping non-cancelled meeting). */
-  async available(startsAt: Date, endsAt: Date) {
+  /**
+   * Places free for the given window — excludes booked meetings and open
+   * request holds. Declined / cancelled requests do not occupy a place.
+   */
+  async available(
+    startsAt: Date,
+    endsAt: Date,
+    options?: { excludeRequestId?: string },
+  ) {
     if (!(startsAt instanceof Date) || Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
@@ -172,13 +179,16 @@ export class PlacesService {
       select: { placeId: true },
     });
 
-    // Also reserve places held by proposed (not-yet-confirmed) meeting requests.
+    // Reserve places held by open proposals (not declined/cancelled/scheduled).
     const busyProposals = await this.prisma.meetingRequest.findMany({
       where: {
         placeId: { not: null },
-        status: 'AWAITING_CONFIRMATION',
-        proposedStartsAt: { lt: endsAt },
-        proposedEndsAt: { gt: startsAt },
+        status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
+        proposedStartsAt: { not: null, lt: endsAt },
+        proposedEndsAt: { not: null, gt: startsAt },
+        ...(options?.excludeRequestId
+          ? { id: { not: options.excludeRequestId } }
+          : {}),
       },
       select: { placeId: true },
     });

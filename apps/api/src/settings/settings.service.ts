@@ -143,6 +143,19 @@ export class SettingsService {
     actor: AuthUser,
     values: Array<{ key: string; value: unknown }>,
   ) {
+    const byKey = new Map(values.map((item) => [item.key, item.value]));
+    const start = String(byKey.get('ops.meetingWindowStart') ?? '').trim();
+    const end = String(byKey.get('ops.meetingWindowEnd') ?? '').trim();
+    if (
+      /^\d{4}-\d{2}-\d{2}$/.test(start) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(end) &&
+      start > end
+    ) {
+      throw new BadRequestException(
+        'Meeting period start must be on or before the end date',
+      );
+    }
+
     const results = [];
     for (const item of values) {
       results.push(await this.upsertSetting(actor, item.key, item.value));
@@ -191,6 +204,12 @@ export class SettingsService {
     }
     if (type === 'select' && options && !options.includes(String(value))) {
       throw new BadRequestException(`Value must be one of: ${options.join(', ')}`);
+    }
+    if (type === 'date') {
+      const text = value == null ? '' : String(value).trim();
+      if (text && !/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        throw new BadRequestException('Date must be YYYY-MM-DD');
+      }
     }
   }
 }

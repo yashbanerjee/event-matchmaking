@@ -367,6 +367,8 @@ export function MeetingRequestsPanel({
             : undefined
         }
         requestId={scheduleFor?.id}
+        fromOrgId={scheduleFor?.fromOrgId}
+        toOrgId={scheduleFor?.toOrgId}
         submitting={propose.isPending}
         error={scheduleError}
         onClose={() => {

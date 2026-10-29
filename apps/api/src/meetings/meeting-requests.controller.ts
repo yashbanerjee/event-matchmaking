@@ -35,13 +35,25 @@ export class MeetingRequestsController {
     return this.requests.listForUser(user);
   }
 
+  @Get('meeting-requests/booking-window')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  bookingWindow() {
+    return this.requests.bookingWindow();
+  }
+
   @Get('meeting-requests/slots')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   slots(
     @Query('date') date: string,
     @Query('requestId') requestId?: string,
+    @Query('fromOrgId') fromOrgId?: string,
+    @Query('toOrgId') toOrgId?: string,
   ) {
-    return this.requests.availableSlots(date, requestId);
+    return this.requests.availableSlots(date, {
+      requestId,
+      fromOrgId,
+      toOrgId,
+    });
   }
 
   @Get('recommendations')

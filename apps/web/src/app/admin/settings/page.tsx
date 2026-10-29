@@ -15,7 +15,7 @@ type Field = {
   key: string;
   envKey: string;
   label: string;
-  type: 'string' | 'number' | 'boolean' | 'select' | 'secret';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'secret' | 'date';
   secret: boolean;
   options?: string[];
   envDefault: unknown;
@@ -344,26 +344,38 @@ export default function SettingsPage() {
                       ))}
                     </select>
                   ) : (
-                    <Input
-                      type={field.secret ? 'password' : field.type === 'number' ? 'number' : 'text'}
-                      placeholder={
-                        field.secret
-                          ? field.configured
-                            ? '•••• configured — enter new value to replace'
-                            : 'Not set'
-                          : String(field.envDefault ?? '')
-                      }
-                      value={String(draft[field.key] ?? '')}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          [field.key]:
-                            field.type === 'number'
-                              ? e.target.value
-                              : e.target.value,
-                        }))
-                      }
-                    />
+                    <div className="space-y-1">
+                      <Input
+                        type={
+                          field.secret
+                            ? 'password'
+                            : field.type === 'number'
+                              ? 'number'
+                              : field.type === 'date'
+                                ? 'date'
+                                : 'text'
+                        }
+                        placeholder={
+                          field.secret
+                            ? field.configured
+                              ? '•••• configured — enter new value to replace'
+                              : 'Not set'
+                            : String(field.envDefault ?? '')
+                        }
+                        value={String(draft[field.key] ?? '')}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            [field.key]: e.target.value,
+                          }))
+                        }
+                      />
+                      {field.description ? (
+                        <p className="text-xs text-[var(--muted)]">
+                          {field.description}
+                        </p>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-2 justify-end">

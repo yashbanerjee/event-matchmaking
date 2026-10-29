@@ -106,7 +106,7 @@ export class MeetingRequestsService {
     const proposalBusy = await this.prisma.meetingRequest.findFirst({
       where: {
         placeId: place.id,
-        status: 'AWAITING_CONFIRMATION',
+        status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
         ...(input.excludeRequestId
           ? { id: { not: input.excludeRequestId } }
           : {}),
@@ -127,6 +127,7 @@ export class MeetingRequestsService {
     orgIds: string[];
     startsAt: Date;
     endsAt: Date;
+    excludeRequestId?: string;
   }) {
     const partyBusy = await this.prisma.meeting.findFirst({
       where: {
@@ -142,6 +143,26 @@ export class MeetingRequestsService {
     if (partyBusy) {
       throw new BadRequestException(
         'Client or guest already has a meeting in that window',
+      );
+    }
+
+    const proposalBusy = await this.prisma.meetingRequest.findFirst({
+      where: {
+        status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
+        ...(input.excludeRequestId
+          ? { id: { not: input.excludeRequestId } }
+          : {}),
+        proposedStartsAt: { not: null, lt: input.endsAt },
+        proposedEndsAt: { not: null, gt: input.startsAt },
+        OR: [
+          { fromOrgId: { in: input.orgIds } },
+          { toOrgId: { in: input.orgIds } },
+        ],
+      },
+    });
+    if (proposalBusy) {
+      throw new BadRequestException(
+        'Client or guest already has a proposed meeting in that window',
       );
     }
   }
@@ -213,6 +234,8 @@ export class MeetingRequestsService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
+    const window = await this.config.getMeetingBookingWindow();
+    this.config.assertInstantInMeetingWindow(startsAt, window);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
     const place = await this.assertPlaceFree({
       placeId: input.placeId!,
@@ -290,11 +313,16 @@ export class MeetingRequestsService {
       throw new BadRequestException('Request can no longer be declined');
     }
 
+    // Decline frees the held place/time so others can book that slot again.
     const updated = await this.prisma.meetingRequest.update({
       where: { id },
       data: {
         status: 'DECLINED',
         declineReason: reason?.trim() || 'Declined',
+        placeId: null,
+        proposedStartsAt: null,
+        proposedEndsAt: null,
+        proposedByOrgId: null,
       },
       include: { fromOrg: true, toOrg: true, place: true },
     });
@@ -328,6 +356,8 @@ export class MeetingRequestsService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
+    const window = await this.config.getMeetingBookingWindow();
+    this.config.assertInstantInMeetingWindow(startsAt, window);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
 
     const place = await this.assertPlaceFree({
@@ -340,6 +370,7 @@ export class MeetingRequestsService {
       orgIds: [request.fromOrgId, request.toOrgId],
       startsAt,
       endsAt,
+      excludeRequestId: id,
     });
 
     const proposedByOrgId = this.isPlatformAdmin(actor)
@@ -422,6 +453,7 @@ export class MeetingRequestsService {
       orgIds: [request.fromOrgId, request.toOrgId],
       startsAt: request.proposedStartsAt,
       endsAt: request.proposedEndsAt,
+      excludeRequestId: id,
     });
 
     const meeting = await this.prisma.$transaction(async (tx) => {
@@ -482,7 +514,31 @@ export class MeetingRequestsService {
     return this.getRequestOrThrow(id);
   }
 
-  async availableSlots(date: string, requestId?: string) {
+  async bookingWindow() {
+    const window = await this.config.getMeetingBookingWindow();
+    const durationMinutes = await this.config.getNumber(
+      'ops.meetingDurationMinutes',
+      15,
+    );
+    return {
+      start: window.start,
+      end: window.end,
+      durationMinutes,
+    };
+  }
+
+  /**
+   * Free slots for a date where BOTH parties are available (no meeting and no
+   * open proposal hold), and at least one meeting place is free.
+   */
+  async availableSlots(
+    date: string,
+    options?: {
+      requestId?: string;
+      fromOrgId?: string;
+      toOrgId?: string;
+    },
+  ) {
     const duration = await this.config.getNumber(
       'ops.meetingDurationMinutes',
       15,
@@ -491,48 +547,206 @@ export class MeetingRequestsService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new BadRequestException('date must be YYYY-MM-DD');
     }
+    const window = await this.config.getMeetingBookingWindow();
+    this.config.assertDateInMeetingWindow(date, window);
     const [y, m, d] = date.split('-').map(Number) as [number, number, number];
     const dayStart = Date.UTC(y, m - 1, d, 9, 0, 0, 0);
     const dayEnd = Date.UTC(y, m - 1, d, 17, 0, 0, 0);
 
     let partyOrgIds: string[] = [];
-    if (requestId) {
-      const request = await this.getRequestOrThrow(requestId);
+    let excludeRequestId: string | undefined;
+
+    if (options?.requestId) {
+      const request = await this.getRequestOrThrow(options.requestId);
       partyOrgIds = [request.fromOrgId, request.toOrgId];
+      excludeRequestId = request.id;
+    } else if (options?.fromOrgId && options?.toOrgId) {
+      if (options.fromOrgId === options.toOrgId) {
+        throw new BadRequestException('fromOrgId and toOrgId must differ');
+      }
+      partyOrgIds = [options.fromOrgId, options.toOrgId];
     }
 
-    const busy = partyOrgIds.length
-      ? await this.prisma.meeting.findMany({
-          where: {
-            status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-            startsAt: { lt: new Date(dayEnd) },
-            endsAt: { gt: new Date(dayStart) },
-            OR: [
-              { companyOrgId: { in: partyOrgIds } },
-              { vendorOrgId: { in: partyOrgIds } },
-            ],
-          },
-          select: { startsAt: true, endsAt: true },
-        })
-      : [];
+    if (partyOrgIds.length < 2) {
+      throw new BadRequestException(
+        'Provide both organizations (fromOrgId & toOrgId) or a requestId to compute mutual free slots',
+      );
+    }
+
+    const dayStartDate = new Date(dayStart);
+    const dayEndDate = new Date(dayEnd);
+
+    const [busyMeetings, busyProposals, places] = await Promise.all([
+      this.prisma.meeting.findMany({
+        where: {
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+          startsAt: { lt: dayEndDate },
+          endsAt: { gt: dayStartDate },
+          OR: [
+            { companyOrgId: { in: partyOrgIds } },
+            { vendorOrgId: { in: partyOrgIds } },
+          ],
+        },
+        select: { startsAt: true, endsAt: true, placeId: true },
+      }),
+      this.prisma.meetingRequest.findMany({
+        where: {
+          status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
+          ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+          proposedStartsAt: { not: null, lt: dayEndDate },
+          proposedEndsAt: { not: null, gt: dayStartDate },
+          OR: [
+            { fromOrgId: { in: partyOrgIds } },
+            { toOrgId: { in: partyOrgIds } },
+          ],
+        },
+        select: {
+          proposedStartsAt: true,
+          proposedEndsAt: true,
+          placeId: true,
+        },
+      }),
+      this.prisma.place.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      }),
+    ]);
+
+    const busyIntervals: Array<{ startsAt: Date; endsAt: Date }> = [
+      ...busyMeetings.map((m) => ({
+        startsAt: m.startsAt,
+        endsAt: m.endsAt,
+      })),
+      ...busyProposals
+        .filter((p) => p.proposedStartsAt && p.proposedEndsAt)
+        .map((p) => ({
+          startsAt: p.proposedStartsAt!,
+          endsAt: p.proposedEndsAt!,
+        })),
+    ];
+
+    const placeIds = places.map((p) => p.id);
+    const busyPlaceHolds: Array<{
+      placeId: string;
+      startsAt: Date;
+      endsAt: Date;
+    }> = [
+      ...busyMeetings
+        .filter((m): m is typeof m & { placeId: string } => Boolean(m.placeId))
+        .map((m) => ({
+          placeId: m.placeId,
+          startsAt: m.startsAt,
+          endsAt: m.endsAt,
+        })),
+      ...busyProposals
+        .filter(
+          (
+            p,
+          ): p is typeof p & {
+            placeId: string;
+            proposedStartsAt: Date;
+            proposedEndsAt: Date;
+          } =>
+            Boolean(p.placeId && p.proposedStartsAt && p.proposedEndsAt),
+        )
+        .map((p) => ({
+          placeId: p.placeId,
+          startsAt: p.proposedStartsAt,
+          endsAt: p.proposedEndsAt,
+        })),
+    ];
+
+    // Also load all place bookings for the day (any party) so we know if a
+    // table/room is free even when the hold is from unrelated orgs.
+    const allPlaceBookings = await this.prisma.meeting.findMany({
+      where: {
+        placeId: { not: null },
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        startsAt: { lt: dayEndDate },
+        endsAt: { gt: dayStartDate },
+      },
+      select: { placeId: true, startsAt: true, endsAt: true },
+    });
+    const allPlaceProposals = await this.prisma.meetingRequest.findMany({
+      where: {
+        placeId: { not: null },
+        status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
+        ...(excludeRequestId ? { id: { not: excludeRequestId } } : {}),
+        proposedStartsAt: { not: null, lt: dayEndDate },
+        proposedEndsAt: { not: null, gt: dayStartDate },
+      },
+      select: {
+        placeId: true,
+        proposedStartsAt: true,
+        proposedEndsAt: true,
+      },
+    });
+
+    const placeBusyAll: Array<{
+      placeId: string;
+      startsAt: Date;
+      endsAt: Date;
+    }> = [
+      ...allPlaceBookings
+        .filter((m): m is typeof m & { placeId: string } => Boolean(m.placeId))
+        .map((m) => ({
+          placeId: m.placeId,
+          startsAt: m.startsAt,
+          endsAt: m.endsAt,
+        })),
+      ...allPlaceProposals
+        .filter(
+          (
+            p,
+          ): p is typeof p & {
+            placeId: string;
+            proposedStartsAt: Date;
+            proposedEndsAt: Date;
+          } =>
+            Boolean(p.placeId && p.proposedStartsAt && p.proposedEndsAt),
+        )
+        .map((p) => ({
+          placeId: p.placeId,
+          startsAt: p.proposedStartsAt,
+          endsAt: p.proposedEndsAt,
+        })),
+      ...busyPlaceHolds,
+    ];
 
     const slots: Array<{ startsAt: string; endsAt: string }> = [];
     let cursor = dayStart;
     while (cursor + duration * 60_000 <= dayEnd) {
       const startsAt = new Date(cursor);
       const endsAt = new Date(cursor + duration * 60_000);
-      const overlaps = busy.some(
+      const partiesBusy = busyIntervals.some(
         (m) => m.startsAt < endsAt && m.endsAt > startsAt,
       );
-      if (!overlaps) {
-        slots.push({
-          startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString(),
-        });
+      if (!partiesBusy) {
+        const freePlaceExists = placeIds.some(
+          (placeId) =>
+            !placeBusyAll.some(
+              (hold) =>
+                hold.placeId === placeId &&
+                hold.startsAt < endsAt &&
+                hold.endsAt > startsAt,
+            ),
+        );
+        if (freePlaceExists) {
+          slots.push({
+            startsAt: startsAt.toISOString(),
+            endsAt: endsAt.toISOString(),
+          });
+        }
       }
       cursor = endsAt.getTime() + buffer * 60_000;
     }
-    return { durationMinutes: duration, slots };
+    return {
+      durationMinutes: duration,
+      slots,
+      windowStart: window.start,
+      windowEnd: window.end,
+      partyOrgIds,
+    };
   }
 
   private async getRequestOrThrow(id: string) {

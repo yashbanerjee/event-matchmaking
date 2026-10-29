@@ -137,6 +137,21 @@ export default function AdminMeetingsPage() {
       ),
   });
 
+  const bookingWindow = useQuery({
+    queryKey: ['meeting-booking-window'],
+    queryFn: () =>
+      apiFetch<{ start: string | null; end: string | null }>(
+        '/meeting-requests/booking-window',
+        { token: getAccessToken() },
+      ),
+  });
+  const startsMin = bookingWindow.data?.start
+    ? `${bookingWindow.data.start}T00:00`
+    : undefined;
+  const startsMax = bookingWindow.data?.end
+    ? `${bookingWindow.data.end}T23:59`
+    : undefined;
+
   const saveMeeting = useMutation({
     mutationFn: () => {
       if (!edit) throw new Error('No meeting selected');
@@ -603,12 +618,26 @@ export default function AdminMeetingsPage() {
             <Input
               type="datetime-local"
               className="mt-1"
+              min={startsMin}
+              max={startsMax}
               value={editForm.startsAt}
               onChange={(e) =>
                 setEditForm((f) => ({ ...f, startsAt: e.target.value }))
               }
             />
           </label>
+          {bookingWindow.data?.start || bookingWindow.data?.end ? (
+            <p className="text-xs text-[var(--muted)]">
+              Allowed period
+              {bookingWindow.data.start
+                ? ` from ${bookingWindow.data.start}`
+                : ''}
+              {bookingWindow.data.end
+                ? ` through ${bookingWindow.data.end}`
+                : ''}
+              .
+            </p>
+          ) : null}
           <label className="block text-sm">
             Reason (optional)
             <Input
@@ -680,12 +709,26 @@ export default function AdminMeetingsPage() {
             <Input
               type="datetime-local"
               className="mt-1"
+              min={startsMin}
+              max={startsMax}
               value={createForm.startsAt}
               onChange={(e) =>
                 setCreateForm((f) => ({ ...f, startsAt: e.target.value }))
               }
             />
           </label>
+          {bookingWindow.data?.start || bookingWindow.data?.end ? (
+            <p className="text-xs text-[var(--muted)]">
+              Allowed period
+              {bookingWindow.data.start
+                ? ` from ${bookingWindow.data.start}`
+                : ''}
+              {bookingWindow.data.end
+                ? ` through ${bookingWindow.data.end}`
+                : ''}
+              .
+            </p>
+          ) : null}
           <label className="block text-sm">
             Duration (minutes)
             <Input

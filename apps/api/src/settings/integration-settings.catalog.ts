@@ -3,7 +3,8 @@ export type SettingFieldType =
   | 'number'
   | 'boolean'
   | 'select'
-  | 'secret';
+  | 'secret'
+  | 'date';
 
 export interface SettingFieldDef {
   key: string;
@@ -259,6 +260,24 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
       'Default length for generated matchmaking meetings (e.g. 15). Used when generating schedules.',
     group: 'ops',
     type: 'number',
+  },
+  {
+    key: 'ops.meetingWindowStart',
+    envKey: 'MEETING_WINDOW_START',
+    label: 'Meeting period start',
+    description:
+      'First date clients and guests can book meetings (YYYY-MM-DD). Leave empty for no start limit.',
+    group: 'ops',
+    type: 'date',
+  },
+  {
+    key: 'ops.meetingWindowEnd',
+    envKey: 'MEETING_WINDOW_END',
+    label: 'Meeting period end',
+    description:
+      'Last date clients and guests can book meetings (YYYY-MM-DD). Leave empty for no end limit.',
+    group: 'ops',
+    type: 'date',
   },
   {
     key: 'ops.semanticSearch',
