@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { EmptyState } from '@/components/empty-state';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
@@ -62,7 +63,7 @@ export function TagMappingsPanel() {
       }),
   });
 
-  const tagOptions = useMemo(() => {
+  const allTagOptions = useMemo(() => {
     const list: Array<{ id: string; label: string }> = [];
     for (const dim of dimensions.data ?? []) {
       for (const tag of dim.tags.filter((t) => t.isActive)) {
@@ -74,6 +75,28 @@ export function TagMappingsPanel() {
     }
     return list;
   }, [dimensions.data]);
+
+  /** Tags already used on the left (from) side of any existing link. */
+  const usedFromTagIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of mappings.data ?? []) {
+      ids.add(row.fromTag.id);
+    }
+    return ids;
+  }, [mappings.data]);
+
+  const fromTagOptions = useMemo(
+    () => allTagOptions.filter((opt) => !usedFromTagIds.has(opt.id)),
+    [allTagOptions, usedFromTagIds],
+  );
+
+  const toTagOptions = allTagOptions;
+
+  useEffect(() => {
+    if (fromTagId && usedFromTagIds.has(fromTagId)) {
+      setFromTagId('');
+    }
+  }, [fromTagId, usedFromTagIds]);
 
   const create = useMutation({
     mutationFn: () =>
@@ -99,115 +122,152 @@ export function TagMappingsPanel() {
       void qc.invalidateQueries({ queryKey: ['filter-mappings'] }),
   });
 
+  const rows = mappings.data ?? [];
+
   return (
-    <Card>
-      <div className="mb-4">
+    <Card className="space-y-5 p-5">
+      <div>
         <h2 className="text-lg font-semibold">Tag matching</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Link related tags so recommendations cross-match. Example: Category
-          Food ↔ Category Hotel shows those users to each other.
+          Link related tags so recommendations cross-match. Previously linked
+          tags stay listed below. The left dropdown only shows tags not yet
+          used as a “from” link; the right dropdown shows every tag.
         </p>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
-        <label className="grid gap-1 text-sm font-medium">
-          From tag
-          <select
-            className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
-            value={fromTagId}
-            onChange={(e) => setFromTagId(e.target.value)}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/50 p-4">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+          <label className="grid gap-1.5 text-sm font-medium">
+            From tag
+            <select
+              className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+              value={fromTagId}
+              onChange={(e) => setFromTagId(e.target.value)}
+            >
+              <option value="">Select unused tag…</option>
+              {fromTagOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-[var(--muted)]">
+              {fromTagOptions.length} available
+            </span>
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">
+            To tag
+            <select
+              className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+              value={toTagId}
+              onChange={(e) => setToTagId(e.target.value)}
+            >
+              <option value="">Select any tag…</option>
+              {toTagOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-[var(--muted)]">
+              All {toTagOptions.length} tags
+            </span>
+          </label>
+          <label className="flex items-center gap-2 pb-6 text-sm">
+            <input
+              type="checkbox"
+              checked={bidirectional}
+              onChange={(e) => setBidirectional(e.target.checked)}
+            />
+            Both ways
+          </label>
+          <Button
+            className="mb-5"
+            onClick={() => create.mutate()}
+            disabled={
+              !fromTagId ||
+              !toTagId ||
+              fromTagId === toTagId ||
+              create.isPending
+            }
           >
-            <option value="">Select…</option>
-            {tagOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-medium">
-          To tag
-          <select
-            className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
-            value={toTagId}
-            onChange={(e) => setToTagId(e.target.value)}
-          >
-            <option value="">Select…</option>
-            {tagOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 pb-2 text-sm">
-          <input
-            type="checkbox"
-            checked={bidirectional}
-            onChange={(e) => setBidirectional(e.target.checked)}
-          />
-          Both ways
-        </label>
-        <Button
-          onClick={() => create.mutate()}
-          disabled={!fromTagId || !toTagId || create.isPending}
-        >
-          Link tags
-        </Button>
+            {create.isPending ? 'Linking…' : 'Link tags'}
+          </Button>
+        </div>
+        {create.error ? (
+          <p className="mt-2 text-sm text-rose-700">
+            {(create.error as Error).message}
+          </p>
+        ) : null}
       </div>
-      {create.error ? (
-        <p className="mb-3 text-sm text-rose-700">
-          {(create.error as Error).message}
-        </p>
-      ) : null}
 
-      {mappings.isLoading ? (
-        <p className="text-sm text-[var(--muted)]">Loading…</p>
-      ) : (mappings.data ?? []).length === 0 ? (
-        <EmptyState
-          title="No tag links yet"
-          description="Create filters and tags first, then link related options here."
-        />
-      ) : (
-        <Table>
-          <THead>
-            <TR>
-              <TH>From</TH>
-              <TH>To</TH>
-              <TH>Direction</TH>
-              <TH />
-            </TR>
-          </THead>
-          <TBody>
-            {(mappings.data ?? []).map((row) => (
-              <TR key={row.id}>
-                <TD>
-                  <span className="font-medium">{row.fromTag.label}</span>
-                  <span className="ml-2 text-xs text-[var(--muted)]">
-                    {row.fromTag.dimension.name}
-                  </span>
-                </TD>
-                <TD>
-                  <span className="font-medium">{row.toTag.label}</span>
-                  <span className="ml-2 text-xs text-[var(--muted)]">
-                    {row.toTag.dimension.name}
-                  </span>
-                </TD>
-                <TD>{row.bidirectional ? 'Both ways' : 'One way'}</TD>
-                <TD className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => remove.mutate(row.id)}
-                  >
-                    Remove
-                  </Button>
-                </TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      )}
+      <div>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Previously linked tags</h3>
+          <Badge variant="secondary">
+            {rows.length} link{rows.length === 1 ? '' : 's'}
+          </Badge>
+        </div>
+
+        {mappings.isLoading ? (
+          <p className="text-sm text-[var(--muted)]">Loading…</p>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-8">
+            <EmptyState
+              title="No tag links yet"
+              description="Create filters and tags first, then link related options above."
+            />
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>From</TH>
+                  <TH>To</TH>
+                  <TH>Direction</TH>
+                  <TH className="text-right">Actions</TH>
+                </TR>
+              </THead>
+              <TBody>
+                {rows.map((row) => (
+                  <TR key={row.id}>
+                    <TD>
+                      <span className="font-medium">{row.fromTag.label}</span>
+                      <span className="ml-2 text-xs text-[var(--muted)]">
+                        {row.fromTag.dimension.name}
+                      </span>
+                    </TD>
+                    <TD>
+                      <span className="font-medium">{row.toTag.label}</span>
+                      <span className="ml-2 text-xs text-[var(--muted)]">
+                        {row.toTag.dimension.name}
+                      </span>
+                    </TD>
+                    <TD>
+                      <Badge
+                        variant={row.bidirectional ? 'accent' : 'secondary'}
+                      >
+                        {row.bidirectional ? 'Both ways' : 'One way'}
+                      </Badge>
+                    </TD>
+                    <TD className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => remove.mutate(row.id)}
+                        disabled={remove.isPending}
+                      >
+                        Remove
+                      </Button>
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
