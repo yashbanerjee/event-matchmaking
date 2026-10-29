@@ -17,13 +17,13 @@ export default function VendorRequestsPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         eyebrow="Vendor workspace"
         title="Meeting requests"
         description="Accept interest from companies, propose a time and place, or confirm proposals sent to you."
       />
       <MeetingRequestsPanel myOrgIds={me.data?.organizationIds ?? []} />
-    </div>
+    </>
   );
 }

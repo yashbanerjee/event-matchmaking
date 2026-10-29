@@ -40,14 +40,17 @@ function SidebarNav({
             href={item.href}
             onClick={onNavigate}
             className={cn(
-              'flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors hover:bg-white/8',
+              'flex min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm transition-colors hover:bg-white/8',
               active &&
                 'bg-[var(--sidebar-active)] font-semibold text-white shadow-sm ring-1 ring-white/10',
             )}
           >
-            <span>{item.label}</span>
+            <span className="truncate">{item.label}</span>
             {item.href === '/vendor/forms' && pendingForms > 0 ? (
-              <Badge variant="accent" className="border-transparent bg-[var(--accent)] text-white">
+              <Badge
+                variant="accent"
+                className="shrink-0 border-transparent bg-[var(--accent)] text-white"
+              >
                 {pendingForms}
               </Badge>
             ) : null}
@@ -67,7 +70,7 @@ export function VendorShell({
   pendingForms?: number;
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
 
@@ -90,7 +93,7 @@ export function VendorShell({
   }, [navOpen]);
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell workspace-shell">
       <header className="glass-panel sticky top-0 z-30 flex items-center gap-3 rounded-none border-x-0 border-t-0 px-4 py-3 sm:hidden">
         <Button
           type="button"
@@ -103,7 +106,7 @@ export function VendorShell({
         >
           {navOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
             Vendor panel
           </p>
@@ -125,7 +128,7 @@ export function VendorShell({
       <aside
         id="vendor-sidebar"
         className={cn(
-          'admin-sidebar sidebar-pad-bottom fixed inset-y-0 left-0 z-50 flex max-w-full flex-col gap-6 overflow-y-auto bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] transition-transform duration-200 ease-out sm:sticky sm:top-0 sm:z-auto sm:h-screen sm:translate-x-0 sm:transition-none',
+          'admin-sidebar sidebar-pad-bottom fixed inset-y-0 left-0 z-50 flex max-w-full flex-col gap-6 overflow-y-auto overflow-x-hidden bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] transition-transform duration-200 ease-out sm:sticky sm:top-0 sm:z-auto sm:h-screen sm:translate-x-0 sm:transition-none',
           navOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0',
         )}
       >
@@ -138,7 +141,7 @@ export function VendorShell({
               Event Matchmaking
             </div>
             {email ? (
-              <p className="mt-2 truncate text-xs text-[var(--sidebar-muted)]">
+              <p className="mt-2 truncate text-xs text-[var(--sidebar-muted)]" title={email}>
                 {email}
               </p>
             ) : null}
@@ -161,14 +164,6 @@ export function VendorShell({
         />
 
         <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
-          <Link href="/portal" onClick={() => setNavOpen(false)}>
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
-            >
-              Participant portal
-            </Button>
-          </Link>
           <Button
             variant="outline"
             className="w-full border-white/20 bg-transparent text-[var(--sidebar-fg)] hover:bg-white/10"
@@ -182,8 +177,10 @@ export function VendorShell({
         </div>
       </aside>
 
-      <main className="page-pad min-h-screen min-w-0">
-        <div className="w-full max-w-full">{children}</div>
+      <main className="page-pad workspace-main min-h-screen min-w-0 overflow-x-hidden">
+        <div className="page-shell w-full max-w-full min-w-0 space-y-6">
+          {children}
+        </div>
       </main>
     </div>
   );

@@ -83,7 +83,7 @@ export default function VendorMeetingsPage() {
   const orgId = me.data?.organizationIds[0] ?? '';
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         eyebrow="Meetings"
         title="Your meetings"
@@ -98,7 +98,7 @@ export default function VendorMeetingsPage() {
         }
       />
 
-      <Card>
+      <Card className="overflow-hidden">
         {meetings.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading…</p>
         ) : filtered.length === 0 ? (
@@ -185,6 +185,6 @@ export default function VendorMeetingsPage() {
           void qc.invalidateQueries({ queryKey: ['vendor-meetings'] })
         }
       />
-    </div>
+    </>
   );
 }

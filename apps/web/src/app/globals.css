@@ -139,6 +139,19 @@ h2,
   padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
 }
 
+.workspace-shell {
+  overflow-x: clip;
+}
+
+.workspace-main {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workspace-main > * {
+  max-width: 100%;
+}
+
 .scroll-pad-bottom {
   padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
 }

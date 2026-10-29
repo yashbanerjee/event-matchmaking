@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { RecommendationsPanel } from '@/components/recommendations-panel';
+import { WorkspaceStat } from '@/components/workspace-stat';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -80,7 +81,7 @@ export default function VendorOverviewPage() {
   }, [meetingItems]);
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         eyebrow="Vendor workspace"
         title="Overview"
@@ -93,30 +94,29 @@ export default function VendorOverviewPage() {
         description="Matched from your categories, capabilities, and operating regions."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-transparent bg-[linear-gradient(145deg,#0f766e,#0b4f4a)] text-white">
-          <p className="text-sm text-white/75">Forms assigned</p>
-          <p className="mt-2 text-3xl font-bold">{formStats.total}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-[var(--muted)]">Forms pending</p>
-          <p className="mt-2 text-3xl font-bold">{formStats.pending}</p>
-        </Card>
-        <Card className="border-transparent bg-[linear-gradient(145deg,#0369a1,#0c4a6e)] text-white">
-          <p className="text-sm text-white/75">Total meetings</p>
-          <p className="mt-2 text-3xl font-bold">{meetingStats.total}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-[var(--muted)]">Awaiting confirmation</p>
-          <p className="mt-2 text-3xl font-bold">{meetingStats.awaiting}</p>
-        </Card>
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <WorkspaceStat
+          tone="accent"
+          label="Forms assigned"
+          value={formStats.total}
+        />
+        <WorkspaceStat label="Forms pending" value={formStats.pending} />
+        <WorkspaceStat
+          tone="highlight"
+          label="Total meetings"
+          value={meetingStats.total}
+        />
+        <WorkspaceStat
+          label="Awaiting confirmation"
+          value={meetingStats.awaiting}
+        />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Forms</h2>
-            <Link href="/vendor/forms">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <Card className="min-w-0 overflow-hidden">
+          <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+            <h2 className="h-display truncate text-lg font-semibold">Forms</h2>
+            <Link href="/vendor/forms" className="shrink-0">
               <Button variant="outline" size="sm">
                 View all
               </Button>
@@ -143,10 +143,11 @@ export default function VendorOverviewPage() {
                   const status = statusForFormItem(item);
                   return (
                     <TR key={item.assignmentId}>
-                      <TD>
+                      <TD className="max-w-[180px] truncate">
                         <Link
                           href={`/vendor/forms/${item.assignmentId}`}
                           className="font-medium text-[var(--accent-hover)] hover:underline"
+                          title={item.formName}
                         >
                           {item.formName}
                         </Link>
@@ -165,26 +166,28 @@ export default function VendorOverviewPage() {
           )}
         </Card>
 
-        <Card>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Meetings</h2>
-            <Link href="/vendor/meetings">
+        <Card className="min-w-0 overflow-hidden">
+          <div className="mb-4 flex min-w-0 items-center justify-between gap-3">
+            <h2 className="h-display truncate text-lg font-semibold">
+              Meetings
+            </h2>
+            <Link href="/vendor/meetings" className="shrink-0">
               <Button variant="outline" size="sm">
                 View all
               </Button>
             </Link>
           </div>
-          <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
-            <div className="rounded-xl bg-[var(--card-elevated)] px-3 py-2">
-              <p className="text-xs text-[var(--muted)]">Confirmed</p>
+          <div className="mb-4 grid min-w-0 grid-cols-3 gap-2 sm:gap-3">
+            <div className="min-w-0 rounded-xl bg-[var(--card-elevated)] px-2 py-2 sm:px-3">
+              <p className="truncate text-xs text-[var(--muted)]">Confirmed</p>
               <p className="text-lg font-semibold">{meetingStats.confirmed}</p>
             </div>
-            <div className="rounded-xl bg-[var(--card-elevated)] px-3 py-2">
-              <p className="text-xs text-[var(--muted)]">Completed</p>
+            <div className="min-w-0 rounded-xl bg-[var(--card-elevated)] px-2 py-2 sm:px-3">
+              <p className="truncate text-xs text-[var(--muted)]">Completed</p>
               <p className="text-lg font-semibold">{meetingStats.completed}</p>
             </div>
-            <div className="rounded-xl bg-[var(--card-elevated)] px-3 py-2">
-              <p className="text-xs text-[var(--muted)]">Awaiting</p>
+            <div className="min-w-0 rounded-xl bg-[var(--card-elevated)] px-2 py-2 sm:px-3">
+              <p className="truncate text-xs text-[var(--muted)]">Awaiting</p>
               <p className="text-lg font-semibold">{meetingStats.awaiting}</p>
             </div>
           </div>
@@ -200,7 +203,6 @@ export default function VendorOverviewPage() {
               <THead>
                 <TR>
                   <TH>Company</TH>
-                  <TH>Vendor</TH>
                   <TH>Starts</TH>
                   <TH>Status</TH>
                 </TR>
@@ -208,8 +210,12 @@ export default function VendorOverviewPage() {
               <TBody>
                 {meetingItems.slice(0, 5).map((item) => (
                   <TR key={item.id}>
-                    <TD className="font-medium">{item.companyOrg.name}</TD>
-                    <TD>{item.vendorOrg.name}</TD>
+                    <TD
+                      className="max-w-[160px] truncate font-medium"
+                      title={item.companyOrg.name}
+                    >
+                      {item.companyOrg.name}
+                    </TD>
                     <TD>{new Date(item.startsAt).toLocaleString()}</TD>
                     <TD>
                       <Badge variant={badgeToneForStatus(item.status)}>
@@ -223,6 +229,6 @@ export default function VendorOverviewPage() {
           )}
         </Card>
       </div>
-    </div>
+    </>
   );
 }

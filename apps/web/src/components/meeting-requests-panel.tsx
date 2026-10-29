@@ -144,10 +144,12 @@ export function MeetingRequestsPanel({
 
   return (
     <>
-      <Card>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">Meeting requests</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
+      <Card className="overflow-hidden">
+        <div className="mb-4 min-w-0">
+          <h2 className="h-display text-lg font-semibold tracking-tight">
+            Meeting requests
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
             Accept interest, propose a time and place, then confirm the final
             schedule.
           </p>

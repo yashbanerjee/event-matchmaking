@@ -119,11 +119,13 @@ export default function PortalMeetingsPage() {
         description="Confirm sessions. After a meeting ends, submit feedback and review the vendor."
       />
 
-      <Card>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold">Schedule</h2>
+      <Card className="overflow-hidden">
+        <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="h-display text-lg font-semibold tracking-tight">
+            Schedule
+          </h2>
           <Input
-            className="max-w-xs"
+            className="w-full max-w-xs shrink-0"
             placeholder="Search company, vendor, status…"
             value={search}
             onChange={(e) => {

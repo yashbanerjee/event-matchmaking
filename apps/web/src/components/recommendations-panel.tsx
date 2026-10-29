@@ -56,10 +56,14 @@ export function RecommendationsPanel({
   const items = recs.data?.items ?? [];
 
   return (
-    <Card>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
+    <Card className="min-w-0 overflow-hidden">
+      <div className="mb-4 min-w-0">
+        <h2 className="h-display text-lg font-semibold tracking-tight">
+          {title}
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
+          {description}
+        </p>
       </div>
 
       {recs.isLoading ? (
@@ -70,30 +74,38 @@ export function RecommendationsPanel({
           description="Complete your profile preferences (category, industry, capabilities) to see matches."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {items.map((item) => (
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          {items.map((item, index) => (
             <div
               key={item.organizationId}
-              className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)] p-4"
+              className="animate-rise min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
+              style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-[var(--muted)]">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold" title={item.name}>
+                    {item.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
                     {item.industry || item.type}
                   </p>
                 </div>
-                <Badge variant="accent">{Math.round(item.score)}%</Badge>
+                <Badge variant="accent" className="shrink-0">
+                  {Math.round(item.score)}%
+                </Badge>
               </div>
               {(item.categories.length > 0 || item.capabilities.length > 0) && (
-                <p className="mt-2 line-clamp-2 text-xs text-[var(--muted)]">
+                <p
+                  className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-[var(--muted)]"
+                  title={[...item.categories, ...item.capabilities].join(' · ')}
+                >
                   {[...item.categories, ...item.capabilities]
                     .slice(0, 6)
                     .join(' · ')}
                 </p>
               )}
               <Button
-                className="mt-3"
+                className="mt-3 w-full sm:w-auto"
                 size="sm"
                 disabled={!fromOrgId || request.isPending}
                 onClick={() => request.mutate(item.organizationId)}
@@ -105,7 +117,7 @@ export function RecommendationsPanel({
         </div>
       )}
       {request.error ? (
-        <p className="mt-3 text-sm text-rose-700">
+        <p className="mt-3 break-words text-sm text-rose-700">
           {(request.error as Error).message}
         </p>
       ) : null}
