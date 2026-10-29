@@ -313,7 +313,12 @@ function Control({
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="">
-          {field.type === 'currency' ? 'Select currency' : 'Select'}
+          {field.type === 'currency'
+            ? 'Select currency'
+            : field.placeholder?.trim() ||
+              (field.filterDimensionId
+                ? `Select ${field.label.toLowerCase()}`
+                : 'Select')}
         </option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>

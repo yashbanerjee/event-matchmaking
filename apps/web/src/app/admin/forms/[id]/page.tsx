@@ -141,19 +141,23 @@ export default function FormBuilderPage() {
     .map((version) => `v${version.version}`)
     .join(', ');
 
-  function addField(type: FieldType) {
-    if (!sectionId) return;
-    const id = crypto.randomUUID();
-    const used = new Set(schema!.fields.map((field) => field.key));
-    let key = normalizeInternalKey(`${type}_${schema!.fields.length + 1}`);
+  function uniqueKey(preferred: string) {
+    const used = new Set(schema!.fields.map((item) => item.key));
+    let key = normalizeInternalKey(preferred);
     let n = 2;
     const base = key;
     while (used.has(key)) {
       key = normalizeInternalKey(`${base}_${n++}`);
     }
+    return key;
+  }
+
+  function addField(type: FieldType) {
+    if (!sectionId) return;
+    const id = crypto.randomUUID();
     const next: FormField = {
       id,
-      key,
+      key: uniqueKey(`${type}_${schema!.fields.length + 1}`),
       type,
       label: labelFor(type),
       description: '',
@@ -167,8 +171,49 @@ export default function FormBuilderPage() {
       order: schema!.fields.length,
       conditional: null,
       readOnly: type === 'info',
+      filterDimensionId: null,
       children: [],
     };
+    setSchema({ ...schema!, fields: [...schema!.fields, next] });
+    setSelected(id);
+  }
+
+  function addFilterField(dimension: {
+    id: string;
+    name: string;
+    code: string;
+    profileKey: string;
+    tags: Array<{ value: string; label: string; isActive: boolean }>;
+  }) {
+    if (!sectionId) return;
+    const options = dimension.tags
+      .filter((tag) => tag.isActive)
+      .map((tag) => ({ value: tag.value, label: tag.label }));
+    if (options.length === 0) {
+      setError(
+        `“${dimension.name}” has no active tags yet. Add tags under Admin → Filters first.`,
+      );
+      return;
+    }
+    const id = crypto.randomUUID();
+    const next: FormField = {
+      id,
+      key: uniqueKey(dimension.profileKey || dimension.code || dimension.name),
+      type: 'select',
+      label: dimension.name,
+      description: `Choose one ${dimension.name.toLowerCase()} option`,
+      required: true,
+      placeholder: `Select ${dimension.name.toLowerCase()}`,
+      options,
+      validation: {},
+      sectionId,
+      order: schema!.fields.length,
+      conditional: null,
+      readOnly: false,
+      filterDimensionId: dimension.id,
+      children: [],
+    };
+    setError('');
     setSchema({ ...schema!, fields: [...schema!.fields, next] });
     setSelected(id);
   }
@@ -235,8 +280,37 @@ export default function FormBuilderPage() {
           />
         </label>
       </div>
-      <div className="grid items-start gap-4 lg:grid-cols-[200px_minmax(0,1fr)_minmax(240px,320px)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)_minmax(240px,320px)]">
         <aside className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto">
+          <h2 className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
+            Filter tags
+          </h2>
+          <p className="mb-2 text-[11px] leading-snug text-[var(--muted)]">
+            Adds a single-choice dropdown from Admin → Filters.
+          </p>
+          {filterDimensions.isLoading ? (
+            <p className="mb-3 text-xs text-[var(--muted)]">Loading filters…</p>
+          ) : (filterDimensions.data ?? []).length === 0 ? (
+            <p className="mb-3 rounded-lg border border-dashed border-[var(--border)] px-2 py-2 text-xs text-[var(--muted)]">
+              No filter groups yet. Create Category / Industry under Filters.
+            </p>
+          ) : (
+            <div className="mb-4 grid gap-1">
+              {(filterDimensions.data ?? []).map((dim) => (
+                <button
+                  key={dim.id}
+                  type="button"
+                  className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-2 py-1.5 text-left text-sm font-medium text-[var(--accent-hover)] hover:bg-[var(--accent-soft)]/80"
+                  onClick={() => addFilterField(dim)}
+                >
+                  {dim.name}
+                  <span className="mt-0.5 block text-[11px] font-normal text-[var(--muted)]">
+                    {dim.tags.filter((t) => t.isActive).length} options
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <h2 className="mb-2 text-xs font-semibold uppercase text-[var(--muted)]">
             Add a field
           </h2>
@@ -341,7 +415,7 @@ export default function FormBuilderPage() {
                 ) ? (
                   <>
                     <label className="grid gap-1 text-sm font-medium">
-                      Filter tags (admin Filters)
+                      Linked filter group
                       <select
                         className={formControlClass}
                         value={field.filterDimensionId ?? ''}
@@ -358,31 +432,52 @@ export default function FormBuilderPage() {
                             }));
                           updateField(field.id, {
                             filterDimensionId: dimensionId,
+                            type: dimensionId ? 'select' : field.type,
                             ...(dimension
                               ? {
                                   options,
+                                  label: field.label || dimension.name,
+                                  placeholder: `Select ${dimension.name.toLowerCase()}`,
                                   key: normalizeInternalKey(
                                     dimension.profileKey || field.key,
                                   ),
                                 }
-                              : { options: field.options ?? [] }),
+                              : {}),
                           });
                         }}
                       >
                         <option value="">Custom options (manual)</option>
                         {(filterDimensions.data ?? []).map((dim) => (
                           <option key={dim.id} value={dim.id}>
-                            {dim.name} ({dim.tags.length} tags)
+                            {dim.name} (
+                            {dim.tags.filter((t) => t.isActive).length} tags)
                           </option>
                         ))}
                       </select>
                     </label>
                     {field.filterDimensionId ? (
-                      <p className="text-xs text-[var(--muted)]">
-                        Options load from Filters. Save/publish refreshes the
-                        dropdown from current tags. Internal key set to profile
-                        field when possible.
-                      </p>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] p-2.5">
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                          Dropdown options
+                        </p>
+                        <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                          {(field.options ?? []).map((option) => (
+                            <li
+                              key={option.value}
+                              className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-1"
+                            >
+                              <span>{option.label}</span>
+                              <code className="text-[11px] text-[var(--muted)]">
+                                {option.value}
+                              </code>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-[var(--muted)]">
+                          Vendors/companies pick one value from this dropdown.
+                          Save or publish to refresh tags from Filters.
+                        </p>
+                      </div>
                     ) : (
                       <label className="grid gap-1 text-sm font-medium">
                         Options (one per line, value|label)

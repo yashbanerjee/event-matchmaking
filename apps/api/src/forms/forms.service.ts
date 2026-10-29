@@ -616,9 +616,8 @@ export class FormsService {
       const versionForUi = !submission
         ? latestPublished
         : submission.formVersion;
-      const schema = resolveSchema(
-        versionForUi.schemaJson,
-        versionForUi.fields,
+      const schema = await this.hydrateFilterOptions(
+        resolveSchema(versionForUi.schemaJson, versionForUi.fields),
       );
 
       if (!submission && assignment.formVersionId !== latestPublished.id) {
