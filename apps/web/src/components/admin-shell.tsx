@@ -26,7 +26,6 @@ const NAV_GROUPS = [
       { href: '/admin/meetings', label: 'Meetings' },
       { href: '/admin/places', label: 'Places' },
       { href: '/admin/feedback', label: 'Feedback' },
-      { href: '/admin/follow-ups', label: 'Follow-ups' },
     ],
   },
   {

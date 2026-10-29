@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import {
+  MeetingFeedbackModal,
+  meetingHasEnded,
+} from '@/components/meeting-feedback-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -21,15 +25,18 @@ type Meeting = {
   durationMinutes?: number | null;
   mode?: string | null;
   venue?: string | null;
+  location?: string | null;
   timeZone?: string | null;
-  matchScore?: number | null;
+  hasSubmittedFeedback?: boolean;
   companyOrg: { name: string };
   vendorOrg: { name: string };
+  place?: { name: string } | null;
 };
 
 export default function VendorMeetingsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
 
   const me = useQuery({
     queryKey: ['me'],
@@ -54,29 +61,8 @@ export default function VendorMeetingsPage() {
         token: getAccessToken(),
         body: JSON.stringify({}),
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['vendor-meetings'] }),
-  });
-
-  const feedback = useMutation({
-    mutationFn: (meeting: { id: string; organizationId: string }) =>
-      apiFetch(`/meetings/${meeting.id}/feedback`, {
-        method: 'POST',
-        token: getAccessToken(),
-        body: JSON.stringify({
-          organizationId: meeting.organizationId,
-          attendanceConfirmed: true,
-          meetingQuality: 4,
-          relevance: 4,
-          businessPotential: 4,
-          communicationQuality: 4,
-          interestLevel: 4,
-          followUpRequired: true,
-          outcome: 'FOLLOW_UP_REQUIRED',
-          comments: 'Constructive discussion; schedule follow-up.',
-          isConfidential: true,
-        }),
-      }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['vendor-meetings'] }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['vendor-meetings'] }),
   });
 
   const filtered = useMemo(() => {
@@ -89,16 +75,19 @@ export default function VendorMeetingsPage() {
         item.vendorOrg.name.toLowerCase().includes(q) ||
         item.status.toLowerCase().includes(q) ||
         (item.mode ?? '').toLowerCase().includes(q) ||
-        (item.venue ?? '').toLowerCase().includes(q),
+        (item.venue ?? '').toLowerCase().includes(q) ||
+        (item.location ?? '').toLowerCase().includes(q),
     );
   }, [meetings.data?.items, search]);
+
+  const orgId = me.data?.organizationIds[0] ?? '';
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Meetings"
         title="Your meetings"
-        description="Full meeting details in a table — confirm sessions and submit confidential feedback."
+        description="Confirm sessions. After a meeting ends, submit feedback and review the company."
         actions={
           <Input
             className="max-w-xs"
@@ -115,79 +104,87 @@ export default function VendorMeetingsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             title="No meetings yet"
-            description="When schedules are published, your meetings will appear here with full details."
+            description="When meetings are scheduled, they appear here with full details."
           />
         ) : (
           <Table>
             <THead>
               <TR>
                 <TH>Company</TH>
-                <TH>Vendor</TH>
                 <TH>Starts</TH>
                 <TH>Ends</TH>
                 <TH>Duration</TH>
-                <TH>Mode</TH>
-                <TH>Venue / TZ</TH>
-                <TH>Score</TH>
+                <TH>Location</TH>
                 <TH>Status</TH>
                 <TH />
               </TR>
             </THead>
             <TBody>
-              {filtered.map((item) => (
-                <TR key={item.id}>
-                  <TD className="font-medium">{item.companyOrg.name}</TD>
-                  <TD>{item.vendorOrg.name}</TD>
-                  <TD>{new Date(item.startsAt).toLocaleString()}</TD>
-                  <TD>
-                    {item.endsAt
-                      ? new Date(item.endsAt).toLocaleString()
-                      : '—'}
-                  </TD>
-                  <TD>
-                    {item.durationMinutes
-                      ? `${item.durationMinutes} min`
-                      : '—'}
-                  </TD>
-                  <TD>{item.mode?.replaceAll('_', ' ') ?? '—'}</TD>
-                  <TD>{item.venue || item.timeZone || '—'}</TD>
-                  <TD>
-                    {item.matchScore != null
-                      ? item.matchScore.toFixed(1)
-                      : '—'}
-                  </TD>
-                  <TD>
-                    <Badge variant={badgeToneForStatus(item.status)}>
-                      {item.status.replaceAll('_', ' ')}
-                    </Badge>
-                  </TD>
-                  <TD className="space-x-2 text-right">
-                    {item.status === 'AWAITING_CONFIRMATION' ? (
-                      <Button size="sm" onClick={() => confirm.mutate(item.id)}>
-                        Confirm
-                      </Button>
-                    ) : null}
-                    {me.data?.organizationIds[0] ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          feedback.mutate({
-                            id: item.id,
-                            organizationId: me.data!.organizationIds[0]!,
-                          })
-                        }
-                      >
-                        Feedback
-                      </Button>
-                    ) : null}
-                  </TD>
-                </TR>
-              ))}
+              {filtered.map((item) => {
+                const ended = meetingHasEnded(item);
+                const submitted = Boolean(item.hasSubmittedFeedback);
+                return (
+                  <TR key={item.id}>
+                    <TD className="font-medium">{item.companyOrg.name}</TD>
+                    <TD>{new Date(item.startsAt).toLocaleString()}</TD>
+                    <TD>
+                      {item.endsAt
+                        ? new Date(item.endsAt).toLocaleString()
+                        : '—'}
+                    </TD>
+                    <TD>
+                      {item.durationMinutes
+                        ? `${item.durationMinutes} min`
+                        : '—'}
+                    </TD>
+                    <TD>
+                      {item.location || item.place?.name || item.venue || '—'}
+                    </TD>
+                    <TD>
+                      <Badge variant={badgeToneForStatus(item.status)}>
+                        {item.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </TD>
+                    <TD className="space-x-2 text-right">
+                      {item.status === 'AWAITING_CONFIRMATION' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => confirm.mutate(item.id)}
+                        >
+                          Confirm
+                        </Button>
+                      ) : null}
+                      {ended && orgId && !submitted ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setFeedbackFor(item)}
+                        >
+                          Feedback & review
+                        </Button>
+                      ) : null}
+                      {ended && submitted ? (
+                        <Badge variant="success">Feedback sent</Badge>
+                      ) : null}
+                    </TD>
+                  </TR>
+                );
+              })}
             </TBody>
           </Table>
         )}
       </Card>
+
+      <MeetingFeedbackModal
+        open={Boolean(feedbackFor)}
+        meetingId={feedbackFor?.id ?? null}
+        organizationId={orgId}
+        counterpartName={feedbackFor?.companyOrg.name ?? 'counterpart'}
+        onClose={() => setFeedbackFor(null)}
+        onSubmitted={() =>
+          void qc.invalidateQueries({ queryKey: ['vendor-meetings'] })
+        }
+      />
     </div>
   );
 }

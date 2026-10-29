@@ -15,14 +15,22 @@ import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
 import { EmptyState } from '@/components/empty-state';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import {
+  MeetingFeedbackModal,
+  meetingHasEnded,
+} from '@/components/meeting-feedback-modal';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 
 type Meeting = {
   id: string;
   status: string;
   startsAt: string;
+  endsAt?: string | null;
+  hasSubmittedFeedback?: boolean;
   companyOrg: { name: string };
   vendorOrg: { name: string };
+  location?: string | null;
+  place?: { name: string } | null;
 };
 
 const PAGE_SIZE = 8;
@@ -33,6 +41,7 @@ export default function PortalMeetingsPage() {
   const [ready, setReady] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -64,7 +73,7 @@ export default function PortalMeetingsPage() {
     queryKey: ['portal-meetings'],
     enabled: ready,
     queryFn: () =>
-      apiFetch<{ items: Meeting[] }>('/meetings', {
+      apiFetch<{ items: Meeting[] }>('/meetings?pageSize=100', {
         token: getAccessToken(),
       }),
   });
@@ -91,32 +100,13 @@ export default function PortalMeetingsPage() {
         token: getAccessToken(),
         body: JSON.stringify({}),
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
-  });
-
-  const feedback = useMutation({
-    mutationFn: (meeting: { id: string; organizationId: string }) =>
-      apiFetch(`/meetings/${meeting.id}/feedback`, {
-        method: 'POST',
-        token: getAccessToken(),
-        body: JSON.stringify({
-          organizationId: meeting.organizationId,
-          attendanceConfirmed: true,
-          meetingQuality: 4,
-          relevance: 4,
-          businessPotential: 4,
-          communicationQuality: 4,
-          interestLevel: 4,
-          followUpRequired: true,
-          outcome: 'FOLLOW_UP_REQUIRED',
-          comments: 'Constructive discussion; schedule follow-up.',
-          isConfidential: true,
-        }),
-      }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
   });
 
   if (!ready) return null;
+
+  const orgId = me.data?.organizationIds[0] ?? '';
 
   return (
     <PortalShell
@@ -126,7 +116,7 @@ export default function PortalMeetingsPage() {
       <PageHeader
         eyebrow="Your workspace"
         title="Meetings"
-        description="Confirm upcoming sessions and submit confidential feedback after each meeting."
+        description="Confirm sessions. After a meeting ends, submit feedback and review the vendor."
       />
 
       <Card>
@@ -158,45 +148,52 @@ export default function PortalMeetingsPage() {
             <Table>
               <THead>
                 <TR>
-                  <TH>Company</TH>
                   <TH>Vendor</TH>
                   <TH>Starts</TH>
+                  <TH>Location</TH>
                   <TH>Status</TH>
                   <TH />
                 </TR>
               </THead>
               <TBody>
-                {pageItems.map((m) => (
-                  <TR key={m.id} className="hover:bg-slate-50/80">
-                    <TD className="font-medium">{m.companyOrg.name}</TD>
-                    <TD>{m.vendorOrg.name}</TD>
-                    <TD>{new Date(m.startsAt).toLocaleString()}</TD>
-                    <TD>
-                      <Badge variant={statusTone(m.status)}>{m.status}</Badge>
-                    </TD>
-                    <TD className="space-x-2 text-right">
-                      {m.status === 'AWAITING_CONFIRMATION' && (
-                        <Button size="sm" onClick={() => confirm.mutate(m.id)}>
-                          Confirm
-                        </Button>
-                      )}
-                      {me.data?.organizationIds[0] && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            feedback.mutate({
-                              id: m.id,
-                              organizationId: me.data!.organizationIds[0]!,
-                            })
-                          }
-                        >
-                          Feedback
-                        </Button>
-                      )}
-                    </TD>
-                  </TR>
-                ))}
+                {pageItems.map((m) => {
+                  const ended = meetingHasEnded(m);
+                  const submitted = Boolean(m.hasSubmittedFeedback);
+                  return (
+                    <TR key={m.id} className="hover:bg-slate-50/80">
+                      <TD className="font-medium">{m.vendorOrg.name}</TD>
+                      <TD>{new Date(m.startsAt).toLocaleString()}</TD>
+                      <TD>{m.location || m.place?.name || '—'}</TD>
+                      <TD>
+                        <Badge variant={statusTone(m.status)}>
+                          {m.status.replaceAll('_', ' ')}
+                        </Badge>
+                      </TD>
+                      <TD className="space-x-2 text-right">
+                        {m.status === 'AWAITING_CONFIRMATION' ? (
+                          <Button
+                            size="sm"
+                            onClick={() => confirm.mutate(m.id)}
+                          >
+                            Confirm
+                          </Button>
+                        ) : null}
+                        {ended && orgId && !submitted ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setFeedbackFor(m)}
+                          >
+                            Feedback & review
+                          </Button>
+                        ) : null}
+                        {ended && submitted ? (
+                          <Badge variant="success">Feedback sent</Badge>
+                        ) : null}
+                      </TD>
+                    </TR>
+                  );
+                })}
               </TBody>
             </Table>
             <Pagination
@@ -208,6 +205,17 @@ export default function PortalMeetingsPage() {
           </>
         )}
       </Card>
+
+      <MeetingFeedbackModal
+        open={Boolean(feedbackFor)}
+        meetingId={feedbackFor?.id ?? null}
+        organizationId={orgId}
+        counterpartName={feedbackFor?.vendorOrg.name ?? 'counterpart'}
+        onClose={() => setFeedbackFor(null)}
+        onSubmitted={() =>
+          void qc.invalidateQueries({ queryKey: ['portal-meetings'] })
+        }
+      />
     </PortalShell>
   );
 }

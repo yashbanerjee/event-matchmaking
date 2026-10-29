@@ -155,6 +155,10 @@ export class MeetingsService {
           : null;
       }
 
+      const hasSubmittedFeedback = meeting.feedbacks.some((fb) =>
+        user.organizationIds.includes(fb.organizationId),
+      );
+
       return {
         ...meeting,
         feedbacks,
@@ -168,6 +172,7 @@ export class MeetingsService {
               type: request.fromOrg.type,
             }
           : null,
+        hasSubmittedFeedback,
       };
     });
 

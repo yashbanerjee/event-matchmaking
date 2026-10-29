@@ -27,13 +27,25 @@ export class OpsController {
         skip: (p - 1) * size,
         take: size,
         include: {
-          organization: { select: { id: true, name: true, code: true } },
+          organization: {
+            select: { id: true, name: true, code: true, type: true },
+          },
+          reviewer: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
           meeting: {
             select: {
               id: true,
               startsAt: true,
-              companyOrg: { select: { name: true } },
-              vendorOrg: { select: { name: true } },
+              endsAt: true,
+              status: true,
+              companyOrg: { select: { id: true, name: true } },
+              vendorOrg: { select: { id: true, name: true } },
             },
           },
         },

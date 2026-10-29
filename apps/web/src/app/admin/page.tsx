@@ -60,7 +60,6 @@ export default function AdminOverviewPage() {
     },
     { label: 'No-show rate', value: `${(data.noShowRate * 100).toFixed(1)}%` },
     { label: 'Pending feedback', value: data.pendingFeedback },
-    { label: 'Follow-ups required', value: data.followUpsRequired },
     {
       label: 'Average match score',
       value: data.averageMatchScore.toFixed(1),
