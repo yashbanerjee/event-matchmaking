@@ -11,6 +11,8 @@ import {
   formSchemaDefinition,
   normalizeFormSchemaKeys,
   renderCorrectionEmail,
+  renderRejectedEmail,
+  renderVerifiedEmail,
   type FormSchemaDefinition,
   type FieldType as BuilderFieldType,
 } from '@em/shared';
@@ -987,9 +989,84 @@ export class FormsService {
     return updated;
   }
 
+  private async resolveOrganizationContact(organizationId: string, submittedById?: string | null) {
+    if (submittedById) {
+      const submitter = await this.prisma.user.findUnique({
+        where: { id: submittedById },
+        select: { email: true, firstName: true, lastName: true },
+      });
+      if (submitter?.email) {
+        return {
+          email: submitter.email,
+          name: [submitter.firstName, submitter.lastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || null,
+        };
+      }
+    }
+
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { customAttrs: true, type: true },
+    });
+    const attrs =
+      organization?.customAttrs && typeof organization.customAttrs === 'object'
+        ? (organization.customAttrs as Record<string, unknown>)
+        : {};
+    if (typeof attrs.contactEmail === 'string' && attrs.contactEmail.trim()) {
+      return {
+        email: attrs.contactEmail.trim(),
+        name:
+          typeof attrs.contactName === 'string' ? attrs.contactName.trim() : null,
+      };
+    }
+
+    const member = await this.prisma.organizationMember.findFirst({
+      where: { organizationId },
+      include: {
+        user: { select: { email: true, firstName: true, lastName: true } },
+      },
+      orderBy: [{ isPrimary: 'desc' }, { joinedAt: 'asc' }],
+    });
+    if (member?.user.email) {
+      return {
+        email: member.user.email,
+        name: [member.user.firstName, member.user.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() || null,
+      };
+    }
+
+    const invitation = await this.prisma.invitation.findFirst({
+      where: {
+        organizationId,
+        status: { in: ['ACCEPTED', 'SENT', 'DELIVERED', 'PENDING'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { email: true },
+    });
+    if (invitation?.email) {
+      return { email: invitation.email, name: null };
+    }
+
+    return null;
+  }
+
+  private dashboardUrlForOrgType(type: string) {
+    if (type === 'COMPANY') return `${this.env.appUrl}/portal`;
+    if (type === 'VENDOR') return `${this.env.appUrl}/vendor`;
+    return this.env.appUrl;
+  }
+
   async approveSubmission(actor: AuthUser, submissionId: string) {
     const submission = await this.prisma.formSubmission.findUnique({
       where: { id: submissionId },
+      include: {
+        organization: true,
+        formVersion: { include: { form: true } },
+      },
     });
     if (!submission) {
       throw new NotFoundException('Submission not found');
@@ -1031,15 +1108,159 @@ export class FormsService {
       return next;
     });
 
+    const contact = await this.resolveOrganizationContact(
+      submission.organizationId,
+      submission.submittedById,
+    );
+    let emailSent = false;
+    if (contact?.email) {
+      try {
+        const fromName = await this.email.getFromName();
+        const audience =
+          submission.organization.type === 'COMPANY' ? 'company' : 'vendor';
+        const template = renderVerifiedEmail({
+          brandName: fromName,
+          organizationName: submission.organization.name,
+          formName: submission.formVersion.form.name,
+          audience,
+          recipientName: contact.name,
+          dashboardUrl: this.dashboardUrlForOrgType(submission.organization.type),
+        });
+        await this.email.send({
+          to: contact.email,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+          idempotencyKey: `submission.verified.email:${submissionId}`,
+          templateCode: 'approved',
+        });
+        emailSent = true;
+      } catch (err) {
+        this.logger.warn(
+          `Verified email failed for ${contact.email}: ${(err as Error).message}`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `No contact email for verified submission ${submissionId}`,
+      );
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'submission.approve',
       entityType: 'FormSubmission',
       entityId: submissionId,
       outcome: 'SUCCESS',
+      after: { emailSent, email: contact?.email ?? null },
     });
 
-    return updated;
+    return { ...updated, emailSent, email: contact?.email ?? null };
+  }
+
+  async rejectSubmission(
+    actor: AuthUser,
+    submissionId: string,
+    input: { reason?: string } = {},
+  ) {
+    const reason = input.reason?.trim() || null;
+    const submission = await this.prisma.formSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        organization: true,
+        formVersion: { include: { form: true } },
+      },
+    });
+    if (!submission) {
+      throw new NotFoundException('Submission not found');
+    }
+    if (submission.status === 'APPROVED') {
+      throw new BadRequestException('Verified submissions cannot be rejected');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.formSubmission.update({
+        where: { id: submissionId },
+        data: {
+          status: 'REJECTED',
+          reviewedAt: new Date(),
+          reviewNotes: reason,
+        },
+      });
+      await tx.vendor.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: {
+          approvalStatus: 'REJECTED',
+          matchingEligible: false,
+        },
+      });
+      await tx.company.updateMany({
+        where: { organizationId: submission.organizationId },
+        data: {
+          approvalStatus: 'REJECTED',
+          matchingEligible: false,
+        },
+      });
+      await tx.organization.update({
+        where: { id: submission.organizationId },
+        data: { status: 'REJECTED' },
+      });
+      await tx.submissionCorrection.updateMany({
+        where: { submissionId, status: 'OPEN' },
+        data: { status: 'SUPERSEDED', resolvedAt: new Date() },
+      });
+      return next;
+    });
+
+    const contact = await this.resolveOrganizationContact(
+      submission.organizationId,
+      submission.submittedById,
+    );
+    let emailSent = false;
+    if (contact?.email) {
+      try {
+        const fromName = await this.email.getFromName();
+        const audience =
+          submission.organization.type === 'COMPANY' ? 'company' : 'vendor';
+        const template = renderRejectedEmail({
+          brandName: fromName,
+          organizationName: submission.organization.name,
+          formName: submission.formVersion.form.name,
+          audience,
+          recipientName: contact.name,
+          reason,
+          dashboardUrl: this.dashboardUrlForOrgType(submission.organization.type),
+        });
+        await this.email.send({
+          to: contact.email,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+          idempotencyKey: `submission.rejected.email:${submissionId}`,
+          templateCode: 'rejected',
+        });
+        emailSent = true;
+      } catch (err) {
+        this.logger.warn(
+          `Rejected email failed for ${contact.email}: ${(err as Error).message}`,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `No contact email for rejected submission ${submissionId}`,
+      );
+    }
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'submission.reject',
+      entityType: 'FormSubmission',
+      entityId: submissionId,
+      outcome: 'SUCCESS',
+      after: { reason, emailSent, email: contact?.email ?? null },
+    });
+
+    return { ...updated, emailSent, email: contact?.email ?? null };
   }
 
   async requestCorrection(
@@ -1053,7 +1274,7 @@ export class FormsService {
     for (const field of input.fields) {
       if (!field.fieldId || !field.note?.trim()) {
         throw new BadRequestException(
-          'Each marked field needs a comment for the vendor',
+          'Each marked field needs a comment for the recipient',
         );
       }
     }
@@ -1061,14 +1282,14 @@ export class FormsService {
     const submission = await this.prisma.formSubmission.findUnique({
       where: { id: submissionId },
       include: {
-        organization: { include: { vendor: true } },
+        organization: true,
         formVersion: { include: { form: true, fields: true } },
       },
     });
     if (!submission) {
       throw new NotFoundException('Submission not found');
     }
-    if (!['SUBMITTED', 'UNDER_REVIEW'].includes(submission.status)) {
+    if (!['SUBMITTED', 'UNDER_REVIEW', 'NEEDS_INFO'].includes(submission.status)) {
       throw new BadRequestException(
         'Only submissions waiting for or in review can request improvements',
       );
@@ -1091,34 +1312,35 @@ export class FormsService {
       }
     }
 
-    const token = generateSecureToken(32);
-    const tokenHash = hashToken(token);
-    const labels = input.fields
-      .map((field, index) => {
-        const match = schema.fields.find((item) => item.id === field.fieldId);
-        return `${index + 1}. ${match?.label ?? field.fieldId}\nComment: ${field.note.trim()}`;
-      })
-      .join('\n\n');
-    const correctionUrl = `${this.env.appUrl}/portal/corrections/${token}`;
-
-    const inviteEmail = await this.prisma.invitation.findFirst({
-      where: { organizationId: submission.organizationId },
-      orderBy: { createdAt: 'desc' },
-    });
-    const email =
-      inviteEmail?.email ??
-      (
-        await this.prisma.organizationMember.findFirst({
-          where: { organizationId: submission.organizationId },
-          include: { user: true },
-        })
-      )?.user.email;
-
-    if (!email) {
+    const contact = await this.resolveOrganizationContact(
+      submission.organizationId,
+      submission.submittedById,
+    );
+    if (!contact?.email) {
       throw new BadRequestException(
-        'No vendor email found to send the correction link',
+        'No contact email found to send the correction link',
       );
     }
+
+    const token = generateSecureToken(32);
+    const tokenHash = hashToken(token);
+    const fieldRows = input.fields.map((field) => {
+      const match = schema.fields.find((item) => item.id === field.fieldId);
+      return {
+        fieldId: field.fieldId,
+        label: match?.label ?? field.fieldId,
+        note: field.note.trim(),
+      };
+    });
+    const labels = fieldRows
+      .map(
+        (field, index) =>
+          `${index + 1}. ${field.label}\nComment: ${field.note}`,
+      )
+      .join('\n\n');
+    const correctionUrl = `${this.env.appUrl}/portal/corrections/${token}`;
+    const audience =
+      submission.organization.type === 'COMPANY' ? 'company' : 'vendor';
 
     const correction = await this.prisma.$transaction(async (tx) => {
       await tx.submissionCorrection.updateMany({
@@ -1132,9 +1354,9 @@ export class FormsService {
           requestedById: actor.id,
           accessTokenHash: tokenHash,
           fields: {
-            create: input.fields.map((field) => ({
+            create: fieldRows.map((field) => ({
               fieldId: field.fieldId,
-              note: field.note.trim(),
+              note: field.note,
             })),
           },
         },
@@ -1162,18 +1384,20 @@ export class FormsService {
       await this.outbox.enqueue(tx, {
         aggregateType: 'SubmissionCorrection',
         aggregateId: created.id,
-        // Reuse invitation routing so existing Rabbit bindings deliver the email.
         eventType: 'invitation.send',
         idempotencyKey: `correction.send:${created.id}`,
         payload: {
           correctionId: created.id,
           submissionId,
-          email,
+          email: contact.email,
+          recipientName: contact.name,
           organizationName: submission.organization.name,
+          organizationType: submission.organization.type,
           formName: submission.formVersion.form.name,
           correctionUrl,
           fieldSummary: labels,
-          fieldCount: input.fields.length,
+          fields: fieldRows.map(({ label, note }) => ({ label, note })),
+          fieldCount: fieldRows.length,
           purpose: 'CORRECTION',
         },
       });
@@ -1182,26 +1406,20 @@ export class FormsService {
     });
 
     let emailSent = false;
+    let emailError: string | null = null;
     try {
       const fromName = await this.email.getFromName();
-      const fieldRows = input.fields.map((field) => {
-        const match = schema.fields.find((item) => item.id === field.fieldId);
-        return {
-          label: match?.label ?? field.fieldId,
-          note: field.note.trim(),
-        };
-      });
       const template = renderCorrectionEmail({
         brandName: fromName,
         organizationName: submission.organization.name,
         formName: submission.formVersion.form.name,
         correctionUrl,
-        fields: fieldRows,
-        audience:
-          submission.organization.type === 'COMPANY' ? 'company' : 'vendor',
+        fields: fieldRows.map(({ label, note }) => ({ label, note })),
+        audience,
+        recipientName: contact.name,
       });
       await this.email.send({
-        to: email,
+        to: contact.email,
         subject: template.subject,
         text: template.text,
         html: template.html,
@@ -1210,8 +1428,9 @@ export class FormsService {
       });
       emailSent = true;
     } catch (err) {
+      emailError = (err as Error).message;
       this.logger.warn(
-        `Correction email failed for ${email}: ${(err as Error).message}`,
+        `Correction email failed for ${contact.email}: ${emailError}`,
       );
     }
 
@@ -1220,15 +1439,27 @@ export class FormsService {
       action: 'submission.correction.request',
       entityType: 'FormSubmission',
       entityId: submissionId,
-      outcome: 'SUCCESS',
-      after: { fieldCount: input.fields.length, emailSent },
+      outcome: emailSent ? 'SUCCESS' : 'PARTIAL',
+      after: {
+        fieldCount: input.fields.length,
+        emailSent,
+        email: contact.email,
+        emailError,
+      },
     });
+
+    if (!emailSent) {
+      throw new BadRequestException(
+        `Improvement request saved, but email to ${contact.email} failed${emailError ? `: ${emailError}` : ''}. Share this link manually: ${correctionUrl}`,
+      );
+    }
 
     return {
       correction,
       correctionUrl,
       emailQueued: true,
       emailSent,
+      email: contact.email,
     };
   }
 

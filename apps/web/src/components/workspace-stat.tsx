@@ -18,16 +18,20 @@ export function WorkspaceStat({
         tone === 'default' &&
           'border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]',
         tone === 'accent' &&
-          'border-transparent bg-[linear-gradient(145deg,#0f766e,#0b4f4a)] text-white',
+          'border-transparent bg-[linear-gradient(145deg,#26e2c6,#1bc4ab)] text-[var(--accent-foreground)]',
         tone === 'highlight' &&
-          'border-transparent bg-[linear-gradient(145deg,#0369a1,#0c4a6e)] text-white',
+          'border-transparent bg-[linear-gradient(145deg,#1bc4ab,#0f9f8c)] text-white',
         className,
       )}
     >
       <p
         className={cn(
           'truncate text-sm',
-          tone === 'default' ? 'text-[var(--muted)]' : 'text-white/75',
+          tone === 'default'
+            ? 'text-[var(--muted)]'
+            : tone === 'accent'
+              ? 'text-[var(--accent-foreground)]/70'
+              : 'text-white/75',
         )}
       >
         {label}

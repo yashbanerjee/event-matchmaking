@@ -88,7 +88,7 @@ export default function HomePage() {
           className="animate-rise glass-panel relative rounded-[1.5rem] p-5 sm:p-6 md:p-8"
           style={{ animationDelay: '120ms' }}
         >
-          <div className="absolute -left-2 -top-3 rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white sm:-left-3">
+          <div className="absolute -left-2 -top-3 rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-foreground)] sm:-left-3">
             Journey
           </div>
           <div className="space-y-4">

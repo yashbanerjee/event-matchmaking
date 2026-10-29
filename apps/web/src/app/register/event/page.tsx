@@ -55,7 +55,7 @@ function StepRail({ step }: { step: Step }) {
                 <span
                   className={cn(
                     'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
-                    active && 'bg-[var(--accent)] text-white',
+                    active && 'bg-[var(--accent)] text-[var(--accent-foreground)]',
                     done && 'bg-emerald-600 text-white',
                     !active &&
                       !done &&

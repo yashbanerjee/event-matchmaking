@@ -426,8 +426,14 @@ export function renderCorrectionEmail(input: {
   correctionUrl: string;
   fields: Array<{ label: string; note: string }>;
   audience?: 'vendor' | 'company';
+  recipientName?: string | null;
 }): { subject: string; html: string; text: string } {
   const count = input.fields.length;
+  const roleWord =
+    input.audience === 'company' ? 'client' : input.audience === 'vendor' ? 'guest' : 'profile';
+  const hello = input.recipientName?.trim()
+    ? `Hello ${input.recipientName.trim()},`
+    : 'Hello,';
   const rendered = renderBrandedEmail({
     kind: 'correction',
     audience: input.audience ?? 'vendor',
@@ -435,9 +441,9 @@ export function renderCorrectionEmail(input: {
     contextName: input.organizationName,
     title: `Please update ${count} field${count === 1 ? '' : 's'}`,
     body: [
-      `Hello,`,
+      hello,
       ``,
-      `Our team reviewed ${input.formName} for ${input.organizationName} and needs a few updates before verification can continue.`,
+      `Our team reviewed ${input.formName} for ${input.organizationName} and needs a few updates before your ${roleWord} profile can be verified.`,
       `Open the secure link below and change only the marked fields. Your other answers stay as they are.`,
     ].join('\n'),
     actionUrl: input.correctionUrl,
@@ -448,14 +454,113 @@ export function renderCorrectionEmail(input: {
     details: [
       { label: 'Organization', value: input.organizationName },
       { label: 'Form', value: input.formName },
-      { label: 'Fields', value: String(count) },
+      { label: 'Fields to update', value: String(count) },
     ],
     footerNote:
       'This link is unique to your organization. If you did not submit this form, contact the event team.',
   });
 
   return {
-    subject: `Please update ${count} field${count === 1 ? '' : 's'} on ${input.formName}`,
+    subject: `Action needed: update ${count} field${count === 1 ? '' : 's'} on ${input.formName}`,
+    ...rendered,
+  };
+}
+
+export function renderVerifiedEmail(input: {
+  brandName?: string;
+  organizationName: string;
+  formName?: string;
+  audience?: 'vendor' | 'company';
+  recipientName?: string | null;
+  dashboardUrl?: string;
+}): { subject: string; html: string; text: string } {
+  const roleLabel = roleDisplayLabel(input.audience ?? 'vendor');
+  const hello = input.recipientName?.trim()
+    ? `Hello ${input.recipientName.trim()},`
+    : 'Hello,';
+  const brandName = input.brandName?.trim() || BRAND.name;
+  const rendered = renderBrandedEmail({
+    kind: 'approved',
+    audience: input.audience ?? 'vendor',
+    brandName,
+    contextName: input.organizationName,
+    title: 'Your profile is verified',
+    body: [
+      hello,
+      ``,
+      `Good news — ${input.organizationName} has been verified as a ${roleLabel.toLowerCase()} on ${brandName}.`,
+      input.formName
+        ? `Your submission for ${input.formName} was approved by the event team.`
+        : `Your registration was approved by the event team.`,
+      `You are now eligible for matchmaking. Sign in to explore recommendations and meetings.`,
+    ].join('\n'),
+    actionUrl: input.dashboardUrl,
+    actionLabel: 'Open dashboard',
+    details: [
+      { label: 'Organization', value: input.organizationName },
+      { label: 'Role', value: roleLabel },
+      { label: 'Status', value: 'Verified' },
+      ...(input.formName ? [{ label: 'Form', value: input.formName }] : []),
+    ],
+    footerNote:
+      'If you have questions about your verification, reply to this email or contact the event team.',
+  });
+
+  return {
+    subject: `${input.organizationName} is verified`,
+    ...rendered,
+  };
+}
+
+export function renderRejectedEmail(input: {
+  brandName?: string;
+  organizationName: string;
+  formName?: string;
+  audience?: 'vendor' | 'company';
+  recipientName?: string | null;
+  reason?: string | null;
+  dashboardUrl?: string;
+}): { subject: string; html: string; text: string } {
+  const roleLabel = roleDisplayLabel(input.audience ?? 'vendor');
+  const hello = input.recipientName?.trim()
+    ? `Hello ${input.recipientName.trim()},`
+    : 'Hello,';
+  const brandName = input.brandName?.trim() || BRAND.name;
+  const reason = input.reason?.trim();
+  const rendered = renderBrandedEmail({
+    kind: 'rejected',
+    audience: input.audience ?? 'vendor',
+    brandName,
+    contextName: input.organizationName,
+    title: 'Registration was not approved',
+    body: [
+      hello,
+      ``,
+      `After reviewing ${input.organizationName}, the event team could not verify this ${roleLabel.toLowerCase()} registration on ${brandName}.`,
+      reason
+        ? `Reason from the review team:\n${reason}`
+        : `No additional reason was provided. Please contact the event team if you need more detail.`,
+      input.formName
+        ? `Reviewed form: ${input.formName}.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    actionUrl: input.dashboardUrl,
+    actionLabel: 'Open portal',
+    details: [
+      { label: 'Organization', value: input.organizationName },
+      { label: 'Role', value: roleLabel },
+      { label: 'Status', value: 'Not approved' },
+      ...(reason ? [{ label: 'Reason', value: reason }] : []),
+      ...(input.formName ? [{ label: 'Form', value: input.formName }] : []),
+    ],
+    footerNote:
+      'If you believe this was a mistake, contact the event team with your organization name.',
+  });
+
+  return {
+    subject: `${input.organizationName} was not approved`,
     ...rendered,
   };
 }

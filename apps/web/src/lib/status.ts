@@ -65,6 +65,7 @@ export function formatVendorStatus(status: string): string {
     PENDING_APPROVAL: 'Pending approval',
     VERIFIED: 'Verified',
     APPROVED: 'Verified',
+    REJECTED: 'Rejected',
     RESEND_FOR_IMPROVEMENTS: 'Resend for improvements',
     PENDING: 'Invited',
   };

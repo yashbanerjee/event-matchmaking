@@ -134,17 +134,22 @@ export function SubmissionReviewView({
       const payload = Object.entries(marks)
         .filter(([, note]) => note.trim())
         .map(([fieldId, note]) => ({ fieldId, note: note.trim() }));
-      return apiFetch<{ correctionUrl: string }>(
-        `/forms/submissions/${submissionId}/corrections`,
-        {
-          method: 'POST',
-          token: getAccessToken(),
-          body: JSON.stringify({ fields: payload }),
-        },
-      );
+      return apiFetch<{
+        correctionUrl: string;
+        emailSent?: boolean;
+        email?: string | null;
+      }>(`/forms/submissions/${submissionId}/corrections`, {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({ fields: payload }),
+      });
     },
     onSuccess: async (res) => {
-      setMessage('Correction email queued.');
+      setMessage(
+        res.email
+          ? `Improvement email sent to ${res.email} with the marked field details.`
+          : 'Improvement request email sent with the marked field details.',
+      );
       setError('');
       setCorrectionUrl(res.correctionUrl);
       setMarks({});
@@ -164,13 +169,22 @@ export function SubmissionReviewView({
 
   const approve = useMutation({
     mutationFn: () =>
-      apiFetch(`/forms/submissions/${submissionId}/approve`, {
-        method: 'POST',
-        token: getAccessToken(),
-      }),
-    onSuccess: async () => {
+      apiFetch<{ emailSent?: boolean; email?: string | null }>(
+        `/forms/submissions/${submissionId}/approve`,
+        {
+          method: 'POST',
+          token: getAccessToken(),
+        },
+      ),
+    onSuccess: async (res) => {
+      const base =
+        kind === 'vendor' ? 'Guest marked verified.' : 'Submission approved.';
       setMessage(
-        kind === 'vendor' ? 'Guest marked verified.' : 'Submission approved.',
+        res.emailSent && res.email
+          ? `${base} Verification email sent to ${res.email}.`
+          : res.emailSent
+            ? `${base} Verification email sent.`
+            : `${base} No verification email could be sent — check contact email.`,
       );
       setError('');
       await qc.invalidateQueries({ queryKey: ['submission', submissionId] });
@@ -182,6 +196,35 @@ export function SubmissionReviewView({
     },
     onError: (caught) =>
       setError(caught instanceof ApiError ? caught.message : 'Approve failed.'),
+  });
+
+  const reject = useMutation({
+    mutationFn: (reason: string) =>
+      apiFetch<{ emailSent?: boolean; email?: string | null }>(
+        `/forms/submissions/${submissionId}/reject`,
+        {
+          method: 'POST',
+          token: getAccessToken(),
+          body: JSON.stringify({ reason }),
+        },
+      ),
+    onSuccess: async (res) => {
+      setMessage(
+        res.emailSent && res.email
+          ? `Registration rejected. Email sent to ${res.email}.`
+          : res.emailSent
+            ? 'Registration rejected. Email sent.'
+            : 'Registration rejected. No email could be sent — check contact email.',
+      );
+      setError('');
+      await qc.invalidateQueries({ queryKey: ['submission', submissionId] });
+      await qc.invalidateQueries({
+        queryKey: ['org-submissions', organizationId],
+      });
+      await qc.invalidateQueries({ queryKey: listQueryKey });
+    },
+    onError: (caught) =>
+      setError(caught instanceof ApiError ? caught.message : 'Reject failed.'),
   });
 
   const data = detail.data;
@@ -203,7 +246,7 @@ export function SubmissionReviewView({
               Review submitted answers and request field-level improvements.
             </p>
           </div>
-          {data && data.status !== 'APPROVED' ? (
+          {data && data.status !== 'APPROVED' && data.status !== 'REJECTED' ? (
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -213,7 +256,21 @@ export function SubmissionReviewView({
                 Resend for improvements
               </Button>
               <Button
-                disabled={approve.isPending}
+                variant="outline"
+                disabled={reject.isPending || approve.isPending}
+                onClick={() => {
+                  const reason = window.prompt(
+                    'Optional reason to include in the rejection email:',
+                    '',
+                  );
+                  if (reason === null) return;
+                  reject.mutate(reason.trim());
+                }}
+              >
+                Reject
+              </Button>
+              <Button
+                disabled={approve.isPending || reject.isPending}
                 onClick={() => approve.mutate()}
               >
                 Mark verified
@@ -338,14 +395,14 @@ export function SubmissionReviewView({
               notes={openNotes}
               disabled
             />
-            {data.status !== 'APPROVED' ? (
+            {data.status !== 'APPROVED' && data.status !== 'REJECTED' ? (
               <aside className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)] p-3">
                 <h3 className="text-xs font-semibold uppercase text-[var(--muted)]">
                   Mark for resubmit
                 </h3>
                 <p className="mt-1 mb-3 text-xs text-[var(--muted)]">
-                  Select fields and add comments. The recipient only sees those
-                  fields via the email link.
+                  Select fields and add comments. The user receives those field
+                  details and a secure update link by email.
                 </p>
                 <div className="grid max-h-[60vh] gap-2 overflow-y-auto">
                   {fields.map((field) => {

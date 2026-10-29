@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OrganizationType } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { formSchemaDefinition, renderInvitationEmail } from '@em/shared';
+import {
+  formSchemaDefinition,
+  renderInvitationEmail,
+  renderVerifiedEmail,
+} from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EnvService } from '../config/env.service';
@@ -1039,17 +1043,47 @@ export class OrganizationsService {
   async approveVendor(actor: AuthUser, id: string) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
-      include: { vendor: true },
+      include: {
+        vendor: true,
+        members: {
+          include: {
+            user: { select: { email: true, firstName: true, lastName: true } },
+          },
+          orderBy: [{ isPrimary: 'desc' }, { joinedAt: 'asc' }],
+          take: 1,
+        },
+      },
     });
     if (!org?.vendor) {
       throw new NotFoundException('Vendor not found');
     }
+
+    const latestSubmission = await this.prisma.formSubmission.findFirst({
+      where: { organizationId: id },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        formVersion: { include: { form: true } },
+        submittedBy: {
+          select: { email: true, firstName: true, lastName: true },
+        },
+      },
+    });
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.organization.update({
         where: { id },
         data: { status: 'APPROVED' },
       });
+      if (latestSubmission) {
+        await tx.formSubmission.update({
+          where: { id: latestSubmission.id },
+          data: { status: 'APPROVED', reviewedAt: new Date() },
+        });
+        await tx.submissionCorrection.updateMany({
+          where: { submissionId: latestSubmission.id, status: 'OPEN' },
+          data: { status: 'RESOLVED', resolvedAt: new Date() },
+        });
+      }
       return tx.vendor.update({
         where: { organizationId: id },
         data: {
@@ -1061,14 +1095,64 @@ export class OrganizationsService {
       });
     });
 
+    const attrs =
+      org.customAttrs && typeof org.customAttrs === 'object'
+        ? (org.customAttrs as Record<string, unknown>)
+        : {};
+    const contactEmail =
+      latestSubmission?.submittedBy?.email ||
+      (typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null) ||
+      org.members[0]?.user.email ||
+      null;
+    const contactName =
+      [latestSubmission?.submittedBy?.firstName, latestSubmission?.submittedBy?.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim() ||
+      (typeof attrs.contactName === 'string' ? attrs.contactName : null) ||
+      [org.members[0]?.user.firstName, org.members[0]?.user.lastName]
+        .filter(Boolean)
+        .join(' ')
+        .trim() ||
+      null;
+
+    let emailSent = false;
+    if (contactEmail) {
+      try {
+        const fromName = await this.email.getFromName();
+        const template = renderVerifiedEmail({
+          brandName: fromName,
+          organizationName: org.name,
+          formName: latestSubmission?.formVersion.form.name,
+          audience: 'vendor',
+          recipientName: contactName,
+          dashboardUrl: `${this.env.appUrl}/vendor`,
+        });
+        await this.email.send({
+          to: contactEmail,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+          idempotencyKey: `vendor.verified.email:${id}`,
+          templateCode: 'approved',
+        });
+        emailSent = true;
+      } catch (err) {
+        this.logger.warn(
+          `Vendor verified email failed for ${contactEmail}: ${(err as Error).message}`,
+        );
+      }
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'vendor.approve',
       entityType: 'Vendor',
       entityId: id,
       outcome: 'SUCCESS',
+      after: { emailSent, email: contactEmail },
     });
 
-    return updated;
+    return { ...updated, emailSent, email: contactEmail };
   }
 }

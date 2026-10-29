@@ -161,22 +161,33 @@ async function handleCorrection(content: Record<string, unknown>) {
   const organizationName = String(content.organizationName ?? 'Organization');
   const formName = String(content.formName ?? 'Form');
   const fieldSummary = String(content.fieldSummary ?? '');
-  const fields = fieldSummary
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map((block) => {
-      const [labelLine, ...rest] = block.split('\n');
-      const label = (labelLine ?? '').replace(/^\d+\.\s*/, '').trim() || 'Field';
-      const note = rest
-        .join('\n')
-        .replace(/^Comment:\s*/i, '')
-        .trim();
-      return { label, note: note || 'Please review this field.' };
-    });
+  const structuredFields = Array.isArray(content.fields)
+    ? (content.fields as Array<{ label?: string; note?: string }>)
+        .map((field) => ({
+          label: String(field.label ?? 'Field').trim() || 'Field',
+          note: String(field.note ?? '').trim() || 'Please review this field.',
+        }))
+        .filter((field) => field.label)
+    : [];
+  const fields = structuredFields.length
+    ? structuredFields
+    : fieldSummary
+        .split(/\n{2,}/)
+        .map((block) => block.trim())
+        .filter(Boolean)
+        .map((block) => {
+          const [labelLine, ...rest] = block.split('\n');
+          const label =
+            (labelLine ?? '').replace(/^\d+\.\s*/, '').trim() || 'Field';
+          const note = rest
+            .join('\n')
+            .replace(/^Comment:\s*/i, '')
+            .trim();
+          return { label, note: note || 'Please review this field.' };
+        });
 
   const template = renderCorrectionEmail({
-    brandName: process.env.APP_NAME ?? 'Event Matchmaking',
+    brandName: process.env.EMAIL_FROM_NAME || process.env.APP_NAME || 'Ethara',
     organizationName,
     formName,
     correctionUrl,
@@ -184,6 +195,8 @@ async function handleCorrection(content: Record<string, unknown>) {
       ? fields
       : [{ label: 'Requested fields', note: fieldSummary || 'See portal' }],
     audience: content.organizationType === 'COMPANY' ? 'company' : 'vendor',
+    recipientName:
+      typeof content.recipientName === 'string' ? content.recipientName : null,
   });
 
   logger.info(

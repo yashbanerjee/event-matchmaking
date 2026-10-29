@@ -50,7 +50,7 @@ function SidebarNav({
             {item.href === '/portal/onboarding' && pendingForms > 0 ? (
               <Badge
                 variant="accent"
-                className="shrink-0 border-transparent bg-[var(--accent)] text-white"
+                className="shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
               >
                 {pendingForms}
               </Badge>

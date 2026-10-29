@@ -79,16 +79,22 @@ export default function AdminOverviewPage() {
         {hero.map((m, i) => (
           <Card
             key={m.label}
-            className="relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#0f766e,#0b4f4a)] text-white"
-            style={{
-              background:
-                m.tone === 'sky'
-                  ? 'linear-gradient(145deg,#0369a1,#0c4a6e)'
-                  : undefined,
-              animationDelay: `${i * 60}ms`,
-            }}
+            className={
+              m.tone === 'sky'
+                ? 'relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#1bc4ab,#0f9f8c)] text-white'
+                : 'relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#26e2c6,#1bc4ab)] text-[var(--accent-foreground)]'
+            }
+            style={{ animationDelay: `${i * 60}ms` }}
           >
-            <div className="text-sm text-white/75">{m.label}</div>
+            <div
+              className={
+                m.tone === 'sky'
+                  ? 'text-sm text-white/75'
+                  : 'text-sm text-[var(--accent-foreground)]/70'
+              }
+            >
+              {m.label}
+            </div>
             <div className="mt-3 text-3xl font-bold tracking-tight">{m.value}</div>
           </Card>
         ))}

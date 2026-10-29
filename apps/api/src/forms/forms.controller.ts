@@ -130,6 +130,16 @@ export class FormsController {
     return this.forms.approveSubmission(user, id);
   }
 
+  @Post('submissions/:id/reject')
+  @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
+  rejectSubmission(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.forms.rejectSubmission(user, id, body ?? {});
+  }
+
   @Post('submissions/:id/corrections')
   @RequirePermissions(PERMISSIONS.SUBMISSIONS_REVIEW)
   requestCorrection(
