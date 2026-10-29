@@ -27,10 +27,17 @@
   --radius: 16px;
   --font-display: "Syne", "Avenir Next", system-ui, sans-serif;
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
-  --page-pad-x: 1.5rem;
-  --page-pad-top: 1.5rem;
+  --page-pad-x: 1rem;
+  --page-pad-top: 1rem;
   --demo-footer-height: 2.25rem;
   --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 640px) {
+  :root {
+    --page-pad-x: 1.5rem;
+    --page-pad-top: 1.5rem;
+  }
 }
 
 .admin-shell {
@@ -153,6 +160,22 @@ h2,
 
 .workspace-main > * {
   max-width: 100%;
+}
+
+.has-mobile-tabs {
+  --page-pad-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 640px) {
+  .has-mobile-tabs {
+    --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .has-mobile-tabs {
+    --page-pad-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .scroll-pad-bottom {

@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { statusTone } from '@/lib/status';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,10 @@ import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
 import { EmptyState } from '@/components/empty-state';
+import {
+  MeetingsCalendar,
+  toCalendarEvents,
+} from '@/components/meetings-calendar';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
   MeetingFeedbackModal,
@@ -33,12 +38,24 @@ type Meeting = {
   place?: { name: string } | null;
 };
 
+type RequestRow = {
+  id: string;
+  status: string;
+  proposedStartsAt: string | null;
+  proposedEndsAt: string | null;
+  fromOrg: { name: string };
+  toOrg: { name: string };
+  place?: { name: string; location?: string | null } | null;
+  meeting?: { id: string } | null;
+};
+
 const PAGE_SIZE = 8;
 
 export default function PortalMeetingsPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [ready, setReady] = useState(false);
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
@@ -78,6 +95,15 @@ export default function PortalMeetingsPage() {
       }),
   });
 
+  const requests = useQuery({
+    queryKey: ['meeting-requests'],
+    enabled: ready,
+    queryFn: () =>
+      apiFetch<{ items: RequestRow[] }>('/meeting-requests', {
+        token: getAccessToken(),
+      }),
+  });
+
   const filtered = useMemo(() => {
     const items = meetings.data?.items ?? [];
     const q = search.trim().toLowerCase();
@@ -89,6 +115,15 @@ export default function PortalMeetingsPage() {
         m.status.toLowerCase().includes(q),
     );
   }, [meetings.data?.items, search]);
+
+  const calendarEvents = useMemo(
+    () =>
+      toCalendarEvents({
+        meetings: filtered,
+        requests: requests.data?.items,
+      }),
+    [filtered, requests.data?.items],
+  );
 
   const total = filtered.length;
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -117,21 +152,49 @@ export default function PortalMeetingsPage() {
         eyebrow="Your workspace"
         title="Meetings"
         description="Confirm sessions. After a meeting ends, submit feedback and review the guest."
+        actions={
+          <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                viewMode === 'calendar'
+                  ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                  : 'text-[var(--muted)]',
+              )}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                viewMode === 'list'
+                  ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                  : 'text-[var(--muted)]',
+              )}
+            >
+              List
+            </button>
+          </div>
+        }
       />
 
       <Card className="overflow-hidden">
         <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="h-display text-lg font-semibold tracking-tight">
-            Schedule
+            {viewMode === 'calendar' ? 'Calendar' : 'Schedule'}
           </h2>
           <Input
             className="w-full max-w-xs shrink-0"
             placeholder="Search client, guest, status…"
-            value={search}
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
             }}
+            value={search}
           />
         </div>
 
@@ -140,12 +203,40 @@ export default function PortalMeetingsPage() {
           <p className="text-rose-700">{(meetings.error as Error).message}</p>
         )}
 
-        {!meetings.isLoading && pageItems.length === 0 ? (
+        {viewMode === 'calendar' && !meetings.isLoading ? (
+          calendarEvents.length === 0 ? (
+            <EmptyState
+              title="No meetings yet"
+              description="Scheduled peer meetings and proposed request times appear here."
+            />
+          ) : (
+            <MeetingsCalendar
+              events={calendarEvents}
+              onSelectEvent={(event) => {
+                if (event.kind !== 'meeting') return;
+                const meetingId = event.id.replace(/^meeting:/, '');
+                const meeting = filtered.find((row) => row.id === meetingId);
+                if (!meeting) return;
+                if (
+                  meetingHasEnded(meeting) &&
+                  orgId &&
+                  !meeting.hasSubmittedFeedback
+                ) {
+                  setFeedbackFor(meeting);
+                }
+              }}
+            />
+          )
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && pageItems.length === 0 ? (
           <EmptyState
             title="No meetings yet"
             description="Scheduled peer meetings and published schedules appear here."
           />
-        ) : (
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && pageItems.length > 0 ? (
           <>
             <Table>
               <THead>
@@ -205,7 +296,7 @@ export default function PortalMeetingsPage() {
               onPageChange={setPage}
             />
           </>
-        )}
+        ) : null}
       </Card>
 
       <MeetingFeedbackModal

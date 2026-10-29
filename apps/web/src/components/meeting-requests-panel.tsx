@@ -163,17 +163,8 @@ export function MeetingRequestsPanel({
             description="Send a request from recommendations, or wait for one from a counterpart."
           />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>From</TH>
-                <TH>To</TH>
-                <TH>Status</TH>
-                <TH>Proposed</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
+          <>
+            <div className="grid gap-3 sm:hidden">
               {items.map((req) => {
                 const isRecipient = canAct.has(req.toOrgId);
                 const isParty =
@@ -183,28 +174,55 @@ export function MeetingRequestsPanel({
                   proposer &&
                   ((proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
                     (proposer === req.toOrgId && canAct.has(req.fromOrgId)));
+                const counterpart = canAct.has(req.fromOrgId)
+                  ? req.toOrg.name
+                  : req.fromOrg.name;
+                const direction = canAct.has(req.fromOrgId)
+                  ? 'Outgoing'
+                  : 'Incoming';
 
                 return (
-                  <TR key={req.id}>
-                    <TD className="font-medium">{req.fromOrg.name}</TD>
-                    <TD>{req.toOrg.name}</TD>
-                    <TD>
-                      <Badge variant={statusTone(req.status)}>
-                        {req.status}
+                  <div
+                    key={req.id}
+                    className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                          {direction}
+                        </p>
+                        <p
+                          className="mt-1 truncate font-semibold"
+                          title={counterpart}
+                        >
+                          {counterpart}
+                        </p>
+                        {req.message ? (
+                          <p className="mt-1 line-clamp-2 text-sm text-[var(--muted)]">
+                            {req.message}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Badge
+                        variant={statusTone(req.status)}
+                        className="shrink-0"
+                      >
+                        {req.status.replaceAll('_', ' ')}
                       </Badge>
-                    </TD>
-                    <TD className="text-sm">
+                    </div>
+                    <p className="mt-3 text-xs text-[var(--muted)]">
                       {req.proposedStartsAt
                         ? `${new Date(req.proposedStartsAt).toLocaleString()}${
                             req.place ? ` · ${req.place.name}` : ''
                           }`
-                        : '—'}
-                    </TD>
-                    <TD className="space-x-2 whitespace-nowrap text-right">
+                        : 'Time not proposed yet'}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {req.status === 'PENDING' && isRecipient ? (
                         <>
                           <Button
                             size="sm"
+                            className="flex-1"
                             onClick={() => accept.mutate(req.id)}
                           >
                             Accept
@@ -212,6 +230,7 @@ export function MeetingRequestsPanel({
                           <Button
                             size="sm"
                             variant="outline"
+                            className="flex-1"
                             onClick={() => decline.mutate(req.id)}
                           >
                             Decline
@@ -219,7 +238,11 @@ export function MeetingRequestsPanel({
                         </>
                       ) : null}
                       {req.status === 'INTEREST_ACCEPTED' && isParty ? (
-                        <Button size="sm" onClick={() => openSchedule(req)}>
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={() => openSchedule(req)}
+                        >
                           Pick time
                         </Button>
                       ) : null}
@@ -228,6 +251,7 @@ export function MeetingRequestsPanel({
                         <>
                           <Button
                             size="sm"
+                            className="flex-1"
                             onClick={() => confirm.mutate(req.id)}
                           >
                             Confirm
@@ -235,18 +259,111 @@ export function MeetingRequestsPanel({
                           <Button
                             size="sm"
                             variant="outline"
+                            className="flex-1"
                             onClick={() => decline.mutate(req.id)}
                           >
                             Decline
                           </Button>
                         </>
                       ) : null}
-                    </TD>
-                  </TR>
+                    </div>
+                  </div>
                 );
               })}
-            </TBody>
-          </Table>
+            </div>
+
+            <div className="hidden sm:block">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>From</TH>
+                    <TH>To</TH>
+                    <TH>Status</TH>
+                    <TH>Proposed</TH>
+                    <TH />
+                  </TR>
+                </THead>
+                <TBody>
+                  {items.map((req) => {
+                    const isRecipient = canAct.has(req.toOrgId);
+                    const isParty =
+                      canAct.has(req.fromOrgId) || canAct.has(req.toOrgId);
+                    const proposer = req.proposedByOrgId;
+                    const isOpponentConfirmer =
+                      proposer &&
+                      ((proposer === req.fromOrgId &&
+                        canAct.has(req.toOrgId)) ||
+                        (proposer === req.toOrgId &&
+                          canAct.has(req.fromOrgId)));
+
+                    return (
+                      <TR key={req.id}>
+                        <TD className="font-medium">{req.fromOrg.name}</TD>
+                        <TD>{req.toOrg.name}</TD>
+                        <TD>
+                          <Badge variant={statusTone(req.status)}>
+                            {req.status}
+                          </Badge>
+                        </TD>
+                        <TD className="text-sm">
+                          {req.proposedStartsAt
+                            ? `${new Date(req.proposedStartsAt).toLocaleString()}${
+                                req.place ? ` · ${req.place.name}` : ''
+                              }`
+                            : '—'}
+                        </TD>
+                        <TD className="space-x-2 whitespace-nowrap text-right">
+                          {req.status === 'PENDING' && isRecipient ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => accept.mutate(req.id)}
+                              >
+                                Accept
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => decline.mutate(req.id)}
+                              >
+                                Decline
+                              </Button>
+                            </>
+                          ) : null}
+                          {req.status === 'INTEREST_ACCEPTED' && isParty ? (
+                            <Button
+                              size="sm"
+                              onClick={() => openSchedule(req)}
+                            >
+                              Pick time
+                            </Button>
+                          ) : null}
+                          {req.status === 'AWAITING_CONFIRMATION' &&
+                          isOpponentConfirmer ? (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => confirm.mutate(req.id)}
+                              >
+                                Confirm
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => decline.mutate(req.id)}
+                              >
+                                Decline
+                              </Button>
+                            </>
+                          ) : null}
+                        </TD>
+                      </TR>
+                    );
+                  })}
+                </TBody>
+              </Table>
+            </div>
+          </>
         )}
       </Card>
 

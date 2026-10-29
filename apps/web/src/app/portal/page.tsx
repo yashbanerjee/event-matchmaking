@@ -1,28 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
 import { RecommendationsPanel } from '@/components/recommendations-panel';
-import { WorkspaceStat } from '@/components/workspace-stat';
+import {
+  OverviewFormCards,
+  OverviewMeetingCards,
+  OverviewRequestCards,
+  OverviewStatStrip,
+} from '@/components/overview-home';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 import { ensurePushSubscription } from '@/lib/push-subscribe';
+import { labelForFormItem, statusForFormItem } from '@/lib/vendor-forms';
 
 type Meeting = {
   id: string;
   status: string;
   startsAt: string;
+  companyOrg: { name: string };
+  vendorOrg: { name: string };
+  place?: { name: string } | null;
+  location?: string | null;
 };
 
 type MeetingRequest = {
   id: string;
   status: string;
+  message?: string | null;
+  proposedStartsAt?: string | null;
+  fromOrg: { id: string; name: string };
+  toOrg: { id: string; name: string };
+  place?: { name: string; location?: string | null } | null;
 };
 
 export default function PortalPage() {
@@ -81,13 +94,56 @@ export default function PortalPage() {
       }),
   });
 
-  if (!ready) return null;
+  const orgIds = me.data?.organizationIds ?? [];
 
-  const openRequests = (requests.data?.items ?? []).filter((r) =>
-    ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
-      r.status,
-    ),
+  const openRequestItems = useMemo(
+    () =>
+      (requests.data?.items ?? []).filter((r) =>
+        ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
+          r.status,
+        ),
+      ),
+    [requests.data?.items],
+  );
+
+  const upcomingMeetings = useMemo(() => {
+    const now = Date.now();
+    return (meetings.data?.items ?? [])
+      .filter((m) => new Date(m.startsAt).getTime() >= now - 60 * 60 * 1000)
+      .sort(
+        (a, b) =>
+          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+      )
+      .map((m) => ({
+        id: m.id,
+        status: m.status,
+        startsAt: m.startsAt,
+        counterpartyName: m.vendorOrg.name,
+        placeName: m.place?.name ?? m.location ?? null,
+      }));
+  }, [meetings.data?.items]);
+
+  const formCards = useMemo(
+    () =>
+      (onboarding.data?.items ?? []).map((item) => {
+        const status = statusForFormItem(item);
+        return {
+          id: item.assignmentId,
+          name: item.formName,
+          statusLabel: labelForFormItem(item),
+          statusToneKey: status,
+          filledOn: item.submission?.submittedAt ?? null,
+          href: `/portal/onboarding`,
+        };
+      }),
+    [onboarding.data?.items],
+  );
+
+  const confirmed = (meetings.data?.items ?? []).filter(
+    (m) => m.status === 'CONFIRMED',
   ).length;
+
+  if (!ready) return null;
 
   return (
     <PortalShell
@@ -97,30 +153,37 @@ export default function PortalPage() {
       <PageHeader
         eyebrow="Client / Delegate"
         title="Home"
-        description="Recommended guests based on your preferences. Request a meeting to start scheduling."
-        actions={
-          <Link href="/portal/requests">
-            <Button variant="outline">Requests ({openRequests})</Button>
-          </Link>
-        }
+        description="Your requests, meetings, forms, and recommended guests in one place."
       />
 
-      <div className="grid min-w-0 gap-4 sm:grid-cols-3">
-        <WorkspaceStat
-          tone="accent"
-          label="Meetings"
-          value={meetings.data?.items.length ?? 0}
-        />
-        <WorkspaceStat label="Open requests" value={openRequests} />
-        <WorkspaceStat
-          label="Signed in as"
-          value={
-            <span className="block truncate text-lg" title={me.data?.email}>
-              {me.data?.email ?? '…'}
-            </span>
-          }
-        />
-      </div>
+      <OverviewStatStrip
+        items={[
+          {
+            label: 'Meetings',
+            value: meetings.data?.items.length ?? 0,
+            accent: true,
+          },
+          { label: 'Open requests', value: openRequestItems.length },
+          { label: 'Confirmed', value: confirmed },
+          {
+            label: 'Forms',
+            value: onboarding.data?.items.length ?? 0,
+          },
+        ]}
+      />
+
+      <OverviewRequestCards
+        items={openRequestItems}
+        requestsHref="/portal/requests"
+        myOrgIds={orgIds}
+      />
+
+      <OverviewMeetingCards
+        items={upcomingMeetings}
+        meetingsHref="/portal/meetings"
+      />
+
+      <OverviewFormCards items={formCards} formsHref="/portal/onboarding" />
 
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}

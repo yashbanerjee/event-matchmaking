@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import {
+  MeetingsCalendar,
+  toCalendarEvents,
+} from '@/components/meetings-calendar';
+import {
   MeetingFeedbackModal,
   meetingHasEnded,
 } from '@/components/meeting-feedback-modal';
@@ -15,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import { cn } from '@/lib/utils';
 import { badgeToneForStatus } from '@/lib/vendor-forms';
 
 type Meeting = {
@@ -33,8 +38,20 @@ type Meeting = {
   place?: { name: string } | null;
 };
 
+type RequestRow = {
+  id: string;
+  status: string;
+  proposedStartsAt: string | null;
+  proposedEndsAt: string | null;
+  fromOrg: { name: string };
+  toOrg: { name: string };
+  place?: { name: string; location?: string | null } | null;
+  meeting?: { id: string } | null;
+};
+
 export default function VendorMeetingsPage() {
   const qc = useQueryClient();
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [search, setSearch] = useState('');
   const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
 
@@ -50,6 +67,14 @@ export default function VendorMeetingsPage() {
     queryKey: ['vendor-meetings'],
     queryFn: () =>
       apiFetch<{ items: Meeting[]; total: number }>('/meetings?pageSize=100', {
+        token: getAccessToken(),
+      }),
+  });
+
+  const requests = useQuery({
+    queryKey: ['meeting-requests'],
+    queryFn: () =>
+      apiFetch<{ items: RequestRow[] }>('/meeting-requests', {
         token: getAccessToken(),
       }),
   });
@@ -80,6 +105,15 @@ export default function VendorMeetingsPage() {
     );
   }, [meetings.data?.items, search]);
 
+  const calendarEvents = useMemo(
+    () =>
+      toCalendarEvents({
+        meetings: filtered,
+        requests: requests.data?.items,
+      }),
+    [filtered, requests.data?.items],
+  );
+
   const orgId = me.data?.organizationIds[0] ?? '';
 
   return (
@@ -89,24 +123,82 @@ export default function VendorMeetingsPage() {
         title="Your meetings"
         description="Confirm sessions. After a meeting ends, submit feedback and review the client."
         actions={
-          <Input
-            className="max-w-xs"
-            placeholder="Search client, guest, status…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                  viewMode === 'calendar'
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                    : 'text-[var(--muted)]',
+                )}
+              >
+                Calendar
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                  viewMode === 'list'
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                    : 'text-[var(--muted)]',
+                )}
+              >
+                List
+              </button>
+            </div>
+            <Input
+              className="max-w-xs"
+              placeholder="Search client, guest, status…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
         }
       />
 
       <Card className="overflow-hidden">
         {meetings.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading…</p>
-        ) : filtered.length === 0 ? (
+        ) : null}
+
+        {viewMode === 'calendar' && !meetings.isLoading ? (
+          calendarEvents.length === 0 ? (
+            <EmptyState
+              title="No meetings yet"
+              description="When meetings are scheduled or a time is proposed, they appear on this calendar."
+            />
+          ) : (
+            <MeetingsCalendar
+              events={calendarEvents}
+              onSelectEvent={(event) => {
+                if (event.kind !== 'meeting') return;
+                const meetingId = event.id.replace(/^meeting:/, '');
+                const meeting = filtered.find((row) => row.id === meetingId);
+                if (!meeting) return;
+                if (
+                  meetingHasEnded(meeting) &&
+                  orgId &&
+                  !meeting.hasSubmittedFeedback
+                ) {
+                  setFeedbackFor(meeting);
+                }
+              }}
+            />
+          )
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && filtered.length === 0 ? (
           <EmptyState
             title="No meetings yet"
             description="When meetings are scheduled, they appear here with full details."
           />
-        ) : (
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && filtered.length > 0 ? (
           <Table>
             <THead>
               <TR>
@@ -172,7 +264,7 @@ export default function VendorMeetingsPage() {
               })}
             </TBody>
           </Table>
-        )}
+        ) : null}
       </Card>
 
       <MeetingFeedbackModal

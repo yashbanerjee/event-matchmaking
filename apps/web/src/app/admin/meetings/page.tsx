@@ -6,12 +6,17 @@ import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { statusTone } from '@/lib/status';
 import { PageHeader } from '@/components/page-header';
+import {
+  MeetingsCalendar,
+  toCalendarEvents,
+} from '@/components/meetings-calendar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 
 type MeetingRow = {
   id: string;
@@ -66,8 +71,20 @@ const emptyFilters = {
   search: '',
 };
 
+type RequestRow = {
+  id: string;
+  status: string;
+  proposedStartsAt: string | null;
+  proposedEndsAt: string | null;
+  fromOrg: { name: string };
+  toOrg: { name: string };
+  place?: { name: string; location?: string | null } | null;
+  meeting?: { id: string } | null;
+};
+
 export default function AdminMeetingsPage() {
   const qc = useQueryClient();
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [filters, setFilters] = useState(emptyFilters);
   const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
@@ -91,6 +108,14 @@ export default function AdminMeetingsPage() {
     queryKey: ['admin-meetings'],
     queryFn: () =>
       apiFetch<{ items: MeetingRow[] }>('/meetings?pageSize=100', {
+        token: getAccessToken(),
+      }),
+  });
+
+  const requests = useQuery({
+    queryKey: ['admin-meeting-requests'],
+    queryFn: () =>
+      apiFetch<{ items: RequestRow[] }>('/meeting-requests', {
         token: getAccessToken(),
       }),
   });
@@ -254,6 +279,15 @@ export default function AdminMeetingsPage() {
       filters.search.trim(),
   );
 
+  const calendarEvents = useMemo(
+    () =>
+      toCalendarEvents({
+        meetings: rows,
+        requests: requests.data?.items,
+      }),
+    [rows, requests.data?.items],
+  );
+
   function openEdit(meeting: MeetingRow) {
     setEdit(meeting);
     setEditForm({
@@ -280,21 +314,51 @@ export default function AdminMeetingsPage() {
         title="Meetings"
         description="Scheduled meetings are confirmed automatically. Edit, delete, or add a manual meeting here."
         actions={
-          <Button
-            onClick={() => {
-              setCreating(true);
-              setError(null);
-            }}
-          >
-            Manual meeting
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                  viewMode === 'calendar'
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                    : 'text-[var(--muted)]',
+                )}
+              >
+                Calendar
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-xs font-semibold sm:text-sm',
+                  viewMode === 'list'
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                    : 'text-[var(--muted)]',
+                )}
+              >
+                List
+              </button>
+            </div>
+            <Button
+              onClick={() => {
+                setCreating(true);
+                setError(null);
+              }}
+            >
+              Manual meeting
+            </Button>
+          </div>
         }
       />
 
       <Card>
         <div className="mb-4 space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-semibold">Schedule</h2>
+            <h2 className="text-lg font-semibold">
+              {viewMode === 'calendar' ? 'Calendar' : 'Schedule'}
+            </h2>
             {filtersActive ? (
               <Button
                 size="sm"
@@ -396,13 +460,35 @@ export default function AdminMeetingsPage() {
           </p>
         ) : null}
 
-        {!meetings.isLoading && rows.length === 0 ? (
+        {viewMode === 'calendar' && !meetings.isLoading ? (
+          calendarEvents.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              {activeMeetings.length === 0
+                ? 'No meetings or proposed requests yet. Create a manual meeting or wait for peer scheduling.'
+                : 'No events match these filters.'}
+            </p>
+          ) : (
+            <MeetingsCalendar
+              events={calendarEvents}
+              onSelectEvent={(event) => {
+                if (event.kind !== 'meeting') return;
+                const meetingId = event.id.replace(/^meeting:/, '');
+                const meeting = rows.find((row) => row.id === meetingId);
+                if (meeting) openEdit(meeting);
+              }}
+            />
+          )
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && rows.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">
             {activeMeetings.length === 0
               ? 'No meetings yet. Create a manual meeting or wait for peer requests to be confirmed.'
               : 'No meetings match these filters.'}
           </p>
-        ) : (
+        ) : null}
+
+        {viewMode === 'list' && !meetings.isLoading && rows.length > 0 ? (
           <Table>
             <THead>
               <TR>
@@ -471,7 +557,7 @@ export default function AdminMeetingsPage() {
               })}
             </TBody>
           </Table>
-        )}
+        ) : null}
       </Card>
 
       <Modal

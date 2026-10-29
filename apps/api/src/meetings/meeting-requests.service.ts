@@ -37,12 +37,17 @@ export class MeetingRequestsService {
 
   async listForUser(actor: AuthUser) {
     const orgIds = this.actorOrgIds(actor);
-    if (!orgIds.length) return { items: [] };
+    const isAdmin = (actor.roles ?? []).some((role) =>
+      ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role),
+    );
+    if (!isAdmin && !orgIds.length) return { items: [] };
 
     const items = await this.prisma.meetingRequest.findMany({
-      where: {
-        OR: [{ fromOrgId: { in: orgIds } }, { toOrgId: { in: orgIds } }],
-      },
+      where: isAdmin
+        ? undefined
+        : {
+            OR: [{ fromOrgId: { in: orgIds } }, { toOrgId: { in: orgIds } }],
+          },
       include: {
         fromOrg: { select: { id: true, name: true, type: true } },
         toOrg: { select: { id: true, name: true, type: true } },
@@ -50,7 +55,7 @@ export class MeetingRequestsService {
         meeting: { select: { id: true, status: true } },
       },
       orderBy: { updatedAt: 'desc' },
-      take: 100,
+      take: isAdmin ? 200 : 100,
     });
 
     return { items };
