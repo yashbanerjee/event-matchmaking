@@ -170,7 +170,7 @@ export function SubmissionReviewView({
       }),
     onSuccess: async () => {
       setMessage(
-        kind === 'vendor' ? 'Vendor marked verified.' : 'Submission approved.',
+        kind === 'vendor' ? 'Guest marked verified.' : 'Submission approved.',
       );
       setError('');
       await qc.invalidateQueries({ queryKey: ['submission', submissionId] });
@@ -230,7 +230,8 @@ export function SubmissionReviewView({
       {!list.isLoading && (list.data?.length ?? 0) === 0 ? (
         <Card>
           <p className="text-sm text-[var(--muted)]">
-            No form has been submitted for this {kind} yet.
+            No form has been submitted for this{' '}
+            {kind === 'vendor' ? 'guest' : 'client'} yet.
           </p>
         </Card>
       ) : null}

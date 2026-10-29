@@ -95,9 +95,9 @@ export default function PortalPage() {
       pendingForms={onboarding.data?.pendingCount}
     >
       <PageHeader
-        eyebrow="Company / Delegate"
+        eyebrow="Client / Delegate"
         title="Home"
-        description="Recommended vendors based on your preferences. Request a meeting to start scheduling."
+        description="Recommended guests based on your preferences. Request a meeting to start scheduling."
         actions={
           <Link href="/portal/requests">
             <Button variant="outline">Requests ({openRequests})</Button>
@@ -124,8 +124,8 @@ export default function PortalPage() {
 
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
-        title="Recommended vendors"
-        description="Admin suggestions plus vendors matched to your industry, categories, and capabilities."
+        title="Recommended guests"
+        description="Admin suggestions plus guests matched to your industry, categories, and capabilities."
       />
     </PortalShell>
   );

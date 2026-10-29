@@ -34,7 +34,7 @@ export default function ProfilesPage() {
       </div>
       {error && <p className="text-red-700">{(error as Error).message}</p>}
       <Card>
-        <h2 className="font-medium mb-3">Companies</h2>
+        <h2 className="font-medium mb-3">Client</h2>
         {isLoading ? (
           <p>Loading…</p>
         ) : (
@@ -67,7 +67,7 @@ export default function ProfilesPage() {
         )}
       </Card>
       <Card>
-        <h2 className="font-medium mb-3">Vendors</h2>
+        <h2 className="font-medium mb-3">Guests</h2>
         <Table>
           <THead>
             <TR>

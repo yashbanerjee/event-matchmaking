@@ -95,7 +95,7 @@ export default function FormsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Forms"
-        description="Write the questions companies and vendors answer online. Publish a form when it is ready to assign."
+        description="Write the questions clients and guests answer online. Publish a form when it is ready to assign."
         actions={
           <Button onClick={() => setOpen(true)}>New form</Button>
         }
@@ -223,7 +223,7 @@ export default function FormsPage() {
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Vendor onboarding"
+            placeholder="Guest onboarding"
             onKeyDown={(event) => {
               if (event.key === 'Enter' && name.trim()) create.mutate();
             }}

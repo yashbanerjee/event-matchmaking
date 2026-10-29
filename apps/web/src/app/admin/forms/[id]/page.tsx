@@ -474,7 +474,7 @@ export default function FormBuilderPage() {
                           ))}
                         </ul>
                         <p className="mt-2 text-xs text-[var(--muted)]">
-                          Vendors/companies pick one value from this dropdown.
+                          Guests/clients pick one value from this dropdown.
                           Save or publish to refresh tags from Filters.
                         </p>
                       </div>

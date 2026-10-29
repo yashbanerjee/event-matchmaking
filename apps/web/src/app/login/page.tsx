@@ -65,7 +65,7 @@ export default function LoginPage() {
             Welcome back to your event workspace.
           </h1>
           <p className="max-w-md text-[var(--muted)]">
-            Admins manage matching and schedules. Vendors and companies use the
+            Admins manage matching and schedules. Guests and clients use the
             participant portal for confirmations and feedback.
           </p>
         </div>

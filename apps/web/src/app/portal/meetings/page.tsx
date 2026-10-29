@@ -116,7 +116,7 @@ export default function PortalMeetingsPage() {
       <PageHeader
         eyebrow="Your workspace"
         title="Meetings"
-        description="Confirm sessions. After a meeting ends, submit feedback and review the vendor."
+        description="Confirm sessions. After a meeting ends, submit feedback and review the guest."
       />
 
       <Card className="overflow-hidden">
@@ -126,7 +126,7 @@ export default function PortalMeetingsPage() {
           </h2>
           <Input
             className="w-full max-w-xs shrink-0"
-            placeholder="Search company, vendor, status…"
+            placeholder="Search client, guest, status…"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -150,7 +150,7 @@ export default function PortalMeetingsPage() {
             <Table>
               <THead>
                 <TR>
-                  <TH>Vendor</TH>
+                  <TH>Guest</TH>
                   <TH>Starts</TH>
                   <TH>Location</TH>
                   <TH>Status</TH>

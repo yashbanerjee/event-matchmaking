@@ -42,8 +42,8 @@ export default function AdminOverviewPage() {
   if (!data) return null;
 
   const hero = [
-    { label: 'Companies', value: data.totalCompanies, tone: 'teal' },
-    { label: 'Vendors', value: data.totalVendors, tone: 'sky' },
+    { label: 'Client', value: data.totalCompanies, tone: 'teal' },
+    { label: 'Guests', value: data.totalVendors, tone: 'sky' },
     { label: 'Scheduled', value: data.scheduledMeetings, tone: 'teal' },
     { label: 'Confirmed', value: data.confirmedMeetings, tone: 'sky' },
   ];

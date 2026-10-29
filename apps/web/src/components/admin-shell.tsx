@@ -13,8 +13,8 @@ const NAV_GROUPS = [
     label: 'Operate',
     items: [
       { href: '/admin', label: 'Overview' },
-      { href: '/admin/companies', label: 'Companies' },
-      { href: '/admin/vendors', label: 'Vendors' },
+      { href: '/admin/companies', label: 'Client' },
+      { href: '/admin/vendors', label: 'Guests' },
     ],
   },
   {
@@ -176,7 +176,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               variant="ghost"
               className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
             >
-              Open vendor panel
+              Open guest panel
             </Button>
           </Link>
           <Link href="/portal" onClick={() => setNavOpen(false)}>
@@ -184,7 +184,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               variant="ghost"
               className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
             >
-              Open participant portal
+              Open client portal
             </Button>
           </Link>
           <Button

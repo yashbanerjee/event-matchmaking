@@ -135,7 +135,7 @@ export default function SettingsPage() {
               <h2 className="font-medium">{group.title}</h2>
               <p className="text-xs text-[var(--muted)]">
                 {group.id === 'email'
-                  ? 'Messages to vendors use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
+                  ? 'Messages to guests use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
                   : 'Setting key shown on each row'}
               </p>
             </div>

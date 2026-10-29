@@ -28,13 +28,13 @@ function VendorFormReviewContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Vendors"
+        eyebrow="Guests"
         title="Submitted form"
-        description="Review answers, verify the vendor, or request improvements."
+        description="Review answers, verify the guest, or request improvements."
         actions={
           <Link href="/admin/vendors">
             <Button variant="outline" size="sm">
-              Back to vendors
+              Back to guests
             </Button>
           </Link>
         }

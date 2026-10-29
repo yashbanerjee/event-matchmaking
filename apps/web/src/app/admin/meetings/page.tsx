@@ -337,7 +337,7 @@ export default function AdminMeetingsPage() {
               />
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Company</span>
+              <span className="mb-1 block text-[var(--muted)]">Client</span>
               <select
                 className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
                 value={filters.companyOrgId}
@@ -345,7 +345,7 @@ export default function AdminMeetingsPage() {
                   setFilters((f) => ({ ...f, companyOrgId: e.target.value }))
                 }
               >
-                <option value="">All companies</option>
+                <option value="">All clients</option>
                 {companyFilterOptions.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
@@ -354,7 +354,7 @@ export default function AdminMeetingsPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Vendor</span>
+              <span className="mb-1 block text-[var(--muted)]">Guest</span>
               <select
                 className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
                 value={filters.vendorOrgId}
@@ -362,7 +362,7 @@ export default function AdminMeetingsPage() {
                   setFilters((f) => ({ ...f, vendorOrgId: e.target.value }))
                 }
               >
-                <option value="">All vendors</option>
+                <option value="">All guests</option>
                 {vendorFilterOptions.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
@@ -406,8 +406,8 @@ export default function AdminMeetingsPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Company</TH>
-                <TH>Vendor</TH>
+                <TH>Client</TH>
+                <TH>Guest</TH>
                 <TH>Starts</TH>
                 <TH>Location</TH>
                 <TH>Invited by</TH>
@@ -481,7 +481,7 @@ export default function AdminMeetingsPage() {
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            Company
+            Client
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={editForm.companyOrgId}
@@ -489,7 +489,7 @@ export default function AdminMeetingsPage() {
                 setEditForm((f) => ({ ...f, companyOrgId: e.target.value }))
               }
             >
-              <option value="">Select company</option>
+              <option value="">Select client</option>
               {(companies.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -498,7 +498,7 @@ export default function AdminMeetingsPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Vendor
+            Guest
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={editForm.vendorOrgId}
@@ -506,7 +506,7 @@ export default function AdminMeetingsPage() {
                 setEditForm((f) => ({ ...f, vendorOrgId: e.target.value }))
               }
             >
-              <option value="">Select vendor</option>
+              <option value="">Select guest</option>
               {(vendors.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -561,7 +561,7 @@ export default function AdminMeetingsPage() {
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            Company
+            Client
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={createForm.companyOrgId}
@@ -569,7 +569,7 @@ export default function AdminMeetingsPage() {
                 setCreateForm((f) => ({ ...f, companyOrgId: e.target.value }))
               }
             >
-              <option value="">Select company</option>
+              <option value="">Select client</option>
               {(companies.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -578,7 +578,7 @@ export default function AdminMeetingsPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Vendor
+            Guest
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={createForm.vendorOrgId}
@@ -586,7 +586,7 @@ export default function AdminMeetingsPage() {
                 setCreateForm((f) => ({ ...f, vendorOrgId: e.target.value }))
               }
             >
-              <option value="">Select vendor</option>
+              <option value="">Select guest</option>
               {(vendors.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}

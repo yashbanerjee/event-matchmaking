@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { formatVendorStatus, statusTone } from '@/lib/status';
+import { orgKindLabel } from '@/lib/org-labels';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -200,7 +201,7 @@ export function OrgRowActions({
       <Modal
         open={mode === 'view'}
         title={viewed.name}
-        description={`${kind === 'company' ? 'Company' : 'Vendor'} details`}
+        description={`${orgKindLabel(kind)} details`}
         onClose={() => setMode(null)}
         wide
         footer={
@@ -314,7 +315,7 @@ export function OrgRowActions({
 
       <Modal
         open={mode === 'edit'}
-        title={`Edit ${kind}`}
+        title={`Edit ${orgKindLabel(kind).toLowerCase()}`}
         description={`Update ${org.code}`}
         onClose={() => setMode(null)}
         wide

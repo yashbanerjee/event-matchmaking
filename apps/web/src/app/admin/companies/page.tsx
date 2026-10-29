@@ -362,8 +362,8 @@ export default function CompaniesPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Organizations"
-        title="Companies"
-        description="Invite companies by email or fill their profile yourself and mark them verified."
+        title="Client"
+        description="Invite clients by email or fill their profile yourself and mark them verified."
         actions={
           <>
             <Button variant="outline" onClick={exportCsv}>
@@ -409,12 +409,12 @@ export default function CompaniesPage() {
         {!isLoading && items.length === 0 ? (
           <EmptyState
             title={
-              debouncedSearch ? 'No matching companies' : 'No companies yet'
+              debouncedSearch ? 'No matching clients' : 'No clients yet'
             }
             description={
               debouncedSearch
                 ? 'Try another name or email.'
-                : 'Use Add to invite a company by email, or fill the form as admin.'
+                : 'Use Add to invite a client by email, or fill the form as admin.'
             }
           />
         ) : (
@@ -507,8 +507,8 @@ export default function CompaniesPage() {
 
       <Modal
         open={addOpen}
-        title="Add company"
-        description="Send an invitation link, or fill the company form yourself and verify immediately."
+        title="Add client"
+        description="Send an invitation link, or fill the client form yourself and verify immediately."
         onClose={() => setAddOpen(false)}
         wide
         footer={
@@ -547,7 +547,7 @@ export default function CompaniesPage() {
                   checked={form.sendInvitation}
                   onChange={() => setForm({ ...form, sendInvitation: true })}
                 />
-                Yes — email invitation (same as vendor)
+                Yes — email invitation (same as guest)
               </label>
               <label className="inline-flex items-center gap-2">
                 <input
@@ -594,19 +594,19 @@ export default function CompaniesPage() {
             </div>
           ) : (
             <p className="text-sm text-[var(--muted)]">
-              Invitation email goes to the company contact. They complete
+              Invitation email goes to the client contact. They complete
               registration and any assigned onboarding forms from their portal.
             </p>
           )}
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Company name
+              Client name
             </label>
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Company name"
+              placeholder="Client name"
             />
           </div>
 
@@ -667,7 +667,7 @@ export default function CompaniesPage() {
       <Modal
         open={Boolean(adminFill)}
         title={adminFill ? `Fill ${adminFill.formName}` : 'Fill form'}
-        description="Complete the company profile. On submit it is marked verified immediately."
+        description="Complete the client profile. On submit it is marked verified immediately."
         onClose={() => setAdminFill(null)}
         size="xl"
         footer={
@@ -734,7 +734,7 @@ export default function CompaniesPage() {
         <div className="space-y-4">
           <p className="text-sm text-[var(--muted)]">
             Each row receives an invitation email. Onboarding forms are assigned
-            automatically from published company forms.
+            automatically from published client forms.
           </p>
           <textarea
             className="min-h-48 w-full rounded-xl border border-[var(--border)] bg-white p-3 font-mono text-xs"

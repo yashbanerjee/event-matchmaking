@@ -180,7 +180,7 @@ export function SubmissionReviewModal({
     onSuccess: async () => {
       setMessage(
         kind === 'vendor'
-          ? 'Vendor marked verified.'
+          ? 'Guest marked verified.'
           : 'Submission approved.',
       );
       setError('');
@@ -238,7 +238,8 @@ export function SubmissionReviewModal({
 
       {!list.isLoading && (list.data?.length ?? 0) === 0 ? (
         <p className="text-sm text-[var(--muted)]">
-          No form has been submitted for this {kind} yet.
+          No form has been submitted for this{' '}
+          {kind === 'vendor' ? 'guest' : 'client'} yet.
         </p>
       ) : null}
 

@@ -9,7 +9,7 @@ export default function MatchmakingPage() {
       <PageHeader
         eyebrow="Match & meet"
         title="Matchmaking"
-        description="Link related filter tags so company and vendor recommendations cross-match. Example: Food ↔ Hotel."
+        description="Link related filter tags so client and guest recommendations cross-match. Example: Food ↔ Hotel."
       />
       <TagMappingsPanel />
     </div>

@@ -83,15 +83,15 @@ export default function VendorOverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Vendor workspace"
+        eyebrow="Guest workspace"
         title="Overview"
-        description="Recommended companies from your preferences, plus forms and meeting status."
+        description="Recommended clients from your preferences, plus forms and meeting status."
       />
 
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
-        title="Recommended companies"
-        description="Admin suggestions plus companies matched to your categories, capabilities, and regions."
+        title="Recommended clients"
+        description="Admin suggestions plus clients matched to your categories, capabilities, and regions."
       />
 
       <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -127,7 +127,7 @@ export default function VendorOverviewPage() {
           ) : formItems.length === 0 ? (
             <EmptyState
               title="No forms yet"
-              description="Assigned vendor forms will appear here with status and fill date."
+              description="Assigned guest forms will appear here with status and fill date."
             />
           ) : (
             <Table>
@@ -202,7 +202,7 @@ export default function VendorOverviewPage() {
             <Table>
               <THead>
                 <TR>
-                  <TH>Company</TH>
+                  <TH>Client</TH>
                   <TH>Starts</TH>
                   <TH>Status</TH>
                 </TR>

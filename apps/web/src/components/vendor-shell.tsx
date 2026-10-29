@@ -108,7 +108,7 @@ export function VendorShell({
         </Button>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-            Vendor panel
+            Guest panel
           </p>
           <div className="h-display truncate text-base font-bold tracking-tight">
             Event Matchmaking
@@ -135,7 +135,7 @@ export function VendorShell({
         <div className="flex items-start justify-between gap-3 px-2">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--sidebar-muted)]">
-              Vendor panel
+              Guest panel
             </p>
             <div className="mt-1 h-display text-xl font-bold tracking-tight">
               Event Matchmaking

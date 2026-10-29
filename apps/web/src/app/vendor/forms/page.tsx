@@ -66,7 +66,7 @@ export default function VendorFormsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             title="No forms assigned"
-            description="When an admin assigns a vendor form, it will show here as a row with status."
+            description="When an admin assigns a guest form, it will show here as a row with status."
           />
         ) : (
           <Table>

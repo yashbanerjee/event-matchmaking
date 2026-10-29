@@ -46,7 +46,7 @@ export default function PortalRequestsPage() {
       pendingForms={onboarding.data?.pendingCount}
     >
       <PageHeader
-        eyebrow="Company / Delegate"
+        eyebrow="Client / Delegate"
         title="Meeting requests"
         description="Accept interest, pick a duration slot and free place, then wait for confirmation."
       />

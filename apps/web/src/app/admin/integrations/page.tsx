@@ -91,7 +91,7 @@ export default function IntegrationsPage() {
         </Table>
       </Card>
       <Card className="space-y-3">
-        <h2 className="font-medium">Vendor search</h2>
+        <h2 className="font-medium">Guest search</h2>
         <div className="flex gap-2">
           <Input value={q} onChange={(e) => setQ(e.target.value)} />
           <Button

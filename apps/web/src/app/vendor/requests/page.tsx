@@ -19,9 +19,9 @@ export default function VendorRequestsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Vendor workspace"
+        eyebrow="Guest workspace"
         title="Meeting requests"
-        description="Accept interest from companies, propose a time and place, or confirm proposals sent to you."
+        description="Accept interest from clients, propose a time and place, or confirm proposals sent to you."
       />
       <MeetingRequestsPanel myOrgIds={me.data?.organizationIds ?? []} />
     </>

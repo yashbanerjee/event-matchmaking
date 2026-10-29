@@ -258,8 +258,8 @@ export default function VendorsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Organizations"
-        title="Vendors"
-        description="Invite vendors by email with an optional onboarding form link."
+        title="Guests"
+        description="Invite guests by email with an optional onboarding form link."
         actions={
           <>
             <Button variant="outline" onClick={() => setCsvOpen(true)}>
@@ -308,11 +308,11 @@ export default function VendorsPage() {
 
         {!isLoading && !error && items.length === 0 ? (
           <EmptyState
-            title={debouncedSearch ? 'No matching vendors' : 'No vendors yet'}
+            title={debouncedSearch ? 'No matching guests' : 'No guests yet'}
             description={
               debouncedSearch
                 ? 'Try another name or email.'
-                : 'Use Add to invite a vendor by email, or import a CSV.'
+                : 'Use Add to invite a guest by email, or import a CSV.'
             }
           />
         ) : null}
@@ -425,7 +425,7 @@ export default function VendorsPage() {
 
       <Modal
         open={addOpen}
-        title="Invite vendor"
+        title="Invite guest"
         description="Send an email with a registration link. Optionally attach a form for profile details."
         onClose={() => setAddOpen(false)}
         wide
@@ -484,9 +484,9 @@ export default function VendorsPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Vendor name</label>
+            <label className="mb-1.5 block text-sm font-medium">Guest name</label>
             <Input
-              placeholder="Vendor company name"
+              placeholder="Guest organization name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />

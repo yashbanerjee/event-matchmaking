@@ -87,11 +87,11 @@ export default function VendorMeetingsPage() {
       <PageHeader
         eyebrow="Meetings"
         title="Your meetings"
-        description="Confirm sessions. After a meeting ends, submit feedback and review the company."
+        description="Confirm sessions. After a meeting ends, submit feedback and review the client."
         actions={
           <Input
             className="max-w-xs"
-            placeholder="Search company, vendor, status…"
+            placeholder="Search client, guest, status…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -110,7 +110,7 @@ export default function VendorMeetingsPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Company</TH>
+                <TH>Client</TH>
                 <TH>Starts</TH>
                 <TH>Ends</TH>
                 <TH>Duration</TH>
