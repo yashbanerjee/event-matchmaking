@@ -43,9 +43,11 @@ export class RecommendationsService {
       const vendors = await this.prisma.vendor.findMany({
         where: {
           matchingEligible: true,
-          approvalStatus: { in: ['VERIFIED', 'APPROVED'] },
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
           onboardingComplete: true,
           organizationId: { notIn: orgIds },
+          organization: { status: { not: 'ARCHIVED' } },
         },
         include: { organization: true },
         take: 200,
@@ -91,8 +93,10 @@ export class RecommendationsService {
       const companies = await this.prisma.company.findMany({
         where: {
           matchingEligible: true,
-          approvalStatus: { in: ['VERIFIED', 'APPROVED'] },
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
           organizationId: { notIn: orgIds },
+          organization: { status: { not: 'ARCHIVED' } },
         },
         include: { organization: true },
         take: 200,
