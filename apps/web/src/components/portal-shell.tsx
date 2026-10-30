@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/portal/onboarding', label: 'Forms' },
   { href: '/portal/requests', label: 'Requests' },
   { href: '/portal/meetings', label: 'Meetings' },
+  { href: '/portal/qr', label: 'QR' },
 ];
 
 function SidebarNav({
@@ -191,6 +192,7 @@ export function PortalShell({
             badge: openRequests,
           },
           { href: '/portal/meetings', label: 'Meetings', icon: 'meetings' },
+          { href: '/portal/qr', label: 'QR', icon: 'qr' },
         ]}
       />
     </div>

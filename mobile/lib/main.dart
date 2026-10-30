@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app/deep_link_listener.dart';
 import 'app/router.dart';
 import 'core/config/app_config.dart';
 import 'core/theme/app_colors.dart';
@@ -41,58 +42,60 @@ class EtharaApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final booting = ref.watch(authControllerProvider).booting;
 
-    return MaterialApp.router(
-      title: '${AppConfig.appName} ${AppConfig.productName}',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      routerConfig: router,
-      builder: (context, child) {
-        if (booting) {
-          return Scaffold(
-            body: Container(
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(gradient: AppColors.heroGradient),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      gradient: AppColors.accentGradient,
-                      borderRadius: BorderRadius.circular(22),
+    return DeepLinkListener(
+      child: MaterialApp.router(
+        title: '${AppConfig.appName} ${AppConfig.productName}',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        routerConfig: router,
+        builder: (context, child) {
+          if (booting) {
+            return Scaffold(
+              body: Container(
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        gradient: AppColors.accentGradient,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: AppColors.ink,
+                        size: 34,
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: AppColors.ink,
-                      size: 34,
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Ethara',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Ethara',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(height: 16),
+                    const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.accent,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        }
-        return child ?? const SizedBox.shrink();
-      },
+            );
+          }
+          return child ?? const SizedBox.shrink();
+        },
+      ),
     );
   }
 }

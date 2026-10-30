@@ -8,6 +8,8 @@ import '../features/forms/forms_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/meetings/meetings_screen.dart';
 import '../features/profile/profile_screen.dart';
+import '../features/qr/qr_hub_screen.dart';
+import '../features/qr/qr_scan_screen.dart';
 import '../features/recommendations/discover_screen.dart';
 import '../features/requests/requests_screen.dart';
 import '../features/shell/app_shell.dart';
@@ -24,18 +26,51 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       if (auth.booting) return null;
       final loggingIn = state.matchedLocation == '/login';
-      if (!auth.isAuthenticated && !loggingIn) return '/login';
-      if (auth.isAuthenticated && loggingIn) return '/home';
+      final loc = state.matchedLocation;
+      if (!auth.isAuthenticated && !loggingIn) {
+        if (loc.startsWith('/qr')) {
+          return '/login?next=${Uri.encodeComponent(state.uri.toString())}';
+        }
+        return '/login';
+      }
+      if (auth.isAuthenticated && loggingIn) {
+        final next = state.uri.queryParameters['next'];
+        if (next != null && next.startsWith('/')) return next;
+        return '/home';
+      }
       return null;
     },
     routes: [
       GoRoute(
         path: '/login',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => LoginScreen(
+          nextPath: state.uri.queryParameters['next'],
+        ),
       ),
       GoRoute(
         path: '/forms',
         builder: (context, state) => const FormsScreen(),
+      ),
+      GoRoute(
+        path: '/qr',
+        builder: (context, state) => QrHubScreen(
+          initialCode: state.uri.queryParameters['code'],
+        ),
+      ),
+      GoRoute(
+        path: '/qr/scan',
+        builder: (context, state) {
+          final extra = state.extra;
+          return QrScanScreen(
+            initialPayload: extra is String ? extra : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/qr/:code',
+        builder: (context, state) => QrHubScreen(
+          initialCode: state.pathParameters['code'],
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

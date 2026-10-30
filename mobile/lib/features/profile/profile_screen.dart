@@ -66,6 +66,18 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 18),
           _Tile(
+            icon: Icons.qr_code_2_rounded,
+            title: 'My QR code',
+            subtitle: 'Save, share, or scan to book meetings',
+            onTap: () => context.push('/qr'),
+          ),
+          _Tile(
+            icon: Icons.qr_code_scanner_rounded,
+            title: 'Scan partner QR',
+            subtitle: 'Camera or gallery upload',
+            onTap: () => context.push('/qr/scan'),
+          ),
+          _Tile(
             icon: Icons.description_outlined,
             title: 'Forms & onboarding',
             subtitle: 'Complete assigned forms',

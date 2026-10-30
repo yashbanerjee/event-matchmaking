@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,8 +21,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const search = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -41,6 +42,11 @@ export default function LoginPage() {
         body: JSON.stringify(values),
       });
       setTokens(result.accessToken, result.refreshToken);
+      const next = search.get('next');
+      if (next && next.startsWith('/') && !next.startsWith('//')) {
+        router.push(next);
+        return;
+      }
       const home = await resolveParticipantHome(result.user.roles ?? []);
       router.push(home);
     } catch (err) {
@@ -110,5 +116,17 @@ export default function LoginPage() {
         </Card>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-sm text-[var(--muted)]">Loading sign-in…</div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

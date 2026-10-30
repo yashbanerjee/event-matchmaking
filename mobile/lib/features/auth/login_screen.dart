@@ -7,7 +7,10 @@ import '../../core/widgets/gradient_button.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.nextPath});
+
+  /// When set (e.g. deep link `/qr/CODE`), router redirect returns here after auth.
+  final String? nextPath;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();

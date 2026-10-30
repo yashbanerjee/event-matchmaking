@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, ClipboardList, Home, Inbox } from 'lucide-react';
+import {
+  CalendarDays,
+  ClipboardList,
+  Home,
+  Inbox,
+  QrCode,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type NavItem = {
@@ -10,7 +16,7 @@ type NavItem = {
   label: string;
   exact?: boolean;
   badge?: number;
-  icon: 'home' | 'forms' | 'requests' | 'meetings';
+  icon: 'home' | 'forms' | 'requests' | 'meetings' | 'qr';
 };
 
 const ICONS = {
@@ -18,6 +24,7 @@ const ICONS = {
   forms: ClipboardList,
   requests: Inbox,
   meetings: CalendarDays,
+  qr: QrCode,
 } as const;
 
 export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
@@ -31,7 +38,7 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
       }}
       aria-label="Primary"
     >
-      <ul className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+      <ul className="mx-auto grid max-w-lg grid-cols-5 gap-1">
         {items.map((item) => {
           const Icon = ICONS[item.icon];
           const active = item.exact

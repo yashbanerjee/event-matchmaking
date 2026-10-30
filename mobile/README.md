@@ -10,6 +10,7 @@ Production-oriented mobile client for Ethara Event Matchmaking (client & guest).
 - Meeting requests: Accept / Decline / Confirm / Pick time & place
 - Meetings list with meeting place details
 - Forms & onboarding assignments
+- **QR exchange**: save/share your org QR, scan camera or gallery, then book only if no meeting exists
 - Firebase Analytics + Firebase Cloud Messaging (push)
 - Ethara black / turquoise gradient design system
 
