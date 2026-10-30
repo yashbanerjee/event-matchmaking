@@ -12,6 +12,7 @@ export type EmailTemplateKind =
   | 'rejected'
   | 'meeting'
   | 'meeting_update'
+  | 'meeting_reminder'
   | 'registration_otp'
   | 'registration_ack'
   | 'registration_admin_notify';
@@ -82,6 +83,13 @@ const THEMES: Record<EmailTemplateKind, Theme> = {
     accentSoft: '#ececeb',
     accentText: '#ffffff',
     action: 'View meetings',
+  },
+  meeting_reminder: {
+    label: 'Meeting reminder',
+    accent: '#26e2c6',
+    accentSoft: '#d8faf3',
+    accentText: '#0a0a0a',
+    action: 'Open meetings',
   },
   registration_otp: {
     label: 'Email verification',
@@ -665,6 +673,63 @@ export function renderMeetingEmail(input: {
     subject: isUpdate
       ? `Updated meeting: ${input.companyName} ↔ ${input.vendorName}`
       : `Meeting scheduled: ${input.companyName} ↔ ${input.vendorName}`,
+    ...rendered,
+  };
+}
+
+export function renderMeetingReminderEmail(input: {
+  brandName?: string;
+  audience: 'vendor' | 'company';
+  companyName: string;
+  vendorName: string;
+  startsAt: Date | string;
+  endsAt?: Date | string | null;
+  durationMinutes: number;
+  placeName?: string | null;
+  placeLocation?: string | null;
+  minutesBefore?: number;
+  portalUrl?: string;
+}): { subject: string; html: string; text: string } {
+  const brandName = input.brandName?.trim() || BRAND.name;
+  const counterpart =
+    input.audience === 'company' ? input.vendorName : input.companyName;
+  const minutes = input.minutesBefore ?? 30;
+  const place =
+    input.placeName && input.placeLocation
+      ? `${input.placeName} · ${input.placeLocation}`
+      : input.placeName || null;
+
+  const rendered = renderBrandedEmail({
+    kind: 'meeting_reminder',
+    audience: input.audience,
+    brandName,
+    contextName:
+      input.audience === 'company' ? input.companyName : input.vendorName,
+    title: `Your meeting starts in ${minutes} minutes`,
+    body: [
+      `Hello,`,
+      ``,
+      `This is a reminder that your meeting with ${counterpart} starts in about ${minutes} minutes.`,
+      `Please arrive on time at the meeting place below.`,
+    ].join('\n'),
+    actionUrl: input.portalUrl,
+    actionLabel: 'Open meetings',
+    details: [
+      { label: 'Client', value: input.companyName },
+      { label: 'Guest', value: input.vendorName },
+      { label: 'Starts', value: formatMeetingWhen(input.startsAt) },
+      ...(input.endsAt
+        ? [{ label: 'Ends', value: formatMeetingWhen(input.endsAt) }]
+        : []),
+      { label: 'Duration', value: `${input.durationMinutes} minutes` },
+      ...(place ? [{ label: 'Meeting place', value: place }] : []),
+    ],
+    footerNote:
+      'If you cannot attend, open the portal and contact your counterpart or the event team as soon as possible.',
+  });
+
+  return {
+    subject: `Reminder: meeting in ${minutes} min · ${input.companyName} ↔ ${input.vendorName}`,
     ...rendered,
   };
 }

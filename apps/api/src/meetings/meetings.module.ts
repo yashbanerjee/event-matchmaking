@@ -4,6 +4,7 @@ import { MeetingsService } from './meetings.service';
 import { MeetingRequestsController } from './meeting-requests.controller';
 import { MeetingRequestsService } from './meeting-requests.service';
 import { RecommendationsService } from './recommendations.service';
+import { MeetingReminderService } from './meeting-reminder.service';
 import { FiltersModule } from '../filters/filters.module';
 
 @Module({
@@ -13,6 +14,7 @@ import { FiltersModule } from '../filters/filters.module';
     MeetingsService,
     MeetingRequestsService,
     RecommendationsService,
+    MeetingReminderService,
   ],
   exports: [MeetingsService, MeetingRequestsService, RecommendationsService],
 })
