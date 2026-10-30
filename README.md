@@ -5,6 +5,7 @@ Production-oriented company & vendor matchmaking, configurable onboarding, meeti
 ## Stack
 
 - **Frontend:** Next.js App Router, React, TypeScript, Tailwind CSS
+- **Mobile:** Flutter (`mobile/`) — Ethara client/guest app with Firebase push + analytics
 - **API:** NestJS, Prisma, PostgreSQL, RabbitMQ, Redis
 - **Workers:** Node RabbitMQ consumer
 - **Domain:** Pure TypeScript scoring & scheduling (`packages/domain`)
@@ -35,6 +36,16 @@ npm run dev:web
 - API docs (dev): http://localhost:4000/api/docs
 - RabbitMQ UI: http://localhost:15672 (`em` / `em_secret`)
 - Mailpit: http://localhost:8025
+
+### Mobile (Flutter)
+
+```bash
+cd mobile
+flutter pub get
+flutter run --dart-define=API_BASE=http://10.0.2.2:4000/api/v1
+```
+
+See [`mobile/README.md`](mobile/README.md) for Firebase production setup.
 
 Seed admin defaults: `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see `.env.example`).
 

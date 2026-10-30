@@ -525,6 +525,22 @@ export default function FormBuilderPage() {
                 <p className="text-xs text-[var(--muted)]">
                   A compulsory field must be filled before submit.
                 </p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(field.sensitive)}
+                    onChange={(event) =>
+                      updateField(field.id, {
+                        sensitive: event.target.checked,
+                      })
+                    }
+                  />
+                  Sensitive
+                </label>
+                <p className="text-xs text-[var(--muted)]">
+                  Sensitive answers stay off recommended public profiles. Admins
+                  still see them in reviews.
+                </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"

@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/empty-state';
 import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
+import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 
 type Recommendation = {
   organizationId: string;
@@ -27,12 +28,14 @@ function SuggestionGrid({
   fromOrgId,
   pendingOrgId,
   onRequest,
+  onViewProfile,
   featured,
 }: {
   items: Recommendation[];
   fromOrgId?: string;
   pendingOrgId?: string | null;
   onRequest: (item: Recommendation) => void;
+  onViewProfile: (item: Recommendation) => void;
   featured?: boolean;
 }) {
   return (
@@ -48,9 +51,16 @@ function SuggestionGrid({
           style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
         >
           <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0">
+            <button
+              type="button"
+              className="min-w-0 text-left"
+              onClick={() => onViewProfile(item)}
+            >
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="truncate font-semibold" title={item.name}>
+                <p
+                  className="truncate font-semibold hover:underline"
+                  title={item.name}
+                >
                   {item.name}
                 </p>
                 {featured ? (
@@ -62,7 +72,7 @@ function SuggestionGrid({
               <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
                 {item.industry || item.type}
               </p>
-            </div>
+            </button>
             {!featured ? (
               <Badge variant="secondary" className="shrink-0">
                 {Math.round(item.score)}%
@@ -79,14 +89,22 @@ function SuggestionGrid({
                 .join(' · ')}
             </p>
           )}
-          <Button
-            className="mt-3 w-full sm:w-auto"
-            size="sm"
-            disabled={!fromOrgId || Boolean(pendingOrgId)}
-            onClick={() => onRequest(item)}
-          >
-            Request meeting
-          </Button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onViewProfile(item)}
+            >
+              View profile
+            </Button>
+            <Button
+              size="sm"
+              disabled={!fromOrgId || Boolean(pendingOrgId)}
+              onClick={() => onRequest(item)}
+            >
+              Request meeting
+            </Button>
+          </div>
         </div>
       ))}
     </div>
@@ -104,6 +122,7 @@ export function RecommendationsPanel({
 }) {
   const qc = useQueryClient();
   const [target, setTarget] = useState<Recommendation | null>(null);
+  const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recs = useQuery({
@@ -151,6 +170,18 @@ export function RecommendationsPanel({
   const items = recs.data?.items ?? [];
   const empty = featured.length === 0 && items.length === 0;
 
+  const openRequestFromProfile = () => {
+    const orgId = profileOrgId;
+    if (!orgId) return;
+    const item =
+      featured.find((r) => r.organizationId === orgId) ??
+      items.find((r) => r.organizationId === orgId);
+    if (!item) return;
+    setProfileOrgId(null);
+    setError(null);
+    setTarget(item);
+  };
+
   return (
     <>
       <Card className="min-w-0 overflow-hidden p-4">
@@ -159,7 +190,8 @@ export function RecommendationsPanel({
             {title}
           </h2>
           <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            {description} Pick a free time and meeting place when you request.
+            {description} Open a profile to review public details, then pick a
+            free time and place.
           </p>
         </div>
 
@@ -185,6 +217,7 @@ export function RecommendationsPanel({
                     setError(null);
                     setTarget(item);
                   }}
+                  onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                   featured
                 />
               </section>
@@ -203,12 +236,20 @@ export function RecommendationsPanel({
                     setError(null);
                     setTarget(item);
                   }}
+                  onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                 />
               </section>
             ) : null}
           </div>
         )}
       </Card>
+
+      <RecommendationProfileModal
+        organizationId={profileOrgId}
+        open={Boolean(profileOrgId)}
+        onClose={() => setProfileOrgId(null)}
+        onRequestMeeting={fromOrgId ? openRequestFromProfile : undefined}
+      />
 
       <MeetingSchedulePicker
         open={Boolean(target)}

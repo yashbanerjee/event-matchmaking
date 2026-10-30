@@ -68,6 +68,15 @@ export class MeetingRequestsController {
     );
   }
 
+  @Get('recommendations/:organizationId/profile')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  recommendationProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.recommendationsService.publicProfile(user, organizationId);
+  }
+
   @Post('meeting-requests')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   create(

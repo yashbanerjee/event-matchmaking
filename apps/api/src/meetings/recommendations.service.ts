@@ -1,6 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { calculateMatchScore, type ProfileFeatures } from '@em/domain';
-import { defaultMatchingWeights } from '@em/shared';
+import {
+  collectPublicProfileFields,
+  defaultMatchingWeights,
+  formSchemaDefinition,
+  type FormSchemaDefinition,
+  type PublicProfileField,
+} from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
 import type { AuthUser } from '../common/decorators';
@@ -138,6 +149,84 @@ export class RecommendationsService {
     }
 
     return { items: [], featured: [], perspective: null };
+  }
+
+  /**
+   * Peer-facing organization profile built from the latest approved form
+   * submission. Fields marked sensitive are excluded.
+   */
+  async publicProfile(actor: AuthUser, organizationId: string) {
+    const orgIds = actor.organizationIds ?? [];
+    if (!orgIds.length) {
+      throw new ForbiddenException('Organization membership required');
+    }
+    if (orgIds.includes(organizationId)) {
+      throw new BadRequestException(
+        'Use your own workspace to view your form answers',
+      );
+    }
+
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { company: true, vendor: true },
+    });
+    if (!organization || organization.status === 'ARCHIVED') {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const submission = await this.prisma.formSubmission.findFirst({
+      where: {
+        organizationId,
+        status: { in: ['APPROVED', 'SUBMITTED', 'UNDER_REVIEW'] },
+        submittedAt: { not: null },
+      },
+      include: {
+        formVersion: {
+          include: { form: { select: { name: true } } },
+        },
+      },
+      orderBy: [{ reviewedAt: 'desc' }, { submittedAt: 'desc' }],
+    });
+
+    const schema = this.resolveSubmissionSchema(
+      submission?.formVersion.schemaJson,
+    );
+    const responses =
+      (submission?.responses as Record<string, unknown> | null) ?? {};
+    const fields: PublicProfileField[] = schema
+      ? collectPublicProfileFields(schema, responses)
+      : [];
+
+    return {
+      organizationId: organization.id,
+      name: organization.name,
+      type: organization.type,
+      industry: organization.industry,
+      region: organization.region,
+      website: organization.website,
+      logoUrl: this.logoOf(organization.customAttrs),
+      categories:
+        organization.vendor?.categories ??
+        organization.company?.preferredCategories ??
+        [],
+      capabilities:
+        organization.vendor?.capabilities ??
+        organization.company?.requiredCapabilities ??
+        [],
+      featured: Boolean(
+        organization.vendor?.featured || organization.company?.featured,
+      ),
+      formName: submission?.formVersion.form.name ?? null,
+      fields,
+      sensitiveFieldsHidden: true,
+    };
+  }
+
+  private resolveSubmissionSchema(
+    schemaJson: unknown,
+  ): FormSchemaDefinition | null {
+    const parsed = formSchemaDefinition.safeParse(schemaJson);
+    return parsed.success ? parsed.data : null;
   }
 
   /** Featured first, then category matches — hard cap of `max` total (default 10). */

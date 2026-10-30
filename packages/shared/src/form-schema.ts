@@ -100,6 +100,11 @@ export const fieldSchema: z.ZodType<FormField> = z.lazy(() =>
     order: z.number().int().nonnegative(),
     conditional: conditionSchema.nullable().optional(),
     readOnly: z.boolean().optional(),
+    /**
+     * When true, answers are hidden on peer recommendation profiles.
+     * Still collected for admin / matchmaking internals.
+     */
+    sensitive: z.boolean().optional(),
     /** When set, options are filled from this admin filter dimension's tags. */
     filterDimensionId: z.string().uuid().nullable().optional(),
     children: z.array(fieldSchema).max(30).optional(),
@@ -140,10 +145,65 @@ export type FormField = {
     value: string;
   } | null;
   readOnly?: boolean;
+  /**
+   * When true, answers are hidden on peer recommendation profiles.
+   * Still collected for admin / matchmaking internals.
+   */
+  sensitive?: boolean;
   /** When set, options are filled from this admin filter dimension's tags. */
   filterDimensionId?: string | null;
   children?: FormField[];
 };
+
+export type PublicProfileField = {
+  key: string;
+  label: string;
+  type: FieldType;
+  value: unknown;
+  sectionTitle: string | null;
+};
+
+function isEmptyPublicValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
+}
+
+/** Flatten form answers for peer-facing profiles (excludes sensitive + display-only). */
+export function collectPublicProfileFields(
+  schema: FormSchemaDefinition,
+  responses: Record<string, unknown>,
+): PublicProfileField[] {
+  const sectionTitle = new Map(
+    schema.sections.map((section) => [section.id, section.title] as const),
+  );
+  const out: PublicProfileField[] = [];
+
+  const walk = (fields: FormField[]) => {
+    const ordered = [...fields].sort((a, b) => a.order - b.order);
+    for (const field of ordered) {
+      if (field.children?.length) {
+        walk(field.children);
+        continue;
+      }
+      if (DISPLAY_ONLY_TYPES.includes(field.type)) continue;
+      if (field.sensitive) continue;
+      const value = responses[field.key];
+      if (isEmptyPublicValue(value)) continue;
+      out.push({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        value,
+        sectionTitle: sectionTitle.get(field.sectionId) ?? null,
+      });
+    }
+  };
+
+  walk(schema.fields);
+  return out;
+}
 
 export const formSchemaDefinition = z.object({
   sections: z

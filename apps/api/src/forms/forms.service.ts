@@ -1795,7 +1795,7 @@ async function syncFieldsFromSchema(
       conditionalLogic: (f.conditional ?? {}) as Prisma.InputJsonValue,
       options: (f.options ?? []) as Prisma.InputJsonValue,
       fileRestrictions: (f.file ?? {}) as Prisma.InputJsonValue,
-      sensitivity: 'INTERNAL' as const,
+      sensitivity: f.sensitive ? ('CONFIDENTIAL' as const) : ('PUBLIC' as const),
     }));
   if (rows.length) {
     await tx.formField.createMany({ data: rows });

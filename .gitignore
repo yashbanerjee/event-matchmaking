@@ -17,6 +17,23 @@ backups/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Flutter / mobile
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/.idea/
+mobile/**/GeneratedPluginRegistrant.*
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/google-services.json
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Runner/GoogleService-Info.plist
+mobile/**/*.iml
 # Generated Serwist artifacts (if introduced later)
 apps/web/public/swe-worker*
 prisma/*.db
