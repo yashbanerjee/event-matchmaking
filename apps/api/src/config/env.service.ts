@@ -155,6 +155,28 @@ export class EnvService {
       }),
       OPENAI_API_KEY: this.config.get('OPENAI_API_KEY', { infer: true }),
       ANTHROPIC_API_KEY: this.config.get('ANTHROPIC_API_KEY', { infer: true }),
+      JAV_AI_BASE_URL: this.config.get('JAV_AI_BASE_URL', { infer: true }),
+      JAV_AI_API_KEY: this.config.get('JAV_AI_API_KEY', { infer: true }),
+      JAV_AI_CHAT_MODEL: this.config.get('JAV_AI_CHAT_MODEL', { infer: true }),
+      JAV_AI_EMBEDDING_MODEL: this.config.get('JAV_AI_EMBEDDING_MODEL', {
+        infer: true,
+      }),
+      JAV_AI_FINE_TUNED_MODEL: this.config.get('JAV_AI_FINE_TUNED_MODEL', {
+        infer: true,
+      }),
+      JAV_AI_TEMPERATURE: this.config.get('JAV_AI_TEMPERATURE', {
+        infer: true,
+      }),
+      AI_MATCHMAKING_MODE: this.config.get('AI_MATCHMAKING_MODE', {
+        infer: true,
+      }),
+      AI_MATCHMAKING_BLEND_WEIGHT: this.config.get(
+        'AI_MATCHMAKING_BLEND_WEIGHT',
+        { infer: true },
+      ),
+      AI_MATCHMAKING_PROMPT: this.config.get('AI_MATCHMAKING_PROMPT', {
+        infer: true,
+      }),
       AI_REQUEST_TIMEOUT_MS: this.config.get('AI_REQUEST_TIMEOUT_MS', {
         infer: true,
       }),

@@ -300,6 +300,24 @@ export class MatchmakingService {
       }> = [];
       const useAi = Boolean(config.useAi);
       let aiPairsScored = 0;
+      const aiModeSetting = useAi
+        ? await this.config.getString('ai.matchmakingMode', 'embedding')
+        : 'embedding';
+      const aiBlendWeight = useAi
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              await this.config.getNumber('ai.matchmakingBlendWeight', 0.3),
+            ),
+          )
+        : 0.3;
+      const aiSystemPrompt = useAi
+        ? await this.config.getString('ai.matchmakingPrompt', '')
+        : '';
+      const aiTemperature = useAi
+        ? await this.config.getNumber('ai.javTemperature', 0.2)
+        : 0.2;
 
       for (const company of companies) {
         for (const vendor of vendors) {
@@ -369,17 +387,64 @@ export class MatchmakingService {
                   : undefined,
             });
 
-            let semantic = await this.ai.semanticSimilarity({ left, right });
-            let aiMode: 'provider' | 'local' = 'provider';
-            if (semantic == null) {
-              semantic = localTextSimilarity(left, right);
-              aiMode = 'local';
+            let embedding01: number | null = null;
+            let llm01: number | null = null;
+            let llmRationale: string | undefined;
+            let aiSource = 'local';
+
+            const wantsEmbedding =
+              aiModeSetting === 'embedding' || aiModeSetting === 'hybrid';
+            const wantsLlm =
+              aiModeSetting === 'llm' || aiModeSetting === 'hybrid';
+
+            if (wantsEmbedding) {
+              embedding01 = await this.ai.semanticSimilarity({ left, right });
+              if (embedding01 != null) aiSource = 'embedding';
             }
-            const aiScore = Math.round(semantic * 10000) / 100;
+
+            if (wantsLlm) {
+              const pair = await this.ai.pairMatchScore({
+                left,
+                right,
+                systemPrompt: aiSystemPrompt || undefined,
+                temperature: aiTemperature,
+              });
+              if (pair) {
+                llm01 = pair.score;
+                llmRationale = pair.rationale;
+                aiSource = pair.provider;
+              }
+            }
+
+            let semantic01: number;
+            if (embedding01 != null && llm01 != null) {
+              semantic01 = (embedding01 + llm01) / 2;
+              aiSource = `${aiSource}+hybrid`;
+            } else if (llm01 != null) {
+              semantic01 = llm01;
+            } else if (embedding01 != null) {
+              semantic01 = embedding01;
+            } else {
+              semantic01 = localTextSimilarity(left, right);
+              aiSource = 'local';
+            }
+
+            const blend = aiBlendWeight;
+            const aiScore = Math.round(semantic01 * 10000) / 100;
             breakdown.aiSemantic = aiScore;
+            if (llm01 != null) {
+              breakdown.aiLlm = Math.round(llm01 * 10000) / 100;
+            }
+            if (embedding01 != null) {
+              breakdown.aiEmbedding = Math.round(embedding01 * 10000) / 100;
+            }
+            breakdown.aiBlendWeight = blend;
+
             totalScore =
-              Math.round((score.totalScore * 0.7 + aiScore * 0.3) * 100) / 100;
-            explanation = `${score.explanation} AI boost (${aiMode}): semantic ${aiScore.toFixed(0)} → blended ${totalScore}/100.`;
+              Math.round(
+                (score.totalScore * (1 - blend) + aiScore * blend) * 100,
+              ) / 100;
+            explanation = `${score.explanation} AI boost (${aiSource}, blend ${blend}): ${aiScore.toFixed(0)}${llmRationale ? ` — ${llmRationale}` : ''} → blended ${totalScore}/100.`;
             aiPairsScored += 1;
           }
 

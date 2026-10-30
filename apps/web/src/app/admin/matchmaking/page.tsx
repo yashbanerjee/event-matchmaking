@@ -207,7 +207,9 @@ export default function MatchmakingPage() {
               onChange={(e) => setUseAi(e.target.checked)}
             />
             <span>
-              <span className="font-medium">Use AI to boost matching</span>
+              <span className="font-medium">
+                Use AI to boost matching (JAV / configured provider)
+              </span>
               <span className="mt-0.5 block text-[var(--muted)]">
                 Blends tag scores with semantic similarity on about / focus
                 events / services

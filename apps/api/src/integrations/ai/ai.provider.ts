@@ -23,6 +23,19 @@ export interface SemanticSimilarityInput {
   right: string;
 }
 
+export interface PairMatchScoreInput {
+  left: string;
+  right: string;
+  systemPrompt?: string;
+  temperature?: number;
+}
+
+export interface PairMatchScoreResult {
+  /** Normalized 0–1 compatibility */
+  score: number;
+  rationale?: string;
+}
+
 export interface AiProvider {
   readonly name: string;
   health(): Promise<AiHealth>;
@@ -30,4 +43,6 @@ export interface AiProvider {
     input: ProfileExtractionInput,
   ): Promise<ProfileExtractionResult>;
   semanticSimilarity?(input: SemanticSimilarityInput): Promise<number>;
+  /** LLM pair scoring used by matchmaking fine-tune prompts */
+  pairMatchScore?(input: PairMatchScoreInput): Promise<PairMatchScoreResult>;
 }

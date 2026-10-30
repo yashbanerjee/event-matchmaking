@@ -1,5 +1,6 @@
 export type SettingFieldType =
   | 'string'
+  | 'textarea'
   | 'number'
   | 'boolean'
   | 'select'
@@ -208,9 +209,10 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     key: 'ai.primaryProvider',
     envKey: 'AI_PRIMARY_PROVIDER',
     label: 'Primary AI provider',
+    description: 'Use jav for Ethara JAV matchmaking models',
     group: 'ai',
     type: 'select',
-    options: ['none', 'openai', 'anthropic'],
+    options: ['none', 'jav', 'openai', 'anthropic'],
   },
   {
     key: 'ai.secondaryProvider',
@@ -218,7 +220,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     label: 'Secondary AI provider',
     group: 'ai',
     type: 'select',
-    options: ['none', 'openai', 'anthropic'],
+    options: ['none', 'jav', 'openai', 'anthropic'],
   },
   {
     key: 'ai.openaiApiKey',
@@ -235,6 +237,83 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     group: 'ai',
     type: 'secret',
     secret: true,
+  },
+  {
+    key: 'ai.javBaseUrl',
+    envKey: 'JAV_AI_BASE_URL',
+    label: 'JAV AI base URL',
+    description:
+      'OpenAI-compatible API root, e.g. https://your-jav-host/v1 (must expose /models, /embeddings, /chat/completions)',
+    group: 'ai',
+    type: 'string',
+  },
+  {
+    key: 'ai.javApiKey',
+    envKey: 'JAV_AI_API_KEY',
+    label: 'JAV AI API key',
+    group: 'ai',
+    type: 'secret',
+    secret: true,
+  },
+  {
+    key: 'ai.javChatModel',
+    envKey: 'JAV_AI_CHAT_MODEL',
+    label: 'JAV chat model',
+    description: 'Base chat model id when no fine-tuned model is set',
+    group: 'ai',
+    type: 'string',
+  },
+  {
+    key: 'ai.javEmbeddingModel',
+    envKey: 'JAV_AI_EMBEDDING_MODEL',
+    label: 'JAV embedding model',
+    group: 'ai',
+    type: 'string',
+  },
+  {
+    key: 'ai.javFineTunedModel',
+    envKey: 'JAV_AI_FINE_TUNED_MODEL',
+    label: 'JAV fine-tuned model id',
+    description:
+      'Optional fine-tuned / custom deployment id. When set, matchmaking chat scoring uses this instead of the base chat model.',
+    group: 'ai',
+    type: 'string',
+  },
+  {
+    key: 'ai.javTemperature',
+    envKey: 'JAV_AI_TEMPERATURE',
+    label: 'JAV temperature',
+    description: '0–1 creativity for pair scoring (lower = more deterministic)',
+    group: 'ai',
+    type: 'number',
+  },
+  {
+    key: 'ai.matchmakingMode',
+    envKey: 'AI_MATCHMAKING_MODE',
+    label: 'Matchmaking AI mode',
+    description:
+      'embedding = semantic vectors; llm = prompt-scored pairs (uses fine-tuned model); hybrid = average of both',
+    group: 'ai',
+    type: 'select',
+    options: ['embedding', 'llm', 'hybrid'],
+  },
+  {
+    key: 'ai.matchmakingBlendWeight',
+    envKey: 'AI_MATCHMAKING_BLEND_WEIGHT',
+    label: 'AI blend weight',
+    description:
+      'How much AI contributes to the final score (0–1). Example 0.3 = 70% rules + 30% AI.',
+    group: 'ai',
+    type: 'number',
+  },
+  {
+    key: 'ai.matchmakingPrompt',
+    envKey: 'AI_MATCHMAKING_PROMPT',
+    label: 'Matchmaking system prompt',
+    description:
+      'Fine-tune scoring behaviour without retraining. Used in llm/hybrid modes. Model must return JSON {"score":0-100,"rationale":"…"}.',
+    group: 'ai',
+    type: 'textarea',
   },
   {
     key: 'ai.requestTimeoutMs',

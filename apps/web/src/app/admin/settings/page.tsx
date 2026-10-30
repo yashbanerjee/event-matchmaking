@@ -16,7 +16,14 @@ type Field = {
   envKey: string;
   label: string;
   description?: string;
-  type: 'string' | 'number' | 'boolean' | 'select' | 'secret' | 'date';
+  type:
+    | 'string'
+    | 'textarea'
+    | 'number'
+    | 'boolean'
+    | 'select'
+    | 'secret'
+    | 'date';
   secret: boolean;
   options?: string[];
   envDefault: unknown;
@@ -344,6 +351,25 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </select>
+                  ) : field.type === 'textarea' ? (
+                    <div className="space-y-1">
+                      <textarea
+                        className="min-h-[120px] w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
+                        placeholder={String(field.envDefault ?? '')}
+                        value={String(draft[field.key] ?? '')}
+                        onChange={(e) =>
+                          setDraft((d) => ({
+                            ...d,
+                            [field.key]: e.target.value,
+                          }))
+                        }
+                      />
+                      {field.description ? (
+                        <p className="text-xs text-[var(--muted)]">
+                          {field.description}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : (
                     <div className="space-y-1">
                       <Input

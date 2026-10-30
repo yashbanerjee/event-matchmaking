@@ -5,6 +5,8 @@ import { EffectiveConfigService } from '../../settings/effective-config.service'
 import type {
   AiHealth,
   AiProvider,
+  PairMatchScoreInput,
+  PairMatchScoreResult,
   ProfileExtractionInput,
   ProfileExtractionResult,
   SemanticSimilarityInput,
@@ -12,6 +14,7 @@ import type {
 import { NullAiProvider } from './null-ai.provider';
 import { OpenAiProvider } from './openai.provider';
 import { AnthropicProvider } from './anthropic.provider';
+import { JavAiProvider } from './jav.provider';
 
 @Injectable()
 export class AiService {
@@ -104,6 +107,34 @@ export class AiService {
     return null;
   }
 
+  async pairMatchScore(
+    input: PairMatchScoreInput,
+  ): Promise<(PairMatchScoreResult & { provider: string }) | null> {
+    if (!(await this.isEnabled())) return null;
+    const providers = await this.buildProviders();
+    const maxRetries = await this.config.getNumber(
+      'ai.maxRetries',
+      this.env.raw.AI_MAX_RETRIES,
+    );
+    for (const provider of providers) {
+      if (!provider.pairMatchScore) continue;
+      if (this.isCircuitOpen(provider.name)) continue;
+      try {
+        const result = await this.withRetries(
+          () => provider.pairMatchScore!(input),
+          maxRetries,
+        );
+        return { ...result, provider: provider.name };
+      } catch (err) {
+        this.logger.warn(
+          `AI provider ${provider.name} pair score failed: ${(err as Error).message}`,
+        );
+        this.circuitOpenUntil.set(provider.name, Date.now() + 60_000);
+      }
+    }
+    return null;
+  }
+
   private isCircuitOpen(name: string) {
     return (this.circuitOpenUntil.get(name) ?? 0) > Date.now();
   }
@@ -138,6 +169,24 @@ export class AiService {
     );
     const openaiKey = await this.config.getString('ai.openaiApiKey', '');
     const anthropicKey = await this.config.getString('ai.anthropicApiKey', '');
+    const javKey = await this.config.getString('ai.javApiKey', '');
+    const javBaseUrl = await this.config.getString('ai.javBaseUrl', '');
+    const javChatModel = await this.config.getString(
+      'ai.javChatModel',
+      'jav-match-v1',
+    );
+    const javEmbeddingModel = await this.config.getString(
+      'ai.javEmbeddingModel',
+      'jav-embed-v1',
+    );
+    const javFineTunedModel = await this.config.getString(
+      'ai.javFineTunedModel',
+      '',
+    );
+    const javTemperature = await this.config.getNumber(
+      'ai.javTemperature',
+      0.2,
+    );
 
     const byName = (name: string): AiProvider | null => {
       if (name === 'openai' && openaiKey) {
@@ -145,6 +194,17 @@ export class AiService {
       }
       if (name === 'anthropic' && anthropicKey) {
         return new AnthropicProvider(anthropicKey, timeout);
+      }
+      if (name === 'jav' && javKey && javBaseUrl) {
+        return new JavAiProvider({
+          apiKey: javKey,
+          baseUrl: javBaseUrl,
+          timeoutMs: timeout,
+          // Prefer fine-tuned model id when admins set one
+          chatModel: javFineTunedModel.trim() || javChatModel,
+          embeddingModel: javEmbeddingModel,
+          temperature: javTemperature,
+        });
       }
       return null;
     };

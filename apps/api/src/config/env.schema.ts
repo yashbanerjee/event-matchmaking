@@ -66,6 +66,17 @@ export const envSchema = z.object({
   AI_SECONDARY_PROVIDER: z.string().default('none'),
   OPENAI_API_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
+  JAV_AI_BASE_URL: z.string().optional().default(''),
+  JAV_AI_API_KEY: z.string().optional().default(''),
+  JAV_AI_CHAT_MODEL: z.string().optional().default('jav-match-v1'),
+  JAV_AI_EMBEDDING_MODEL: z.string().optional().default('jav-embed-v1'),
+  JAV_AI_FINE_TUNED_MODEL: z.string().optional().default(''),
+  JAV_AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+  AI_MATCHMAKING_MODE: z
+    .enum(['embedding', 'llm', 'hybrid'])
+    .default('embedding'),
+  AI_MATCHMAKING_BLEND_WEIGHT: z.coerce.number().min(0).max(1).default(0.3),
+  AI_MATCHMAKING_PROMPT: z.string().optional().default(''),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   FEATURE_SEMANTIC_SEARCH: z
