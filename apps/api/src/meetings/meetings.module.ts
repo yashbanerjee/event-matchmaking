@@ -8,9 +8,10 @@ import { MeetingReminderService } from './meeting-reminder.service';
 import { QrController } from './qr.controller';
 import { QrService } from './qr.service';
 import { FiltersModule } from '../filters/filters.module';
+import { PlacesModule } from '../places/places.module';
 
 @Module({
-  imports: [FiltersModule],
+  imports: [FiltersModule, PlacesModule],
   controllers: [MeetingsController, MeetingRequestsController, QrController],
   providers: [
     MeetingsService,

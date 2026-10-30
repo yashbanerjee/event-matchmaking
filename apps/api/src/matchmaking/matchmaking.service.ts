@@ -27,6 +27,7 @@ import { EffectiveConfigService } from '../settings/effective-config.service';
 import { EmailService } from '../integrations/email/email.service';
 import { EnvService } from '../config/env.service';
 import { FiltersService } from '../filters/filters.service';
+import { AiService } from '../integrations/ai/ai.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
 
@@ -36,6 +37,44 @@ function isOrgActive(status: string): boolean {
 
 function isVendorVerified(approvalStatus: string): boolean {
   return approvalStatus === 'VERIFIED' || approvalStatus === 'APPROVED';
+}
+
+/** Token Jaccard when no AI provider is configured — keeps demo AI mode useful. */
+function localTextSimilarity(left: string, right: string): number {
+  const tokenize = (text: string) =>
+    new Set(
+      text
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length > 2),
+    );
+  const a = tokenize(left);
+  const b = tokenize(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) intersection += 1;
+  }
+  return intersection / new Set([...a, ...b]).size;
+}
+
+function profileNarrative(
+  features: ProfileFeatures,
+  extras?: { about?: string; focusEvents?: string },
+): string {
+  return [
+    extras?.about,
+    extras?.focusEvents,
+    features.industry,
+    features.preferredCategories.join(' '),
+    features.categories.join(' '),
+    features.capabilities.join(' '),
+    features.requirements.join(' '),
+    features.regions.join(' '),
+    features.commercialTags.join(' '),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 @Injectable()
@@ -50,6 +89,7 @@ export class MatchmakingService {
     private readonly email: EmailService,
     private readonly env: EnvService,
     private readonly filters: FiltersService,
+    private readonly ai: AiService,
   ) {}
 
   async ensureDefaultRule() {
@@ -232,6 +272,7 @@ export class MatchmakingService {
       const vendors = (
         await this.prisma.vendor.findMany({
           include: { organization: true },
+          // normalizedProfile carries about / focusEvents for AI narrative
         })
       ).filter(
         (vendor) =>
@@ -254,6 +295,9 @@ export class MatchmakingService {
         companyProfileVersion: number;
         vendorProfileVersion: number;
       }> = [];
+      const useAi = Boolean(config.useAi);
+      let aiPairsScored = 0;
+
       for (const company of companies) {
         for (const vendor of vendors) {
           // Verified matching-eligible orgs are schedulable; capability fit
@@ -285,24 +329,80 @@ export class MatchmakingService {
             equivalences,
           );
 
+          let totalScore = score.totalScore;
+          let explanation = score.explanation;
+          const breakdown: Record<string, number> = {
+            ...score.breakdown,
+          };
+
+          if (useAi) {
+            const companyNorm = (company.normalizedProfile ?? {}) as Record<
+              string,
+              unknown
+            >;
+            const vendorNorm = (vendor.normalizedProfile ?? {}) as Record<
+              string,
+              unknown
+            >;
+            const left = profileNarrative(companyFeatures, {
+              about:
+                typeof companyNorm.about === 'string'
+                  ? companyNorm.about
+                  : undefined,
+              focusEvents:
+                typeof companyNorm.focusEvents === 'string'
+                  ? companyNorm.focusEvents
+                  : undefined,
+            });
+            const right = profileNarrative(vendorFeatures, {
+              about:
+                typeof vendorNorm.about === 'string'
+                  ? vendorNorm.about
+                  : undefined,
+              focusEvents:
+                typeof vendorNorm.focusEvents === 'string'
+                  ? vendorNorm.focusEvents
+                  : undefined,
+            });
+
+            let semantic = await this.ai.semanticSimilarity({ left, right });
+            let aiMode: 'provider' | 'local' = 'provider';
+            if (semantic == null) {
+              semantic = localTextSimilarity(left, right);
+              aiMode = 'local';
+            }
+            const aiScore = Math.round(semantic * 10000) / 100;
+            breakdown.aiSemantic = aiScore;
+            totalScore =
+              Math.round((score.totalScore * 0.7 + aiScore * 0.3) * 100) / 100;
+            explanation = `${score.explanation} AI boost (${aiMode}): semantic ${aiScore.toFixed(0)} → blended ${totalScore}/100.`;
+            aiPairsScored += 1;
+          }
+
           // Prefer better fits, but still schedule verified pairs above a soft floor.
           const softMinScore = Math.min(minScore, 20);
           candidates.push({
             runId,
             companyOrgId: company.organizationId,
             vendorOrgId: vendor.organizationId,
-            totalScore: score.totalScore,
-            scoreBreakdown: score.breakdown as unknown as Prisma.InputJsonValue,
-            explanation: score.explanation,
-            eligible: eligibility.eligible && score.totalScore >= softMinScore,
+            totalScore,
+            scoreBreakdown: breakdown as unknown as Prisma.InputJsonValue,
+            explanation,
+            eligible: eligibility.eligible && totalScore >= softMinScore,
             ineligibilityReasons: [
               ...eligibility.reasons,
-              ...(score.totalScore < softMinScore ? ['BELOW_MIN_SCORE'] : []),
+              ...(totalScore < softMinScore ? ['BELOW_MIN_SCORE'] : []),
             ],
             companyProfileVersion: company.profileVersion,
             vendorProfileVersion: vendor.profileVersion,
           });
         }
+      }
+
+      if (useAi) {
+        this.logger.log(
+          `AI matchmaking scored ${aiPairsScored} pairs for run ${runId}`,
+        );
       }
 
       await this.prisma.matchCandidate.createMany({ data: candidates });
@@ -1389,14 +1489,20 @@ export class MatchmakingService {
       string,
       unknown
     >;
+    const regionTags = Array.isArray(normalized.regions)
+      ? (normalized.regions as string[]).filter((v) => typeof v === 'string')
+      : [];
     return {
       organizationId: company.organizationId,
       industry: company.organization.industry,
       capabilities: [],
-      categories: [],
-      regions: company.organization.region
-        ? [company.organization.region]
-        : ((normalized.regions as string[]) ?? []),
+      categories: company.preferredCategories,
+      regions:
+        regionTags.length > 0
+          ? regionTags
+          : company.organization.region
+            ? [company.organization.region]
+            : [],
       requirements: company.requiredCapabilities,
       preferredCategories: company.preferredCategories,
       commercialTags: (prefs.tags as string[]) ?? [],
@@ -1411,6 +1517,7 @@ export class MatchmakingService {
     categories: string[];
     operatingRegions: string[];
     commercialPrefs: unknown;
+    normalizedProfile?: unknown;
   }): ProfileFeatures {
     const prefs = (vendor.commercialPrefs ?? {}) as Record<string, unknown>;
     return {

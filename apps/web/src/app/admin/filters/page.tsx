@@ -35,9 +35,16 @@ type FilterDimension = {
 function inferProfileKey(name: string, code?: string) {
   const key = `${code ?? ''} ${name}`.toLowerCase();
   if (key.includes('industr')) return 'industry';
-  if (key.includes('region') || key.includes('area')) return 'regions';
-  if (key.includes('capabilit')) return 'capabilities';
-  if (key.includes('commercial')) return 'commercialTags';
+  if (key.includes('region') || key.includes('area') || key.includes('venue'))
+    return 'regions';
+  if (
+    key.includes('capabilit') ||
+    key.includes('service') ||
+    key.includes('ethara_services')
+  )
+    return 'capabilities';
+  if (key.includes('commercial') || key.includes('partner'))
+    return 'commercialTags';
   if (key.includes('prefer')) return 'preferredCategories';
   return 'categories';
 }

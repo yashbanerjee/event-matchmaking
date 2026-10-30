@@ -143,7 +143,33 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
               StatusChip(req.status),
             ],
           ),
-          if (req.message != null && req.message!.isNotEmpty) ...[
+          if (req.message != null &&
+              req.message!.startsWith('Meet now')) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bolt_rounded, size: 14, color: AppColors.accentDeep),
+                  SizedBox(width: 4),
+                  Text(
+                    'Meet now — confirm within 10 min',
+                    style: TextStyle(
+                      color: AppColors.accentDeep,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (req.message != null && req.message!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(req.message!, style: const TextStyle(color: AppColors.muted)),
           ],

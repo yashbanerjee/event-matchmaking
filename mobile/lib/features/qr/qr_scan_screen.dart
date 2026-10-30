@@ -15,6 +15,7 @@ import '../../services/qr_repository.dart';
 import '../meetings/schedule_picker_sheet.dart';
 import '../recommendations/profile_sheet.dart';
 import '../requests/requests_screen.dart';
+import 'meet_now_sheet.dart';
 
 class QrScanScreen extends ConsumerStatefulWidget {
   const QrScanScreen({super.key, this.initialPayload});
@@ -107,6 +108,74 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
           parameters: {'code': result.code},
         );
     if (!mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        decoration: const BoxDecoration(
+          color: AppColors.stone,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Meet ${result.profile?.name ?? 'them'}?',
+              style: Theme.of(ctx).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Meet now holds a free table for the next slot. Schedule later opens the full calendar.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            GradientButton(
+              label: 'Meet now',
+              icon: Icons.bolt_rounded,
+              onPressed: () => Navigator.of(ctx).pop('NOW'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.of(ctx).pop('LATER'),
+              child: const Text('Schedule for later'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    if (choice == 'NOW') {
+      final ok = await showMeetNowSheet(
+        context,
+        fromOrgId: result.fromOrgId!,
+        toOrgId: result.toOrgId!,
+        counterpartName: result.profile?.name,
+      );
+      if (!ok || !mounted) return;
+      ref.invalidate(requestsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Meet now sent — waiting for approval'),
+        ),
+      );
+      context.go('/requests');
+      return;
+    }
+
     final picked = await showSchedulePickerSheet(
       context,
       title: 'Request meeting · ${result.profile?.name ?? 'Partner'}',

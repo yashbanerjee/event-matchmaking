@@ -56,6 +56,16 @@ export class MeetingRequestsController {
     });
   }
 
+  @Get('meeting-requests/now-window')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  nowWindow(
+    @CurrentUser() user: AuthUser,
+    @Query('fromOrgId') fromOrgId: string,
+    @Query('toOrgId') toOrgId: string,
+  ) {
+    return this.requests.nowWindow(user, fromOrgId, toOrgId);
+  }
+
   @Get('recommendations')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   recommendations(
@@ -88,6 +98,7 @@ export class MeetingRequestsController {
       message?: string;
       startsAt?: string;
       placeId?: string;
+      mode?: 'SCHEDULED' | 'NOW';
     },
   ) {
     return this.requests.create(user, body);

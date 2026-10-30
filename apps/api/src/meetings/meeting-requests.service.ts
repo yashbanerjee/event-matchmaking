@@ -11,7 +11,16 @@ import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../integrations/email/email.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
 import { EnvService } from '../config/env.service';
+import { PlacesService } from '../places/places.service';
 import type { AuthUser } from '../common/decorators';
+
+/** Prefixed in message so UI/email can detect meet-now without a schema change. */
+export const MEET_NOW_MESSAGE_PREFIX = 'Meet now — confirm within 10 minutes';
+export const MEET_NOW_EXPIRE_MS = 10 * 60_000;
+
+export function isMeetNowMessage(message: string | null | undefined): boolean {
+  return Boolean(message?.startsWith('Meet now'));
+}
 
 @Injectable()
 export class MeetingRequestsService {
@@ -23,6 +32,7 @@ export class MeetingRequestsService {
     private readonly email: EmailService,
     private readonly config: EffectiveConfigService,
     private readonly env: EnvService,
+    private readonly places: PlacesService,
   ) {}
 
   private actorOrgIds(actor: AuthUser) {
@@ -167,6 +177,70 @@ export class MeetingRequestsService {
     }
   }
 
+  private computeNowWindow(durationMinutes: number): {
+    startsAt: Date;
+    endsAt: Date;
+  } {
+    // Snap to the next whole minute so "now" holds are stable across clients.
+    const startsAt = new Date(Date.now());
+    startsAt.setSeconds(0, 0);
+    if (startsAt.getTime() < Date.now() - 5_000) {
+      startsAt.setMinutes(startsAt.getMinutes() + 1);
+    }
+    const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
+    return { startsAt, endsAt };
+  }
+
+  async nowWindow(
+    actor: AuthUser,
+    fromOrgId: string,
+    toOrgId: string,
+  ) {
+    this.assertMember(actor, fromOrgId);
+    if (fromOrgId === toOrgId) {
+      throw new BadRequestException('fromOrgId and toOrgId must differ');
+    }
+    const durationMinutes = await this.config.getNumber(
+      'ops.meetingDurationMinutes',
+      15,
+    );
+    const { startsAt, endsAt } = this.computeNowWindow(durationMinutes);
+
+    // Parties must be free for meet-now; if busy, still return places empty + reason.
+    let partiesFree = true;
+    try {
+      await this.assertPartiesFree({
+        orgIds: [fromOrgId, toOrgId],
+        startsAt,
+        endsAt,
+      });
+    } catch {
+      partiesFree = false;
+    }
+
+    const places = partiesFree
+      ? await this.places.available(startsAt, endsAt)
+      : [];
+
+    return {
+      mode: 'NOW' as const,
+      startsAt: startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      durationMinutes,
+      confirmWithinMinutes: 10,
+      partiesFree,
+      places: places.map((p) => ({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        location: p.location,
+      })),
+      message: partiesFree
+        ? null
+        : 'Client or guest already has a meeting in this window',
+    };
+  }
+
   async create(
     actor: AuthUser,
     input: {
@@ -175,6 +249,7 @@ export class MeetingRequestsService {
       message?: string;
       startsAt?: string;
       placeId?: string;
+      mode?: 'SCHEDULED' | 'NOW';
     },
   ) {
     this.assertMember(actor, input.fromOrgId);
@@ -182,17 +257,21 @@ export class MeetingRequestsService {
       throw new BadRequestException('Cannot request a meeting with yourself');
     }
 
-    const hasStarts = Boolean(input.startsAt?.trim());
+    const mode = input.mode === 'NOW' ? 'NOW' : 'SCHEDULED';
     const hasPlace = Boolean(input.placeId?.trim());
-    if (hasStarts !== hasPlace) {
+    if (!hasPlace) {
       throw new BadRequestException(
-        'Meeting requests must include both a start time and a free place',
+        'Select a free meeting place before sending the request',
       );
     }
-    if (!hasStarts || !hasPlace) {
-      throw new BadRequestException(
-        'Select a free time slot and meeting place before sending the request',
-      );
+
+    if (mode === 'SCHEDULED') {
+      const hasStarts = Boolean(input.startsAt?.trim());
+      if (!hasStarts) {
+        throw new BadRequestException(
+          'Select a free time slot and meeting place before sending the request',
+        );
+      }
     }
 
     const [fromOrg, toOrg] = await Promise.all([
@@ -230,13 +309,29 @@ export class MeetingRequestsService {
       'ops.meetingDurationMinutes',
       15,
     );
-    const startsAt = new Date(input.startsAt!);
-    if (Number.isNaN(startsAt.getTime())) {
-      throw new BadRequestException('Invalid start time');
+
+    let startsAt: Date;
+    let endsAt: Date;
+    let message: string | null;
+
+    if (mode === 'NOW') {
+      const window = this.computeNowWindow(duration);
+      startsAt = window.startsAt;
+      endsAt = window.endsAt;
+      message =
+        input.message?.trim() ||
+        MEET_NOW_MESSAGE_PREFIX;
+    } else {
+      startsAt = new Date(input.startsAt!);
+      if (Number.isNaN(startsAt.getTime())) {
+        throw new BadRequestException('Invalid start time');
+      }
+      const bookingWindow = await this.config.getMeetingBookingWindow();
+      this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
+      endsAt = new Date(startsAt.getTime() + duration * 60_000);
+      message = input.message?.trim() || null;
     }
-    const window = await this.config.getMeetingBookingWindow();
-    this.config.assertInstantInMeetingWindow(startsAt, window);
-    const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+
     const place = await this.assertPlaceFree({
       placeId: input.placeId!,
       startsAt,
@@ -253,7 +348,7 @@ export class MeetingRequestsService {
         fromOrgId: input.fromOrgId,
         toOrgId: input.toOrgId,
         requestedById: actor.id,
-        message: input.message?.trim() || null,
+        message,
         status: 'AWAITING_CONFIRMATION',
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
@@ -277,14 +372,44 @@ export class MeetingRequestsService {
         placeId: place.id,
         placeName: place.name,
         startsAt: startsAt.toISOString(),
+        mode,
       },
     });
 
-    void this.notifyOrgs(created.id, 'schedule_proposed').catch((err) =>
-      this.logger.warn(err.message),
-    );
+    void this.notifyOrgs(
+      created.id,
+      mode === 'NOW' ? 'meet_now_proposed' : 'schedule_proposed',
+    ).catch((err) => this.logger.warn(err.message));
 
     return created;
+  }
+
+  /** Expire stale meet-now holds and free their places. */
+  async expireStaleMeetNowRequests() {
+    const cutoff = new Date(Date.now() - MEET_NOW_EXPIRE_MS);
+    const stale = await this.prisma.meetingRequest.findMany({
+      where: {
+        status: 'AWAITING_CONFIRMATION',
+        createdAt: { lt: cutoff },
+        message: { startsWith: 'Meet now' },
+      },
+      select: { id: true },
+      take: 50,
+    });
+    for (const row of stale) {
+      await this.prisma.meetingRequest.update({
+        where: { id: row.id },
+        data: {
+          status: 'DECLINED',
+          declineReason: 'Meet now request expired (not confirmed in time)',
+          placeId: null,
+          proposedStartsAt: null,
+          proposedEndsAt: null,
+          proposedByOrgId: null,
+        },
+      });
+    }
+    return { expired: stale.length };
   }
 
   async acceptInterest(actor: AuthUser, id: string) {
@@ -412,6 +537,26 @@ export class MeetingRequestsService {
     }
     if (!request.proposedStartsAt || !request.proposedEndsAt || !request.placeId) {
       throw new BadRequestException('Schedule details are incomplete');
+    }
+
+    if (
+      isMeetNowMessage(request.message) &&
+      Date.now() - request.createdAt.getTime() > MEET_NOW_EXPIRE_MS
+    ) {
+      await this.prisma.meetingRequest.update({
+        where: { id },
+        data: {
+          status: 'DECLINED',
+          declineReason: 'Meet now request expired (not confirmed in time)',
+          placeId: null,
+          proposedStartsAt: null,
+          proposedEndsAt: null,
+          proposedByOrgId: null,
+        },
+      });
+      throw new BadRequestException(
+        'Meet now request expired. Ask them to scan again or schedule for later.',
+      );
     }
 
     const proposerOrgId =
@@ -801,6 +946,7 @@ export class MeetingRequestsService {
       | 'request_created'
       | 'interest_accepted'
       | 'schedule_proposed'
+      | 'meet_now_proposed'
       | 'scheduled'
       | 'declined',
   ) {
@@ -808,11 +954,20 @@ export class MeetingRequestsService {
     const fromName = await this.email.getFromName();
     const portalUrl = `${this.env.appUrl.replace(/\/$/, '')}/portal/requests`;
     const vendorUrl = `${this.env.appUrl.replace(/\/$/, '')}/vendor/requests`;
+    const placeLabel = request.place
+      ? request.place.location
+        ? `${request.place.name} · ${request.place.location}`
+        : request.place.name
+      : 'TBA';
+    const startsLabel = request.proposedStartsAt
+      ? request.proposedStartsAt.toUTCString()
+      : 'soon';
 
     const titles: Record<typeof kind, string> = {
       request_created: 'New meeting request',
       interest_accepted: 'Meeting interest accepted — pick a time',
       schedule_proposed: 'Meeting time & place proposed',
+      meet_now_proposed: 'Meet now request',
       scheduled: 'Meeting scheduled',
       declined: 'Meeting request declined',
     };
@@ -821,12 +976,15 @@ export class MeetingRequestsService {
       request_created: `${request.fromOrg.name} wants to meet ${request.toOrg.name}.`,
       interest_accepted: `${request.toOrg.name} accepted. Propose a time slot and place.`,
       schedule_proposed: `A time and place were proposed for ${request.fromOrg.name} ↔ ${request.toOrg.name}. Please confirm or decline.`,
+      meet_now_proposed: `${request.fromOrg.name} wants to meet now at ${placeLabel} (${startsLabel}). Confirm within 10 minutes.`,
       scheduled: `Your meeting is confirmed: ${request.fromOrg.name} ↔ ${request.toOrg.name}.`,
       declined: `The meeting request between ${request.fromOrg.name} and ${request.toOrg.name} was declined.`,
     };
 
     const targets =
-      kind === 'request_created' || kind === 'schedule_proposed'
+      kind === 'request_created' ||
+      kind === 'schedule_proposed' ||
+      kind === 'meet_now_proposed'
         ? [request.toOrgId]
         : kind === 'interest_accepted'
           ? [request.fromOrgId]

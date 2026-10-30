@@ -39,6 +39,10 @@ function hasSchedule(req: MeetingRequest) {
   return Boolean(req.proposedStartsAt && req.proposedEndsAt && req.place);
 }
 
+function isMeetNow(req: MeetingRequest) {
+  return Boolean(req.message?.startsWith('Meet now'));
+}
+
 export function MeetingRequestsPanel({
   myOrgIds,
   isAdmin = false,
@@ -267,18 +271,24 @@ export function MeetingRequestsPanel({
                         >
                           {counterpart}
                         </p>
-                        {req.message ? (
+                        {isMeetNow(req) ? (
+                          <p className="mt-1 text-sm font-semibold text-[var(--accent)]">
+                            Meet now — confirm within 10 minutes
+                          </p>
+                        ) : req.message ? (
                           <p className="mt-1 line-clamp-2 text-sm text-[var(--muted)]">
                             {req.message}
                           </p>
                         ) : null}
                       </div>
-                      <Badge
-                        variant={statusTone(req.status)}
-                        className="shrink-0"
-                      >
-                        {req.status.replaceAll('_', ' ')}
-                      </Badge>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {isMeetNow(req) ? (
+                          <Badge variant="warning">Meet now</Badge>
+                        ) : null}
+                        <Badge variant={statusTone(req.status)}>
+                          {req.status.replaceAll('_', ' ')}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
                       <p>
@@ -324,9 +334,19 @@ export function MeetingRequestsPanel({
                         <TD className="font-medium">{req.fromOrg.name}</TD>
                         <TD>{req.toOrg.name}</TD>
                         <TD>
-                          <Badge variant={statusTone(req.status)}>
-                            {req.status.replaceAll('_', ' ')}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {isMeetNow(req) ? (
+                              <Badge variant="warning">Meet now</Badge>
+                            ) : null}
+                            <Badge variant={statusTone(req.status)}>
+                              {req.status.replaceAll('_', ' ')}
+                            </Badge>
+                          </div>
+                          {isMeetNow(req) ? (
+                            <p className="mt-1 text-xs font-medium text-[var(--accent)]">
+                              Confirm within 10 minutes
+                            </p>
+                          ) : null}
                         </TD>
                         <TD className="text-sm">
                           {req.proposedStartsAt

@@ -40,6 +40,11 @@ export const scheduleConfigSchema = z.object({
   bufferMinutes: z.number().int().min(0).max(60).default(5),
   maxMeetingsPerParticipant: z.number().int().min(1).max(64).default(24),
   mode: z.enum(['VIRTUAL', 'IN_PERSON', 'HYBRID']).default('VIRTUAL'),
+  /**
+   * When true, blend deterministic tag scores with AI semantic similarity
+   * on profile text (about, focus events, categories, capabilities).
+   */
+  useAi: z.boolean().default(false),
   /** Time windows where no meetings should be scheduled (e.g. lunch 12:00–13:00). */
   excludeIntervals: z
     .array(

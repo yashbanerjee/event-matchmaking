@@ -22,6 +22,26 @@ const LEGACY_SAMPLE_EMAIL_SUFFIX = '@ethara-demo.com';
 
 type TagDef = { value: string; label: string };
 
+/** Shared Ethara work / event tags (ethara.com/en Work + Upcoming Events). */
+const ETHARA_EVENT_TAGS: TagDef[] = [
+  { value: 'arts-culture', label: 'Arts & Culture' },
+  { value: 'concerts', label: 'Concerts' },
+  { value: 'family', label: 'Family' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'gaming', label: 'Gaming' },
+  { value: 'festivals', label: 'Festivals' },
+  { value: 'motorsport', label: 'Motorsport (F1 / Supercross)' },
+  { value: 'combat-sports', label: 'Combat sports (UFC)' },
+  { value: 'basketball', label: 'Basketball (NBA)' },
+  { value: 'tennis', label: 'Tennis' },
+  { value: 'heritage', label: 'Heritage & culture' },
+  { value: 'public-art', label: 'Public art & light' },
+  { value: 'community', label: 'Community carnival' },
+  { value: 'entrepreneurship', label: 'Entrepreneurship' },
+  { value: 'yacht-lifestyle', label: 'Yacht & lifestyle' },
+  { value: 'climate', label: 'Climate & global forums' },
+];
+
 const DIMENSIONS: Array<{
   code: string;
   name: string;
@@ -33,37 +53,24 @@ const DIMENSIONS: Array<{
   {
     code: 'event_categories',
     name: 'Event categories',
-    description: 'Ethara event categories from ethara.com/en/events',
+    description:
+      'Ethara work & event categories (concerts, sports, festivals, heritage — ethara.com/en)',
     profileKey: 'categories',
     sortOrder: 10,
-    tags: [
-      { value: 'arts-culture', label: 'Arts & Culture' },
-      { value: 'concerts', label: 'Concerts' },
-      { value: 'family', label: 'Family' },
-      { value: 'sports', label: 'Sports' },
-      { value: 'gaming', label: 'Gaming' },
-      { value: 'festivals', label: 'Festivals' },
-    ],
+    tags: ETHARA_EVENT_TAGS,
   },
   {
     code: 'preferred_categories',
     name: 'Preferred categories',
-    description: 'Client preferred Ethara event categories',
+    description: 'Client preferred Ethara event / work categories',
     profileKey: 'preferredCategories',
     sortOrder: 20,
-    tags: [
-      { value: 'arts-culture', label: 'Arts & Culture' },
-      { value: 'concerts', label: 'Concerts' },
-      { value: 'family', label: 'Family' },
-      { value: 'sports', label: 'Sports' },
-      { value: 'gaming', label: 'Gaming' },
-      { value: 'festivals', label: 'Festivals' },
-    ],
+    tags: ETHARA_EVENT_TAGS,
   },
   {
     code: 'venues',
     name: 'Venues & locations',
-    description: 'Ethara / Yas Island venues and locations',
+    description: 'Ethara / OVG venues and destination locations',
     profileKey: 'regions',
     sortOrder: 30,
     tags: [
@@ -76,7 +83,26 @@ const DIMENSIONS: Array<{
       { value: 'yas-conference-centre', label: 'Yas Conference Centre' },
       { value: 'manarat-al-saadiyat', label: 'Manarat Al Saadiyat' },
       { value: 'qasr-al-hosn', label: 'Qasr Al Hosn' },
+      { value: 'saadiyat', label: 'Saadiyat Island' },
       { value: 'abu-dhabi', label: 'Abu Dhabi' },
+      { value: 'dubai', label: 'Dubai' },
+    ],
+  },
+  {
+    code: 'ethara_services',
+    name: 'Ethara services',
+    description:
+      'Services from ethara.com/en — world-class events, content, venue ops, sponsorship, tech',
+    profileKey: 'capabilities',
+    sortOrder: 35,
+    tags: [
+      { value: 'world-class-events', label: 'World-class events' },
+      { value: 'content-creation', label: 'Content & creation' },
+      { value: 'event-management', label: 'Event management' },
+      { value: 'marketing-comms', label: 'Marketing & communications' },
+      { value: 'venue-management', label: 'Venue management' },
+      { value: 'sponsorship-sales', label: 'Sponsorship & sales' },
+      { value: 'technology-innovation', label: 'Technology & innovation' },
     ],
   },
   {
@@ -96,12 +122,20 @@ const DIMENSIONS: Array<{
       { value: 'broadcast', label: 'Broadcast & media' },
       { value: 'sponsorship', label: 'Sponsorship activation' },
       { value: 'security-crowd', label: 'Security & crowd' },
+      { value: 'world-class-events', label: 'World-class events' },
+      { value: 'content-creation', label: 'Content & creation' },
+      { value: 'event-management', label: 'Event management' },
+      { value: 'marketing-comms', label: 'Marketing & communications' },
+      { value: 'venue-management', label: 'Venue management' },
+      { value: 'sponsorship-sales', label: 'Sponsorship & sales' },
+      { value: 'technology-innovation', label: 'Technology & innovation' },
     ],
   },
   {
     code: 'commercial_tags',
     name: 'Commercial focus',
-    description: 'Commercial / partnership tags',
+    description:
+      'Partnership types Ethara works with — brands, rights-holders, talent, media',
     profileKey: 'commercialTags',
     sortOrder: 50,
     tags: [
@@ -111,6 +145,10 @@ const DIMENSIONS: Array<{
       { value: 'sponsorship', label: 'Sponsorship' },
       { value: 'rights-holder', label: 'Rights holder' },
       { value: 'content-provider', label: 'Content provider' },
+      { value: 'brand-partner', label: 'Brand partner' },
+      { value: 'talent', label: 'Talent / artist' },
+      { value: 'media-partner', label: 'Media partner' },
+      { value: 'destination-marketing', label: 'Destination marketing' },
     ],
   },
 ];
@@ -512,35 +550,44 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     }
   }
 
-  // Cross-map concerts ↔ arts-culture for richer matching
-  const concertPreferred = await prisma.filterTag.findFirst({
-    where: {
-      dimensionId: dimensionIds.preferred_categories,
-      value: 'concerts',
-    },
-  });
-  const artsGuest = await prisma.filterTag.findFirst({
-    where: {
-      dimensionId: dimensionIds.event_categories,
-      value: 'arts-culture',
-    },
-  });
-  if (concertPreferred && artsGuest) {
+  // Cross-map Ethara-related categories for richer matchmaking
+  async function mapPreferredToEvent(fromValue: string, toValue: string) {
+    const fromTag = await prisma.filterTag.findFirst({
+      where: {
+        dimensionId: dimensionIds.preferred_categories,
+        value: fromValue,
+      },
+    });
+    const toTag = await prisma.filterTag.findFirst({
+      where: {
+        dimensionId: dimensionIds.event_categories,
+        value: toValue,
+      },
+    });
+    if (!fromTag || !toTag) return;
     await prisma.filterTagMapping.upsert({
       where: {
-        fromTagId_toTagId: {
-          fromTagId: concertPreferred.id,
-          toTagId: artsGuest.id,
-        },
+        fromTagId_toTagId: { fromTagId: fromTag.id, toTagId: toTag.id },
       },
       create: {
-        fromTagId: concertPreferred.id,
-        toTagId: artsGuest.id,
+        fromTagId: fromTag.id,
+        toTagId: toTag.id,
         bidirectional: true,
       },
       update: { bidirectional: true },
     });
   }
+
+  await mapPreferredToEvent('concerts', 'arts-culture');
+  await mapPreferredToEvent('arts-culture', 'public-art');
+  await mapPreferredToEvent('sports', 'motorsport');
+  await mapPreferredToEvent('sports', 'combat-sports');
+  await mapPreferredToEvent('sports', 'basketball');
+  await mapPreferredToEvent('sports', 'tennis');
+  await mapPreferredToEvent('festivals', 'community');
+  await mapPreferredToEvent('festivals', 'heritage');
+  await mapPreferredToEvent('family', 'community');
+  await mapPreferredToEvent('gaming', 'entrepreneurship');
 
   // ── Places ───────────────────────────────────────────────────────────────
   const placeIds: Record<string, string> = {};
@@ -567,103 +614,178 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   }
 
   // ── Forms ────────────────────────────────────────────────────────────────
-  async function upsertPublishedForm(input: {
-    code: string;
-    name: string;
-    description: string;
-    targetType: 'COMPANY' | 'VENDOR';
-  }) {
-    const sectionId = randomUUID();
+  function buildEtharaProfileFields(
+    targetType: 'COMPANY' | 'VENDOR',
+    opts?: { demoEvent?: boolean },
+  ) {
+    const aboutSection = randomUUID();
+    const interestsSection = randomUUID();
+    const servicesSection = randomUUID();
+    const commercialSection = randomUUID();
+    const isCompany = targetType === 'COMPANY';
+    const demo = Boolean(opts?.demoEvent);
+
     const fields = [
-      field(sectionId, 0, {
-        key: 'heading_profile',
+      field(aboutSection, 0, {
+        key: 'heading_about',
         type: 'heading',
-        label: input.targetType === 'COMPANY' ? 'Client profile' : 'Guest profile',
+        label: demo
+          ? 'Ethara demo — about you'
+          : isCompany
+            ? 'Client profile'
+            : 'Guest profile',
       }),
-      field(sectionId, 1, {
+      field(aboutSection, 1, {
+        key: 'industry',
+        type: 'text',
+        label: 'Industry / sector',
+        required: true,
+        description: 'e.g. Live entertainment, Sports rights, Brand marketing',
+      }),
+      field(aboutSection, 2, {
         key: 'organization_summary',
         type: 'textarea',
         label: 'About your organization',
         required: true,
-        description: 'How you work with Ethara venues and events.',
+        description:
+          'How you create moments with Ethara venues, rights-holders, and audiences.',
       }),
-      field(sectionId, 2, {
+      field(aboutSection, 3, {
         key: 'focus_events',
         type: 'textarea',
-        label: 'Focus Ethara events',
+        label: demo ? 'Ethara work you care about' : 'Focus Ethara events',
         required: true,
         description:
-          'e.g. Hans Zimmer Live, F1 Abu Dhabi GP, RAF Abu Dhabi — see ethara.com/en/events',
+          'e.g. F1 Abu Dhabi GP, Yasalam, NBA Abu Dhabi, UFC, Saadiyat Nights — ethara.com/en',
       }),
-      field(sectionId, 3, {
-        key:
-          input.targetType === 'COMPANY' ? 'preferredCategories' : 'categories',
+      field(aboutSection, 4, {
+        key: 'contact_phone',
+        type: 'text',
+        label: 'Contact phone',
+        required: false,
+      }),
+      field(interestsSection, 10, {
+        key: 'heading_interests',
+        type: 'heading',
+        label: 'Event interests',
+      }),
+      field(interestsSection, 11, {
+        key: isCompany ? 'preferredCategories' : 'categories',
         type: 'multiselect',
-        label: 'Event categories',
+        label: 'Event / work categories',
         required: true,
-        options:
-          tagOptions[
-            input.targetType === 'COMPANY'
-              ? 'preferred_categories'
-              : 'event_categories'
-          ],
+        description:
+          'Concerts, motorsport, combat sports, heritage, public art, gaming, and more',
+        options: tagOptions[isCompany ? 'preferred_categories' : 'event_categories'],
         filterDimensionId:
-          dimensionIds[
-            input.targetType === 'COMPANY'
-              ? 'preferred_categories'
-              : 'event_categories'
-          ],
+          dimensionIds[isCompany ? 'preferred_categories' : 'event_categories'],
       }),
-      field(sectionId, 4, {
-        key:
-          input.targetType === 'COMPANY'
-            ? 'requiredCapabilities'
-            : 'capabilities',
-        type: 'multiselect',
-        label:
-          input.targetType === 'COMPANY'
-            ? 'Capabilities you need'
-            : 'Your capabilities',
-        required: true,
-        options: tagOptions.capabilities,
-        filterDimensionId: dimensionIds.capabilities,
-      }),
-      field(sectionId, 5, {
-        key: input.targetType === 'COMPANY' ? 'regions' : 'operatingRegions',
+      field(interestsSection, 12, {
+        key: isCompany ? 'regions' : 'operatingRegions',
         type: 'multiselect',
         label: 'Preferred venues / locations',
         required: true,
         options: tagOptions.venues,
         filterDimensionId: dimensionIds.venues,
       }),
-      field(sectionId, 6, {
+      field(servicesSection, 20, {
+        key: 'heading_services',
+        type: 'heading',
+        label: 'Services & capabilities',
+      }),
+      field(servicesSection, 21, {
+        key: isCompany ? 'requiredCapabilities' : 'capabilities',
+        type: 'multiselect',
+        label: isCompany
+          ? 'Ethara services & capabilities you need'
+          : 'Ethara services & capabilities you offer',
+        required: true,
+        description:
+          'World-class events, content, venue management, sponsorship, tech, and production skills',
+        options: [
+          ...(tagOptions.ethara_services ?? []),
+          ...(tagOptions.capabilities ?? []).filter(
+            (t) =>
+              !(tagOptions.ethara_services ?? []).some((s) => s.value === t.value),
+          ),
+        ],
+        filterDimensionId: dimensionIds.capabilities,
+      }),
+      field(commercialSection, 30, {
+        key: 'heading_commercial',
+        type: 'heading',
+        label: 'Partnership focus',
+      }),
+      field(commercialSection, 31, {
         key: 'commercialTags',
         type: 'multiselect',
-        label: 'Commercial focus',
-        required: false,
+        label: 'Commercial / partnership type',
+        required: demo,
         options: tagOptions.commercial_tags,
         filterDimensionId: dimensionIds.commercial_tags,
       }),
-      field(sectionId, 7, {
-        key: 'contact_phone',
-        type: 'text',
-        label: 'Contact phone',
-        required: false,
-      }),
     ];
 
-    const schema = {
-      sections: [
-        {
-          id: sectionId,
-          title: 'Ethara event profile',
+    if (demo) {
+      fields.push(
+        field(commercialSection, 32, {
+          key: 'partnership_goal',
+          type: 'textarea',
+          label: 'What would a successful match look like?',
+          required: true,
           description:
-            'Aligned with Ethara upcoming events (concerts, sports, family, gaming, festivals).',
-          order: 0,
-        },
-      ],
-      fields,
-    };
+            'Meetings, sponsorship activation, co-promotion, venue booking, talent, etc.',
+        }),
+      );
+    }
+
+    const sections = [
+      {
+        id: aboutSection,
+        title: demo ? 'Demo registration' : 'Organization',
+        description: demo
+          ? 'Show this form in demos — fields map to Ethara matchmaking dimensions.'
+          : 'Tell us who you are and how you work with Ethara.',
+        order: 0,
+      },
+      {
+        id: interestsSection,
+        title: 'Categories & venues',
+        description: 'Aligned with Ethara Work and venue portfolio.',
+        order: 1,
+      },
+      {
+        id: servicesSection,
+        title: 'Services',
+        description: 'Ethara services + production capabilities used in scoring.',
+        order: 2,
+      },
+      {
+        id: commercialSection,
+        title: 'Partnership',
+        description: 'Brands, rights-holders, talent, and media partners.',
+        order: 3,
+      },
+    ];
+
+    return { sections, fields };
+  }
+
+  async function upsertPublishedForm(input: {
+    code: string;
+    name: string;
+    description: string;
+    targetType: 'COMPANY' | 'VENDOR';
+    demoEvent?: boolean;
+    schemaVersion?: string;
+  }) {
+    const { sections, fields } = buildEtharaProfileFields(input.targetType, {
+      demoEvent: input.demoEvent,
+    });
+    const schema = { sections, fields };
+    const schemaHash =
+      input.schemaVersion ??
+      `ethara-events-${input.code}-v2${input.demoEvent ? '-demo' : ''}`;
 
     const form = await prisma.form.upsert({
       where: { code: input.code },
@@ -672,12 +794,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         name: input.name,
         description: input.description,
         targetType: input.targetType,
-        isTemplate: false,
+        isTemplate: Boolean(input.demoEvent),
       },
       update: {
         name: input.name,
         description: input.description,
         targetType: input.targetType,
+        isTemplate: Boolean(input.demoEvent),
       },
     });
 
@@ -696,7 +819,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           status: 'PUBLISHED',
           publishedAt: existingVersion.publishedAt ?? new Date(),
           schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash: `ethara-events-${input.code}-v1`,
+          schemaHash,
         },
       });
       versionId = existingVersion.id;
@@ -708,7 +831,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           status: 'PUBLISHED',
           publishedAt: new Date(),
           schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash: `ethara-events-${input.code}-v1`,
+          schemaHash,
         },
       });
       versionId = created.id;
@@ -737,15 +860,26 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     code: 'CLIENT_EVENT_PROFILE',
     name: 'Client Event Profile',
     description:
-      'Client onboarding for Ethara event matchmaking (concerts, sports, family).',
+      'Client onboarding for Ethara event matchmaking (categories, venues, services).',
     targetType: 'COMPANY',
   });
   const guestForm = await upsertPublishedForm({
     code: 'GUEST_EVENT_PROFILE',
     name: 'Guest Event Profile',
     description:
-      'Guest and partner onboarding for Ethara venues and upcoming events.',
+      'Guest and partner onboarding for Ethara venues, work, and services.',
     targetType: 'VENDOR',
+  });
+
+  /** Showcase form for live demos — full Ethara field set for clients. */
+  await upsertPublishedForm({
+    code: 'ETHARA_DEMO_EVENT',
+    name: 'Ethara Event Matchmaking Demo',
+    description:
+      'Demo form aligned with ethara.com/en — categories, venues, services, partnership goals.',
+    targetType: 'COMPANY',
+    demoEvent: true,
+    schemaVersion: 'ethara-demo-event-v1',
   });
 
   // Enable public registration against guest form by default if unset
@@ -1072,6 +1206,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
 
     const responseData = {
+      industry: client.industry,
       organization_summary: client.about,
       focus_events: client.focusEvents,
       preferredCategories: client.preferredCategories,
@@ -1205,6 +1340,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
 
     const responseData = {
+      industry: guest.industry,
       organization_summary: guest.about,
       focus_events: guest.focusEvents,
       categories: guest.categories,

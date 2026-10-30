@@ -151,15 +151,17 @@ export function calculateMatchScore(
       vendor.industry,
       equivalences,
     ),
-    requirements: overlapScore(
-      expand(company.requirements),
-      expand(vendor.categories),
+    // Ethara-aligned: client needs vs guest event categories / services
+    requirements: Math.max(
+      overlapScore(expand(company.requirements), expand(vendor.categories)),
+      overlapScore(expand(company.requirements), expand(vendor.capabilities)),
     ),
     geography: overlapScore(expand(company.regions), expand(vendor.regions)),
     commercial: overlapScore(
       expand(company.commercialTags),
       expand(vendor.commercialTags),
     ),
+    // Client preferred Ethara categories ↔ guest event categories
     mutualPreferences: overlapScore(
       expand(company.preferredCategories),
       expand(

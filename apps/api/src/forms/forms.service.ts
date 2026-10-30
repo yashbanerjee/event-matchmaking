@@ -1622,6 +1622,16 @@ export class FormsService {
       });
     }
 
+    const about = firstString(
+      responses.organization_summary ?? responses.about,
+    );
+    const focusEvents = firstString(
+      responses.focus_events ?? responses.focusEvents,
+    );
+    const regionTags = asStringArray(
+      responses.regions ?? responses.operatingRegions ?? responses.area,
+    );
+
     if (org.company) {
       await this.prisma.company.update({
         where: { organizationId: org.id },
@@ -1637,6 +1647,9 @@ export class FormsService {
           } as unknown as Prisma.InputJsonValue,
           normalizedProfile: {
             sourceSubmissionId: submission.id,
+            about,
+            focusEvents,
+            regions: regionTags,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },
@@ -1650,9 +1663,13 @@ export class FormsService {
         where: { organizationId: org.id },
         data: {
           capabilities: asStringArray(
-            responses.capabilities ?? responses.services,
+            responses.capabilities ??
+              responses.requiredCapabilities ??
+              responses.services,
           ),
-          categories: asStringArray(responses.categories),
+          categories: asStringArray(
+            responses.categories ?? responses.preferredCategories,
+          ),
           operatingRegions: asStringArray(
             responses.operatingRegions ?? responses.regions ?? responses.area,
           ),
@@ -1661,6 +1678,8 @@ export class FormsService {
           } as unknown as Prisma.InputJsonValue,
           normalizedProfile: {
             sourceSubmissionId: submission.id,
+            about,
+            focusEvents,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },

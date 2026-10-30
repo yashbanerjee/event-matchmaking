@@ -4,15 +4,39 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
-import { Download, QrCode, ScanLine, Share2, Upload } from 'lucide-react';
+import {
+  Download,
+  MapPin,
+  QrCode,
+  ScanLine,
+  Share2,
+  Upload,
+  Zap,
+} from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { trackEvent } from '@/lib/analytics';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/modal';
 import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
+
+type NowWindow = {
+  startsAt: string;
+  endsAt: string;
+  durationMinutes: number;
+  confirmWithinMinutes: number;
+  partiesFree: boolean;
+  message: string | null;
+  places: Array<{
+    id: string;
+    name: string;
+    code: string;
+    location: string | null;
+  }>;
+};
 
 type MyQr = {
   organizationId: string;
@@ -101,11 +125,48 @@ export function QrExchangePanel({
   const [scanOpen, setScanOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [resolved, setResolved] = useState<QrResolve | null>(null);
+  const [choiceOpen, setChoiceOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [meetNowOpen, setMeetNowOpen] = useState(false);
+  const [nowWindow, setNowWindow] = useState<NowWindow | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [nowLoading, setNowLoading] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const detectTimer = useRef<number | null>(null);
+
+  function openBookingChoice() {
+    if (!resolved?.canBook) return;
+    trackEvent('qr_book_started', {
+      code: resolved.code,
+      toOrgId: resolved.toOrgId ?? '',
+    });
+    setScheduleError(null);
+    setChoiceOpen(true);
+  }
+
+  async function openMeetNow() {
+    if (!resolved?.fromOrgId || !resolved.toOrgId) return;
+    setChoiceOpen(false);
+    setMeetNowOpen(true);
+    setNowLoading(true);
+    setSelectedPlaceId(null);
+    setScheduleError(null);
+    try {
+      const data = await apiFetch<NowWindow>(
+        `/meeting-requests/now-window?fromOrgId=${encodeURIComponent(resolved.fromOrgId)}&toOrgId=${encodeURIComponent(resolved.toOrgId)}`,
+        { token: getAccessToken() },
+      );
+      setNowWindow(data);
+      trackEvent('qr_meet_now', { code: resolved.code, step: 'places' });
+    } catch (err) {
+      setScheduleError((err as Error).message);
+      setNowWindow(null);
+    } finally {
+      setNowLoading(false);
+    }
+  }
 
   const myQr = useQuery({
     queryKey: ['qr-me'],
@@ -152,18 +213,25 @@ export function QrExchangePanel({
     mutationFn: (input: {
       fromOrgId: string;
       toOrgId: string;
-      startsAt: string;
+      startsAt?: string;
       placeId: string;
+      mode?: 'SCHEDULED' | 'NOW';
     }) =>
       apiFetch('/meeting-requests', {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify(input),
       }),
-    onSuccess: async () => {
+    onSuccess: async (_data, vars) => {
       setScheduleOpen(false);
+      setMeetNowOpen(false);
+      setChoiceOpen(false);
       setResolved(null);
       setProfileOpen(false);
+      setNowWindow(null);
+      if (vars.mode === 'NOW') {
+        trackEvent('qr_meet_now', { code: 'sent', step: 'created' });
+      }
       await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
       await qc.invalidateQueries({ queryKey: ['recommendations'] });
     },
@@ -469,17 +537,7 @@ export function QrExchangePanel({
                     </Button>
                   ) : null}
                   {resolved.canBook ? (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        trackEvent('qr_book_started', {
-                          code: resolved.code,
-                          toOrgId: resolved.toOrgId ?? '',
-                        });
-                        setScheduleError(null);
-                        setScheduleOpen(true);
-                      }}
-                    >
+                    <Button size="sm" onClick={openBookingChoice}>
                       Book meeting
                     </Button>
                   ) : null}
@@ -538,15 +596,142 @@ export function QrExchangePanel({
           resolved?.canBook
             ? () => {
                 setProfileOpen(false);
-                trackEvent('qr_book_started', {
-                  code: resolved.code,
-                  toOrgId: resolved.toOrgId ?? '',
-                });
-                setScheduleOpen(true);
+                openBookingChoice();
               }
             : undefined
         }
       />
+
+      <Modal
+        open={choiceOpen}
+        title={`Meet ${resolved?.profile?.name ?? 'partner'}?`}
+        description="Start immediately at a free table, or schedule a time for later."
+        onClose={() => setChoiceOpen(false)}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4 text-left transition hover:border-[var(--accent)]"
+            onClick={() => void openMeetNow()}
+          >
+            <Zap className="mb-2 h-5 w-5 text-[var(--accent-hover)]" />
+            <p className="font-semibold">Meet now</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Pick a free table for the next slot. They confirm within 10
+              minutes.
+            </p>
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-[var(--border)] bg-white p-4 text-left transition hover:border-[var(--accent)]"
+            onClick={() => {
+              setChoiceOpen(false);
+              setScheduleOpen(true);
+            }}
+          >
+            <ScanLine className="mb-2 h-5 w-5 text-[var(--muted)]" />
+            <p className="font-semibold">Schedule for later</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Choose a mutual free date, time, and place.
+            </p>
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={meetNowOpen}
+        title="Meet now — free tables"
+        description={
+          nowWindow
+            ? `Slot ${new Date(nowWindow.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${nowWindow.durationMinutes} min · confirm within ${nowWindow.confirmWithinMinutes} min`
+            : 'Loading free tables for the next slot…'
+        }
+        onClose={() => {
+          if (createRequest.isPending) return;
+          setMeetNowOpen(false);
+          setScheduleError(null);
+        }}
+        wide
+        footer={
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setMeetNowOpen(false)}
+              disabled={createRequest.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                !selectedPlaceId ||
+                !nowWindow?.partiesFree ||
+                createRequest.isPending
+              }
+              loading={createRequest.isPending}
+              onClick={() => {
+                if (!resolved?.fromOrgId || !resolved.toOrgId || !selectedPlaceId)
+                  return;
+                createRequest.mutate({
+                  fromOrgId: resolved.fromOrgId,
+                  toOrgId: resolved.toOrgId,
+                  placeId: selectedPlaceId,
+                  mode: 'NOW',
+                });
+              }}
+            >
+              Send meet-now request
+            </Button>
+          </div>
+        }
+      >
+        {nowLoading ? (
+          <p className="text-sm text-[var(--muted)]">Finding free tables…</p>
+        ) : null}
+        {scheduleError ? (
+          <p className="mb-3 text-sm text-rose-700">{scheduleError}</p>
+        ) : null}
+        {nowWindow && !nowWindow.partiesFree ? (
+          <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-4 py-3 text-sm text-[var(--muted)]">
+            {nowWindow.message ||
+              'One of you is busy right now. Schedule for later instead.'}
+          </p>
+        ) : null}
+        {nowWindow && nowWindow.partiesFree && nowWindow.places.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">
+            No free tables in this slot. Try schedule for later.
+          </p>
+        ) : null}
+        {nowWindow && nowWindow.places.length > 0 ? (
+          <div className="max-h-80 space-y-2 overflow-y-auto">
+            {nowWindow.places.map((place) => {
+              const selected = selectedPlaceId === place.id;
+              return (
+                <button
+                  key={place.id}
+                  type="button"
+                  className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left ${
+                    selected
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                      : 'border-[var(--border)] hover:border-[var(--accent)]/50'
+                  }`}
+                  onClick={() => setSelectedPlaceId(place.id)}
+                >
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-hover)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">{place.name}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--muted)]">
+                      {place.location || 'Location TBA'}
+                    </span>
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                    {place.code}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </Modal>
 
       <MeetingSchedulePicker
         open={scheduleOpen}
@@ -568,6 +753,7 @@ export function QrExchangePanel({
             toOrgId: resolved.toOrgId,
             startsAt,
             placeId,
+            mode: 'SCHEDULED',
           });
         }}
       />

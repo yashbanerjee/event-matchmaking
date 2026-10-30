@@ -354,20 +354,33 @@ class MatchmakingRepository {
         .toList();
   }
 
+  Future<Map<String, dynamic>> nowWindow({
+    required String fromOrgId,
+    required String toOrgId,
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/meeting-requests/now-window',
+      query: {'fromOrgId': fromOrgId, 'toOrgId': toOrgId},
+      parse: (d) => d as Map<String, dynamic>,
+    );
+  }
+
   Future<void> createRequest({
     required String fromOrgId,
     required String toOrgId,
-    required String startsAt,
     required String placeId,
+    String? startsAt,
     String? message,
+    String mode = 'SCHEDULED',
   }) {
     return _api.post(
       '/meeting-requests',
       body: {
         'fromOrgId': fromOrgId,
         'toOrgId': toOrgId,
-        'startsAt': startsAt,
         'placeId': placeId,
+        'mode': mode,
+        'startsAt': ?startsAt,
         'message': ?message,
       },
     );

@@ -8,6 +8,7 @@ import { renderMeetingReminderEmail } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../integrations/email/email.service';
 import { EnvService } from '../config/env.service';
+import { MeetingRequestsService } from './meeting-requests.service';
 
 const REMINDER_MINUTES = 30;
 /** Poll window around the 30-minute mark so a 60s ticker cannot miss a meeting. */
@@ -25,6 +26,7 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
     private readonly env: EnvService,
+    private readonly meetingRequests: MeetingRequestsService,
   ) {}
 
   onModuleInit() {
@@ -43,6 +45,7 @@ export class MeetingReminderService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
+      await this.meetingRequests.expireStaleMeetNowRequests();
       await this.sendDueReminders();
     } catch (err) {
       this.logger.warn(
