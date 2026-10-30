@@ -251,16 +251,29 @@ export class RecommendationsService {
       preferredCategories: string[];
       requiredCapabilities: string[];
       commercialPrefs: unknown;
+      normalizedProfile?: unknown;
     },
     organization: { industry: string | null; region: string | null },
   ): ProfileFeatures {
     const prefs = (company.commercialPrefs ?? {}) as Record<string, unknown>;
+    const normalized = (company.normalizedProfile ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const regionTags = Array.isArray(normalized.regions)
+      ? (normalized.regions as string[]).filter((v) => typeof v === 'string')
+      : [];
     return {
       organizationId: company.organizationId,
       industry: organization.industry,
       capabilities: [],
-      categories: [],
-      regions: organization.region ? [organization.region] : [],
+      categories: company.preferredCategories,
+      regions:
+        regionTags.length > 0
+          ? regionTags
+          : organization.region
+            ? [organization.region]
+            : [],
       requirements: company.requiredCapabilities,
       preferredCategories: company.preferredCategories,
       commercialTags: (prefs.tags as string[]) ?? [],
