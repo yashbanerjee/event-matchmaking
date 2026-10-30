@@ -115,11 +115,7 @@ function labelLookup(index: TagLabelIndex | undefined, raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return trimmed;
   const key = trimmed.toLowerCase();
-  if (!index) return trimmed;
-  if (index instanceof Map) {
-    return index.get(key) ?? trimmed;
-  }
-  return index[key] ?? trimmed;
+  return toLabelMap(index).get(key) ?? trimmed;
 }
 
 function toLabelMap(index?: TagLabelIndex): Map<string, string> {
