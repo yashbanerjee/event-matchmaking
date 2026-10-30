@@ -162,6 +162,15 @@ export class EnvService {
       FEATURE_SEMANTIC_SEARCH: this.config.get('FEATURE_SEMANTIC_SEARCH', {
         infer: true,
       }),
+      MEETING_DURATION_MINUTES: this.config.get('MEETING_DURATION_MINUTES', {
+        infer: true,
+      }),
+      MEETING_WINDOW_START: this.config.get('MEETING_WINDOW_START', {
+        infer: true,
+      }),
+      MEETING_WINDOW_END: this.config.get('MEETING_WINDOW_END', {
+        infer: true,
+      }),
       BACKUP_RETENTION_DAYS: this.config.get('BACKUP_RETENTION_DAYS', {
         infer: true,
       }),

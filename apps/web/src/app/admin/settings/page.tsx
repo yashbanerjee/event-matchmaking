@@ -15,6 +15,7 @@ type Field = {
   key: string;
   envKey: string;
   label: string;
+  description?: string;
   type: 'string' | 'number' | 'boolean' | 'select' | 'secret' | 'date';
   secret: boolean;
   options?: string[];
