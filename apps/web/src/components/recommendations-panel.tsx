@@ -19,9 +19,21 @@ type Recommendation = {
   categories: string[];
   capabilities: string[];
   score: number;
+  reasons?: string[];
   explanation: string;
   featured?: boolean;
 };
+
+function matchReasons(item: Recommendation): string[] {
+  if (item.reasons?.length) return item.reasons;
+  // Older payloads: strip trailing technical score appendix from explanation
+  const cleaned = item.explanation?.replace(/\s*\(Score[\s\S]*$/, '').trim();
+  if (!cleaned) return [];
+  return cleaned
+    .split(' · ')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 function SuggestionGrid({
   items,
@@ -79,16 +91,44 @@ function SuggestionGrid({
               </Badge>
             ) : null}
           </div>
-          {(item.categories.length > 0 || item.capabilities.length > 0) && (
-            <p
-              className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-[var(--muted)]"
-              title={[...item.categories, ...item.capabilities].join(' · ')}
-            >
-              {[...item.categories, ...item.capabilities]
-                .slice(0, 6)
-                .join(' · ')}
-            </p>
-          )}
+          {(() => {
+            const reasons = matchReasons(item);
+            if (!reasons.length) {
+              if (item.categories.length > 0 || item.capabilities.length > 0) {
+                return (
+                  <p
+                    className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-[var(--muted)]"
+                    title={[...item.categories, ...item.capabilities].join(
+                      ' · ',
+                    )}
+                  >
+                    {[...item.categories, ...item.capabilities]
+                      .slice(0, 6)
+                      .join(' · ')}
+                  </p>
+                );
+              }
+              return null;
+            }
+            return (
+              <div className="mt-2 min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                  Why a good match
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {reasons.slice(0, 3).map((reason) => (
+                    <li
+                      key={reason}
+                      className="line-clamp-2 text-xs leading-relaxed text-[var(--muted)]"
+                      title={reason}
+                    >
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -169,17 +209,17 @@ export function RecommendationsPanel({
   const featured = recs.data?.featured ?? [];
   const items = recs.data?.items ?? [];
   const empty = featured.length === 0 && items.length === 0;
+  const profileItem = profileOrgId
+    ? (featured.find((r) => r.organizationId === profileOrgId) ??
+      items.find((r) => r.organizationId === profileOrgId) ??
+      null)
+    : null;
 
   const openRequestFromProfile = () => {
-    const orgId = profileOrgId;
-    if (!orgId) return;
-    const item =
-      featured.find((r) => r.organizationId === orgId) ??
-      items.find((r) => r.organizationId === orgId);
-    if (!item) return;
+    if (!profileItem) return;
     setProfileOrgId(null);
     setError(null);
-    setTarget(item);
+    setTarget(profileItem);
   };
 
   return (
@@ -249,6 +289,7 @@ export function RecommendationsPanel({
         open={Boolean(profileOrgId)}
         onClose={() => setProfileOrgId(null)}
         onRequestMeeting={fromOrgId ? openRequestFromProfile : undefined}
+        reasons={profileItem ? matchReasons(profileItem) : undefined}
       />
 
       <MeetingSchedulePicker

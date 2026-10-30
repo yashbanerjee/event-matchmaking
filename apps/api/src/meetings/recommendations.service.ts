@@ -24,6 +24,8 @@ type RecommendationItem = {
   categories: string[];
   capabilities: string[];
   score: number;
+  /** User-facing “why this match” bullets */
+  reasons: string[];
   explanation: string;
   logoUrl: string | null;
   featured: boolean;
@@ -84,6 +86,7 @@ export class RecommendationsService {
             categories: vendor.categories,
             capabilities: vendor.capabilities,
             score: score.totalScore,
+            reasons: score.reasons,
             explanation: score.explanation,
             logoUrl: this.logoOf(vendor.organization.customAttrs),
             featured: vendor.featured,
@@ -132,6 +135,7 @@ export class RecommendationsService {
             categories: company.preferredCategories,
             capabilities: company.requiredCapabilities,
             score: score.totalScore,
+            reasons: score.reasons,
             explanation: score.explanation,
             logoUrl: this.logoOf(company.organization.customAttrs),
             featured: company.featured,

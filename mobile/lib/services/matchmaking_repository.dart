@@ -131,6 +131,7 @@ class RecommendationItem {
     required this.name,
     this.score,
     this.summary,
+    this.reasons = const [],
     this.industry,
     this.type,
   });
@@ -139,17 +140,33 @@ class RecommendationItem {
   final String name;
   final double? score;
   final String? summary;
+  final List<String> reasons;
   final String? industry;
   final String? type;
 
   factory RecommendationItem.fromJson(Map<String, dynamic> json) {
+    final rawReasons = json['reasons'];
+    final reasons = rawReasons is List
+        ? rawReasons.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+        : <String>[];
+    final explanation = json['summary'] as String? ??
+        json['explanation'] as String? ??
+        json['reason'] as String?;
+    // Prefer structured reasons; otherwise strip technical score appendix.
+    final fallbackReasons = reasons.isNotEmpty
+        ? reasons
+        : (explanation ?? '')
+            .replaceAll(RegExp(r'\s*\(Score[\s\S]*$'), '')
+            .split(' · ')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
     return RecommendationItem(
       organizationId: (json['organizationId'] ?? json['id']) as String,
       name: json['name'] as String? ?? 'Organization',
       score: (json['score'] as num?)?.toDouble(),
-      summary: json['summary'] as String? ??
-          json['explanation'] as String? ??
-          json['reason'] as String?,
+      summary: explanation,
+      reasons: fallbackReasons,
       industry: json['industry'] as String?,
       type: json['type'] as String?,
     );

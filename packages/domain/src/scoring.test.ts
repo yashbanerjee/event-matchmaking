@@ -46,6 +46,13 @@ describe('calculateMatchScore', () => {
 
     assert.ok(result.totalScore > 40);
     assert.ok(result.explanation.includes('Score'));
+    assert.ok(result.reasons.length > 0);
+    assert.ok(
+      result.reasons.some((r) => r.toLowerCase().includes('industry')),
+    );
+    assert.ok(
+      result.reasons.some((r) => r.toLowerCase().includes('cnc')),
+    );
     assert.equal(result.breakdown.industry, 100);
   });
 

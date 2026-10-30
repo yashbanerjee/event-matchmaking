@@ -91,11 +91,54 @@ class DiscoverScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      if (item.summary != null && item.summary!.isNotEmpty) ...[
+                      if (item.reasons.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        const Text(
+                          'WHY A GOOD MATCH',
+                          style: TextStyle(
+                            color: AppColors.accentDeep,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ...item.reasons.take(3).map(
+                              (reason) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '•  ',
+                                      style: TextStyle(
+                                        color: AppColors.accentDeep,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        reason,
+                                        style: const TextStyle(
+                                          color: AppColors.muted,
+                                          height: 1.35,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                      ] else if (item.summary != null &&
+                          item.summary!.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text(
                           item.summary!,
-                          style: const TextStyle(color: AppColors.muted, height: 1.35),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            height: 1.35,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 14),
@@ -108,6 +151,7 @@ class DiscoverScreen extends ConsumerWidget {
                                   context,
                                   organizationId: item.organizationId,
                                   counterpartName: item.name,
+                                  reasons: item.reasons,
                                   onRequestMeeting:
                                       fromOrgId == null || fromOrgId.isEmpty
                                           ? null

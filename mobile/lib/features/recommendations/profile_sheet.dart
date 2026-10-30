@@ -10,6 +10,7 @@ Future<void> showRecommendationProfileSheet(
   BuildContext context, {
   required String organizationId,
   String? counterpartName,
+  List<String> reasons = const [],
   VoidCallback? onRequestMeeting,
 }) {
   return showModalBottomSheet<void>(
@@ -19,6 +20,7 @@ Future<void> showRecommendationProfileSheet(
     builder: (_) => RecommendationProfileSheet(
       organizationId: organizationId,
       counterpartName: counterpartName,
+      reasons: reasons,
       onRequestMeeting: onRequestMeeting,
     ),
   );
@@ -29,11 +31,13 @@ class RecommendationProfileSheet extends ConsumerStatefulWidget {
     super.key,
     required this.organizationId,
     this.counterpartName,
+    this.reasons = const [],
     this.onRequestMeeting,
   });
 
   final String organizationId;
   final String? counterpartName;
+  final List<String> reasons;
   final VoidCallback? onRequestMeeting;
 
   @override
@@ -142,6 +146,50 @@ class _RecommendationProfileSheetState
                                       const _Chip('Admin pick', accent: true),
                                   ],
                                 ),
+                                if (widget.reasons.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentSoft,
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color: AppColors.accent
+                                            .withValues(alpha: 0.35),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'WHY A GOOD MATCH FOR YOU',
+                                          style: TextStyle(
+                                            color: AppColors.accentDeep,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ...widget.reasons.map(
+                                          (reason) => Padding(
+                                            padding:
+                                                const EdgeInsets.only(bottom: 4),
+                                            child: Text(
+                                              '•  $reason',
+                                              style: const TextStyle(
+                                                height: 1.35,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                                 if (profile.categories.isNotEmpty ||
                                     profile.capabilities.isNotEmpty) ...[
                                   const SizedBox(height: 14),

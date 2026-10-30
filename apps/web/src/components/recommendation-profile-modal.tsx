@@ -58,11 +58,14 @@ export function RecommendationProfileModal({
   open,
   onClose,
   onRequestMeeting,
+  reasons,
 }: {
   organizationId: string | null;
   open: boolean;
   onClose: () => void;
   onRequestMeeting?: () => void;
+  /** Match reasons from the recommendations list for this org */
+  reasons?: string[];
 }) {
   const profile = useQuery({
     queryKey: ['recommendation-profile', organizationId],
@@ -138,6 +141,24 @@ export function RecommendationProfileModal({
               </a>
             ) : null}
           </div>
+
+          {reasons && reasons.length > 0 ? (
+            <div className="rounded-2xl border border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] bg-[linear-gradient(180deg,#e7fcf8_0%,#ffffff_75%)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]">
+                Why a good match for you
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {reasons.map((reason) => (
+                  <li
+                    key={reason}
+                    className="text-sm leading-relaxed text-[var(--foreground)]"
+                  >
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {(data.categories.length > 0 || data.capabilities.length > 0) && (
             <p className="text-sm leading-relaxed text-[var(--muted)]">

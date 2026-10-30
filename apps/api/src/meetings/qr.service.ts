@@ -49,8 +49,9 @@ export class QrService {
         const url = new URL(normalized);
         const parts = url.pathname.split('/').filter(Boolean);
         const qrIndex = parts.findIndex((p) => p.toLowerCase() === 'qr');
-        if (qrIndex >= 0 && parts[qrIndex + 1]) {
-          return decodeURIComponent(parts[qrIndex + 1]).trim();
+        const qrCode = qrIndex >= 0 ? parts[qrIndex + 1] : undefined;
+        if (qrCode) {
+          return decodeURIComponent(qrCode).trim();
         }
       }
     } catch {
