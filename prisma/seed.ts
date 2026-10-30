@@ -193,10 +193,13 @@ async function main() {
     where: { key: 'ai_enabled' },
     create: {
       key: 'ai_enabled',
-      enabled: false,
-      description: 'Global switch for external AI processing',
+      enabled: true,
+      description: 'Global switch for JAV AI matchmaking / recommendations',
     },
-    update: {},
+    update: {
+      enabled: true,
+      description: 'Global switch for JAV AI matchmaking / recommendations',
+    },
   });
 
   await prisma.featureFlag.upsert({
@@ -230,12 +233,18 @@ async function main() {
     { key: 'storage.s3Bucket', value: '' },
     { key: 'storage.s3Region', value: '' },
     { key: 'storage.s3Endpoint', value: '' },
-    { key: 'ai.enabled', value: false },
-    { key: 'ai.primaryProvider', value: 'none' },
-    { key: 'ai.secondaryProvider', value: 'none' },
+    { key: 'ai.enabled', value: true },
+    { key: 'ai.primaryProvider', value: 'jav' },
+    { key: 'ai.secondaryProvider', value: 'openai' },
+    { key: 'ai.javBaseUrl', value: 'https://api.openai.com/v1' },
+    { key: 'ai.javChatModel', value: 'gpt-4o-mini' },
+    { key: 'ai.javEmbeddingModel', value: 'text-embedding-3-small' },
+    { key: 'ai.javTemperature', value: 0.2 },
+    { key: 'ai.matchmakingMode', value: 'hybrid' },
+    { key: 'ai.matchmakingBlendWeight', value: 0.3 },
     { key: 'ai.requestTimeoutMs', value: 15000 },
     { key: 'ai.maxRetries', value: 2 },
-    { key: 'ops.semanticSearch', value: false },
+    { key: 'ops.semanticSearch', value: true },
     { key: 'ops.backupRetentionDays', value: 30 },
     { key: 'ops.rpoHours', value: 24 },
     { key: 'ops.rtoHours', value: 4 },
@@ -253,6 +262,26 @@ async function main() {
         data: { key: item.key, value: { value: item.value } },
       });
     }
+  }
+
+  // Force-enable integrated JAV AI on every seed (safe to re-run).
+  const javAiDefaults: Array<{ key: string; value: unknown }> = [
+    { key: 'ai.enabled', value: true },
+    { key: 'ai.primaryProvider', value: 'jav' },
+    { key: 'ai.secondaryProvider', value: 'openai' },
+    { key: 'ai.javBaseUrl', value: 'https://api.openai.com/v1' },
+    { key: 'ai.javChatModel', value: 'gpt-4o-mini' },
+    { key: 'ai.javEmbeddingModel', value: 'text-embedding-3-small' },
+    { key: 'ai.matchmakingMode', value: 'hybrid' },
+    { key: 'ai.matchmakingBlendWeight', value: 0.3 },
+    { key: 'ops.semanticSearch', value: true },
+  ];
+  for (const item of javAiDefaults) {
+    await prisma.systemSetting.upsert({
+      where: { key: item.key },
+      create: { key: item.key, value: { value: item.value } },
+      update: { value: { value: item.value } },
+    });
   }
 
   await prisma.emailTemplate.upsert({

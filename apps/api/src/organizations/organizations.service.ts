@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { OrganizationType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import {
@@ -11,6 +18,7 @@ import { AuditService } from '../audit/audit.service';
 import { EnvService } from '../config/env.service';
 import { OutboxService } from '../messaging/outbox.service';
 import { EmailService } from '../integrations/email/email.service';
+import { PeerRecommendationsService } from '../meetings/peer-recommendations.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
@@ -24,6 +32,8 @@ export class OrganizationsService {
     private readonly env: EnvService,
     private readonly outbox: OutboxService,
     private readonly email: EmailService,
+    @Inject(forwardRef(() => PeerRecommendationsService))
+    private readonly peerRecs: PeerRecommendationsService,
   ) {}
 
   async createCompany(
@@ -78,6 +88,8 @@ export class OrganizationsService {
       outcome: 'SUCCESS',
       after: { code: org.code, name: org.name },
     });
+
+    this.peerRecs.scheduleRecompute(org.id, 'company.create');
 
     return org;
   }
@@ -531,6 +543,8 @@ export class OrganizationsService {
       entityId: submission.id,
       outcome: 'SUCCESS',
     });
+
+    this.peerRecs.scheduleRecompute(organizationId, 'company.admin_fill');
 
     return { submission, organizationId, status: 'VERIFIED' };
   }
@@ -1152,6 +1166,8 @@ export class OrganizationsService {
       outcome: 'SUCCESS',
       after: { emailSent, email: contactEmail },
     });
+
+    this.peerRecs.scheduleRecompute(id, 'vendor.approve');
 
     return { ...updated, emailSent, email: contactEmail };
   }

@@ -60,21 +60,28 @@ export const envSchema = z.object({
   S3_ENDPOINT: z.string().optional().default(''),
   AI_ENABLED: z
     .string()
-    .transform((v) => v === 'true')
-    .default('false'),
-  AI_PRIMARY_PROVIDER: z.string().default('none'),
-  AI_SECONDARY_PROVIDER: z.string().default('none'),
+    .transform((v) => v !== 'false' && v !== '0')
+    .default('true'),
+  AI_PRIMARY_PROVIDER: z.string().default('jav'),
+  AI_SECONDARY_PROVIDER: z.string().default('openai'),
   OPENAI_API_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
-  JAV_AI_BASE_URL: z.string().optional().default(''),
+  /** OpenAI-compatible JAV gateway; defaults to OpenAI when empty */
+  JAV_AI_BASE_URL: z
+    .string()
+    .optional()
+    .default('https://api.openai.com/v1'),
   JAV_AI_API_KEY: z.string().optional().default(''),
-  JAV_AI_CHAT_MODEL: z.string().optional().default('jav-match-v1'),
-  JAV_AI_EMBEDDING_MODEL: z.string().optional().default('jav-embed-v1'),
+  JAV_AI_CHAT_MODEL: z.string().optional().default('gpt-4o-mini'),
+  JAV_AI_EMBEDDING_MODEL: z
+    .string()
+    .optional()
+    .default('text-embedding-3-small'),
   JAV_AI_FINE_TUNED_MODEL: z.string().optional().default(''),
   JAV_AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
   AI_MATCHMAKING_MODE: z
     .enum(['embedding', 'llm', 'hybrid'])
-    .default('embedding'),
+    .default('hybrid'),
   AI_MATCHMAKING_BLEND_WEIGHT: z.coerce.number().min(0).max(1).default(0.3),
   AI_MATCHMAKING_PROMPT: z.string().optional().default(''),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),

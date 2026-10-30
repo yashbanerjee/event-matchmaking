@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { FieldType, Prisma } from '@prisma/client';
 import {
@@ -23,6 +25,7 @@ import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
 import { EnvService } from '../config/env.service';
 import { EmailService } from '../integrations/email/email.service';
+import { PeerRecommendationsService } from '../meetings/peer-recommendations.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
 
@@ -51,6 +54,8 @@ export class FormsService {
     private readonly outbox: OutboxService,
     private readonly env: EnvService,
     private readonly email: EmailService,
+    @Inject(forwardRef(() => PeerRecommendationsService))
+    private readonly peerRecs: PeerRecommendationsService,
   ) {}
 
   /** Snapshot filter-dimension tags into field.options for select/radio fields. */
@@ -1155,6 +1160,11 @@ export class FormsService {
       after: { emailSent, email: contact?.email ?? null },
     });
 
+    this.peerRecs.scheduleRecompute(
+      submission.organizationId,
+      'submission.approve',
+    );
+
     return { ...updated, emailSent, email: contact?.email ?? null };
   }
 
@@ -1689,6 +1699,19 @@ export class FormsService {
             org.vendor.approvalStatus === 'APPROVED',
         },
       });
+    }
+
+    const refreshed = await this.prisma.organization.findUnique({
+      where: { id: org.id },
+      include: { company: true, vendor: true },
+    });
+    const ready =
+      (refreshed?.company?.matchingEligible &&
+        refreshed.company.approvalStatus === 'VERIFIED') ||
+      (refreshed?.vendor?.matchingEligible &&
+        refreshed.vendor.approvalStatus === 'VERIFIED');
+    if (ready) {
+      this.peerRecs.scheduleRecompute(org.id, 'profile.normalize');
     }
   }
 

@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { EnvService } from '../../config/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EffectiveConfigService } from '../../settings/effective-config.service';
@@ -17,7 +18,7 @@ import { AnthropicProvider } from './anthropic.provider';
 import { JavAiProvider } from './jav.provider';
 
 @Injectable()
-export class AiService {
+export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
   private circuitOpenUntil = new Map<string, number>();
 
@@ -27,8 +28,68 @@ export class AiService {
     private readonly config: EffectiveConfigService,
   ) {}
 
+  async onModuleInit() {
+    await this.ensureIntegratedJavDefaults();
+  }
+
+  /** Wire JAV as the default Ethara matchmaking AI if settings are still unset/off. */
+  private async ensureIntegratedJavDefaults() {
+    const ensure = async (key: string, value: Prisma.InputJsonValue) => {
+      const payload = { value } as Prisma.InputJsonValue;
+      const existing = await this.prisma.systemSetting.findUnique({
+        where: { key },
+      });
+      if (!existing) {
+        await this.prisma.systemSetting.create({
+          data: { key, value: payload },
+        });
+        return;
+      }
+      const raw = existing.value as { value?: unknown } | unknown;
+      const current =
+        raw && typeof raw === 'object' && 'value' in (raw as object)
+          ? (raw as { value: unknown }).value
+          : raw;
+      const empty =
+        current === undefined ||
+        current === null ||
+        current === '' ||
+        current === 'none' ||
+        current === false ||
+        current === 'false';
+      if (empty && (key === 'ai.enabled' || key === 'ai.primaryProvider')) {
+        await this.prisma.systemSetting.update({
+          where: { key },
+          data: { value: payload },
+        });
+      }
+    };
+
+    await ensure('ai.enabled', true);
+    await ensure('ai.primaryProvider', 'jav');
+    await ensure('ai.secondaryProvider', 'openai');
+    await ensure('ai.javBaseUrl', 'https://api.openai.com/v1');
+    await ensure('ai.javChatModel', 'gpt-4o-mini');
+    await ensure('ai.javEmbeddingModel', 'text-embedding-3-small');
+    await ensure('ai.matchmakingMode', 'hybrid');
+    await ensure('ai.matchmakingBlendWeight', 0.3);
+
+    await this.prisma.featureFlag.upsert({
+      where: { key: 'ai_enabled' },
+      create: {
+        key: 'ai_enabled',
+        enabled: true,
+        description: 'Global switch for JAV AI matchmaking / recommendations',
+      },
+      update: {},
+    });
+
+    this.config.invalidate();
+    this.logger.log('JAV AI integrated as primary matchmaking provider');
+  }
+
   async isEnabled() {
-    return this.config.getBoolean('ai.enabled', this.env.aiEnabled);
+    return this.config.getBoolean('ai.enabled', this.env.aiEnabled ?? true);
   }
 
   async health(): Promise<AiHealth[]> {
@@ -161,23 +222,27 @@ export class AiService {
     );
     const primary = await this.config.getString(
       'ai.primaryProvider',
-      this.env.raw.AI_PRIMARY_PROVIDER,
+      this.env.raw.AI_PRIMARY_PROVIDER || 'jav',
     );
     const secondary = await this.config.getString(
       'ai.secondaryProvider',
-      this.env.raw.AI_SECONDARY_PROVIDER,
+      this.env.raw.AI_SECONDARY_PROVIDER || 'openai',
     );
     const openaiKey = await this.config.getString('ai.openaiApiKey', '');
     const anthropicKey = await this.config.getString('ai.anthropicApiKey', '');
-    const javKey = await this.config.getString('ai.javApiKey', '');
-    const javBaseUrl = await this.config.getString('ai.javBaseUrl', '');
+    const javKey =
+      (await this.config.getString('ai.javApiKey', '')) || openaiKey;
+    const javBaseUrl =
+      (await this.config.getString('ai.javBaseUrl', '')) ||
+      this.env.raw.JAV_AI_BASE_URL ||
+      'https://api.openai.com/v1';
     const javChatModel = await this.config.getString(
       'ai.javChatModel',
-      'jav-match-v1',
+      this.env.raw.JAV_AI_CHAT_MODEL || 'gpt-4o-mini',
     );
     const javEmbeddingModel = await this.config.getString(
       'ai.javEmbeddingModel',
-      'jav-embed-v1',
+      this.env.raw.JAV_AI_EMBEDDING_MODEL || 'text-embedding-3-small',
     );
     const javFineTunedModel = await this.config.getString(
       'ai.javFineTunedModel',
@@ -195,12 +260,12 @@ export class AiService {
       if (name === 'anthropic' && anthropicKey) {
         return new AnthropicProvider(anthropicKey, timeout);
       }
-      if (name === 'jav' && javKey && javBaseUrl) {
+      if (name === 'jav' && javKey) {
+        // JAV is the built-in Ethara matchmaking AI (OpenAI-compatible gateway).
         return new JavAiProvider({
           apiKey: javKey,
           baseUrl: javBaseUrl,
           timeoutMs: timeout,
-          // Prefer fine-tuned model id when admins set one
           chatModel: javFineTunedModel.trim() || javChatModel,
           embeddingModel: javEmbeddingModel,
           temperature: javTemperature,
@@ -210,10 +275,24 @@ export class AiService {
     };
 
     const providers: AiProvider[] = [];
-    for (const name of [primary, secondary].filter((n) => n && n !== 'none')) {
+    const seen = new Set<string>();
+    const push = (name: string) => {
+      if (!name || name === 'none' || seen.has(name)) return;
       const provider = byName(name);
-      if (provider) providers.push(provider);
-    }
+      if (provider) {
+        seen.add(name);
+        providers.push(provider);
+      }
+    };
+
+    // Always prefer JAV first — it is the integrated Ethara matchmaking model.
+    push('jav');
+    push(primary);
+    push(secondary);
+    // Last-resort fallbacks so matchmaking still gets AI when only one key is set
+    push('openai');
+    push('anthropic');
+
     if (providers.length === 0) {
       providers.push(new NullAiProvider());
     }

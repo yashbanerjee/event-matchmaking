@@ -25,6 +25,7 @@ const NAV_GROUPS = [
       { href: '/admin/forms', label: 'Forms' },
       { href: '/admin/filters', label: 'Filters' },
       { href: '/admin/matchmaking', label: 'Matchmaking' },
+      { href: '/admin/recommendations', label: 'Recommendations' },
       { href: '/admin/meetings', label: 'Meetings' },
       { href: '/admin/places', label: 'Places' },
       { href: '/admin/feedback', label: 'Feedback' },

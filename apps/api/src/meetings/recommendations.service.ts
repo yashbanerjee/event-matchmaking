@@ -27,6 +27,8 @@ type RecommendationItem = {
   /** User-facing “why this match” bullets */
   reasons: string[];
   explanation: string;
+  aiScore?: number | null;
+  aiDescription?: string | null;
   logoUrl: string | null;
   featured: boolean;
 };
@@ -55,6 +57,22 @@ export class RecommendationsService {
 
     const companyOrg = myOrgs.find((o) => o.type === 'COMPANY' && o.company);
     const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR' && o.vendor);
+
+    // Prefer persisted JAV AI peer recommendations when available
+    const perspectiveOrg = companyOrg ?? vendorOrg;
+    if (perspectiveOrg) {
+      const stored = await this.fromStored(
+        perspectiveOrg.id,
+        max,
+        tagLabels,
+      );
+      if (stored) {
+        return {
+          ...stored,
+          perspective: perspectiveOrg.type as 'COMPANY' | 'VENDOR',
+        };
+      }
+    }
 
     if (companyOrg?.company) {
       const vendors = await this.prisma.vendor.findMany({
@@ -269,6 +287,66 @@ export class RecommendationsService {
     if (!customAttrs || typeof customAttrs !== 'object') return null;
     const logo = (customAttrs as Record<string, unknown>).logoUrl;
     return typeof logo === 'string' ? logo : null;
+  }
+
+  private async fromStored(
+    fromOrgId: string,
+    max: number,
+    tagLabels: Record<string, string>,
+  ): Promise<{ items: RecommendationItem[]; featured: RecommendationItem[] } | null> {
+    const rows = await this.prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId },
+      include: {
+        toOrg: {
+          include: { company: true, vendor: true },
+        },
+      },
+      orderBy: { totalScore: 'desc' },
+      take: Math.max(max * 2, 20),
+    });
+    if (!rows.length) return null;
+
+    const scored: RecommendationItem[] = rows.map((row) => {
+      const peer = row.toOrg;
+      const featured = Boolean(
+        peer.company?.featured || peer.vendor?.featured,
+      );
+      const reasons =
+        row.reasons.length > 0
+          ? row.reasons
+          : row.aiDescription
+            ? [row.aiDescription]
+            : [];
+      return {
+        organizationId: peer.id,
+        name: peer.name,
+        type: peer.type as 'COMPANY' | 'VENDOR',
+        industry: this.labelOf(peer.industry, tagLabels),
+        categories: this.labelsOf(
+          peer.vendor?.categories ??
+            peer.company?.preferredCategories ??
+            [],
+          tagLabels,
+        ),
+        capabilities: this.labelsOf(
+          peer.vendor?.capabilities ??
+            peer.company?.requiredCapabilities ??
+            [],
+          tagLabels,
+        ),
+        score: row.totalScore,
+        reasons,
+        explanation:
+          row.aiDescription ??
+          (reasons.length ? reasons.join(' · ') : `Score ${row.totalScore}`),
+        aiScore: row.aiScore,
+        aiDescription: row.aiDescription,
+        logoUrl: this.logoOf(peer.customAttrs),
+        featured,
+      };
+    });
+
+    return this.splitRecommendations(scored, max);
   }
 
   private labelOf(

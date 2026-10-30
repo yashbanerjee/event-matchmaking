@@ -390,10 +390,41 @@ model Organization {
   feedbacks           MeetingFeedback[]
   followUps           FollowUpAction[]
   availabilityWindows AvailabilityWindow[]
+  peerRecommendationsFrom OrgPeerRecommendation[] @relation("PeerRecFrom")
+  peerRecommendationsTo   OrgPeerRecommendation[] @relation("PeerRecTo")
 
   @@index([type, status])
   @@index([name])
   @@map("organizations")
+}
+
+/// Persisted client↔guest recommendation with rule + JAV AI score/description.
+model OrgPeerRecommendation {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromOrgId          String           @db.Uuid
+  toOrgId            String           @db.Uuid
+  /// Perspective of fromOrg (COMPANY sees guests, VENDOR sees clients)
+  perspective        OrganizationType
+  ruleScore          Float
+  aiScore            Float?
+  totalScore         Float
+  reasons            String[]         @default([])
+  aiDescription      String?
+  scoreBreakdown     Json             @default("{}")
+  fromProfileVersion  Int              @default(1)
+  toProfileVersion   Int              @default(1)
+  computedAt         DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  fromOrg Organization @relation("PeerRecFrom", fields: [fromOrgId], references: [id], onDelete: Cascade)
+  toOrg   Organization @relation("PeerRecTo", fields: [toOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([fromOrgId, toOrgId])
+  @@index([fromOrgId, totalScore])
+  @@index([toOrgId, totalScore])
+  @@index([perspective, computedAt])
+  @@map("org_peer_recommendations")
 }
 
 model OrganizationMember {
