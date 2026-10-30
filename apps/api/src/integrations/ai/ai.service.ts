@@ -57,7 +57,23 @@ export class AiService implements OnModuleInit {
         current === 'none' ||
         current === false ||
         current === 'false';
-      if (empty && (key === 'ai.enabled' || key === 'ai.primaryProvider')) {
+      const legacyModel =
+        key === 'ai.javChatModel' &&
+        (current === 'gpt-4o-mini' ||
+          current === 'openai/gpt-4o-mini' ||
+          current === 'jav-match-v1');
+      const legacyMode =
+        key === 'ai.matchmakingMode' && current === 'embedding';
+      const shouldUpgrade =
+        empty &&
+        (key === 'ai.enabled' ||
+          key === 'ai.primaryProvider' ||
+          key === 'ai.javChatModel' ||
+          key === 'ai.matchmakingMode' ||
+          key === 'ai.javBaseUrl')
+          ? true
+          : legacyModel || legacyMode;
+      if (shouldUpgrade) {
         await this.prisma.systemSetting.update({
           where: { key },
           data: { value: payload },
@@ -67,11 +83,10 @@ export class AiService implements OnModuleInit {
 
     await ensure('ai.enabled', true);
     await ensure('ai.primaryProvider', 'jav');
-    await ensure('ai.secondaryProvider', 'openai');
-    await ensure('ai.javBaseUrl', 'https://api.openai.com/v1');
-    await ensure('ai.javChatModel', 'gpt-4o-mini');
-    await ensure('ai.javEmbeddingModel', 'text-embedding-3-small');
-    await ensure('ai.matchmakingMode', 'hybrid');
+    await ensure('ai.secondaryProvider', 'none');
+    await ensure('ai.javBaseUrl', 'https://openrouter.ai/api/v1');
+    await ensure('ai.javChatModel', '~typesafe/jev-latest');
+    await ensure('ai.matchmakingMode', 'llm');
     await ensure('ai.matchmakingBlendWeight', 0.3);
 
     await this.prisma.featureFlag.upsert({
@@ -228,21 +243,20 @@ export class AiService implements OnModuleInit {
       'ai.secondaryProvider',
       this.env.raw.AI_SECONDARY_PROVIDER || 'openai',
     );
+    // Credentials and models come from Admin → System Settings only.
     const openaiKey = await this.config.getString('ai.openaiApiKey', '');
     const anthropicKey = await this.config.getString('ai.anthropicApiKey', '');
-    const javKey =
-      (await this.config.getString('ai.javApiKey', '')) || openaiKey;
+    const javKey = await this.config.getString('ai.openrouterApiKey', '');
     const javBaseUrl =
       (await this.config.getString('ai.javBaseUrl', '')) ||
-      this.env.raw.JAV_AI_BASE_URL ||
-      'https://api.openai.com/v1';
+      'https://openrouter.ai/api/v1';
     const javChatModel = await this.config.getString(
       'ai.javChatModel',
-      this.env.raw.JAV_AI_CHAT_MODEL || 'gpt-4o-mini',
+      '~typesafe/jev-latest',
     );
     const javEmbeddingModel = await this.config.getString(
       'ai.javEmbeddingModel',
-      this.env.raw.JAV_AI_EMBEDDING_MODEL || 'text-embedding-3-small',
+      '',
     );
     const javFineTunedModel = await this.config.getString(
       'ai.javFineTunedModel',
@@ -252,6 +266,7 @@ export class AiService implements OnModuleInit {
       'ai.javTemperature',
       0.2,
     );
+    const isOpenRouter = /openrouter\.ai/i.test(javBaseUrl);
 
     const byName = (name: string): AiProvider | null => {
       if (name === 'openai' && openaiKey) {
@@ -261,14 +276,20 @@ export class AiService implements OnModuleInit {
         return new AnthropicProvider(anthropicKey, timeout);
       }
       if (name === 'jav' && javKey) {
-        // JAV is the built-in Ethara matchmaking AI (OpenAI-compatible gateway).
+        // Jev (TypeSafe) on OpenRouter — https://openrouter.ai/~typesafe/jev-latest
         return new JavAiProvider({
           apiKey: javKey,
           baseUrl: javBaseUrl,
           timeoutMs: timeout,
           chatModel: javFineTunedModel.trim() || javChatModel,
-          embeddingModel: javEmbeddingModel,
+          embeddingModel: javEmbeddingModel || 'openai/text-embedding-3-small',
           temperature: javTemperature,
+          extraHeaders: isOpenRouter
+            ? {
+                'HTTP-Referer': this.env.appUrl || 'https://ethara.com',
+                'X-Title': 'Ethara Matchmaking',
+              }
+            : undefined,
         });
       }
       return null;

@@ -31,11 +31,12 @@ export type JavProviderConfig = {
   /** Embedding model id for semantic similarity */
   embeddingModel: string;
   temperature: number;
+  /** Extra headers (e.g. OpenRouter HTTP-Referer / X-Title) */
+  extraHeaders?: Record<string, string>;
 };
 
 /**
- * JAV AI — OpenAI-compatible HTTP provider.
- * Point `baseUrl` at the JAV gateway (e.g. https://api.example.com/v1).
+ * JAV AI — OpenAI-compatible HTTP provider (OpenRouter by default).
  * Fine-tuned models are selected via `chatModel` from Admin → System Settings.
  */
 export class JavAiProvider implements AiProvider {
@@ -51,6 +52,7 @@ export class JavAiProvider implements AiProvider {
     return {
       Authorization: `Bearer ${this.config.apiKey}`,
       'Content-Type': 'application/json',
+      ...(this.config.extraHeaders ?? {}),
     };
   }
 

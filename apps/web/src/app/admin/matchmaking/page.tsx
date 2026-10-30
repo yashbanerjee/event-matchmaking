@@ -208,7 +208,7 @@ export default function MatchmakingPage() {
             />
             <span>
               <span className="font-medium">
-                Use AI to boost matching (JAV / configured provider)
+                Use AI to boost matching (Jev via OpenRouter)
               </span>
               <span className="mt-0.5 block text-[var(--muted)]">
                 Blends tag scores with semantic similarity on about / focus

@@ -157,6 +157,9 @@ export class EnvService {
       ANTHROPIC_API_KEY: this.config.get('ANTHROPIC_API_KEY', { infer: true }),
       JAV_AI_BASE_URL: this.config.get('JAV_AI_BASE_URL', { infer: true }),
       JAV_AI_API_KEY: this.config.get('JAV_AI_API_KEY', { infer: true }),
+      OPENROUTER_API_KEY: this.config.get('OPENROUTER_API_KEY', {
+        infer: true,
+      }),
       JAV_AI_CHAT_MODEL: this.config.get('JAV_AI_CHAT_MODEL', { infer: true }),
       JAV_AI_EMBEDDING_MODEL: this.config.get('JAV_AI_EMBEDDING_MODEL', {
         infer: true,
