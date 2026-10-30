@@ -613,27 +613,26 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     placeIds[place.code] = row.id;
   }
 
-  // ── Forms ────────────────────────────────────────────────────────────────
-  function buildEtharaProfileFields(
-    targetType: 'COMPANY' | 'VENDOR',
-    opts?: { demoEvent?: boolean },
-  ) {
+  // ── Single Ethara onboarding form (clients + guests) ─────────────────────
+  function buildEtharaOnboardingFields() {
     const aboutSection = randomUUID();
     const interestsSection = randomUUID();
     const servicesSection = randomUUID();
     const commercialSection = randomUUID();
-    const isCompany = targetType === 'COMPANY';
-    const demo = Boolean(opts?.demoEvent);
+
+    const capabilityOptions = [
+      ...(tagOptions.ethara_services ?? []),
+      ...(tagOptions.capabilities ?? []).filter(
+        (t) =>
+          !(tagOptions.ethara_services ?? []).some((s) => s.value === t.value),
+      ),
+    ];
 
     const fields = [
       field(aboutSection, 0, {
         key: 'heading_about',
         type: 'heading',
-        label: demo
-          ? 'Ethara demo — about you'
-          : isCompany
-            ? 'Client profile'
-            : 'Guest profile',
+        label: 'About you',
       }),
       field(aboutSection, 1, {
         key: 'industry',
@@ -653,7 +652,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       field(aboutSection, 3, {
         key: 'focus_events',
         type: 'textarea',
-        label: demo ? 'Ethara work you care about' : 'Focus Ethara events',
+        label: 'Focus Ethara events / work',
         required: true,
         description:
           'e.g. F1 Abu Dhabi GP, Yasalam, NBA Abu Dhabi, UFC, Saadiyat Nights — ethara.com/en',
@@ -670,18 +669,17 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         label: 'Event interests',
       }),
       field(interestsSection, 11, {
-        key: isCompany ? 'preferredCategories' : 'categories',
+        key: 'categories',
         type: 'multiselect',
         label: 'Event / work categories',
         required: true,
         description:
           'Concerts, motorsport, combat sports, heritage, public art, gaming, and more',
-        options: tagOptions[isCompany ? 'preferred_categories' : 'event_categories'],
-        filterDimensionId:
-          dimensionIds[isCompany ? 'preferred_categories' : 'event_categories'],
+        options: tagOptions.event_categories,
+        filterDimensionId: dimensionIds.event_categories,
       }),
       field(interestsSection, 12, {
-        key: isCompany ? 'regions' : 'operatingRegions',
+        key: 'regions',
         type: 'multiselect',
         label: 'Preferred venues / locations',
         required: true,
@@ -694,21 +692,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         label: 'Services & capabilities',
       }),
       field(servicesSection, 21, {
-        key: isCompany ? 'requiredCapabilities' : 'capabilities',
+        key: 'capabilities',
         type: 'multiselect',
-        label: isCompany
-          ? 'Ethara services & capabilities you need'
-          : 'Ethara services & capabilities you offer',
+        label: 'Ethara services & capabilities',
         required: true,
         description:
           'World-class events, content, venue management, sponsorship, tech, and production skills',
-        options: [
-          ...(tagOptions.ethara_services ?? []),
-          ...(tagOptions.capabilities ?? []).filter(
-            (t) =>
-              !(tagOptions.ethara_services ?? []).some((s) => s.value === t.value),
-          ),
-        ],
+        options: capabilityOptions,
         filterDimensionId: dimensionIds.capabilities,
       }),
       field(commercialSection, 30, {
@@ -720,32 +710,26 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         key: 'commercialTags',
         type: 'multiselect',
         label: 'Commercial / partnership type',
-        required: demo,
+        required: true,
         options: tagOptions.commercial_tags,
         filterDimensionId: dimensionIds.commercial_tags,
       }),
+      field(commercialSection, 32, {
+        key: 'partnership_goal',
+        type: 'textarea',
+        label: 'What would a successful match look like?',
+        required: false,
+        description:
+          'Meetings, sponsorship activation, co-promotion, venue booking, talent, etc.',
+      }),
     ];
-
-    if (demo) {
-      fields.push(
-        field(commercialSection, 32, {
-          key: 'partnership_goal',
-          type: 'textarea',
-          label: 'What would a successful match look like?',
-          required: true,
-          description:
-            'Meetings, sponsorship activation, co-promotion, venue booking, talent, etc.',
-        }),
-      );
-    }
 
     const sections = [
       {
         id: aboutSection,
-        title: demo ? 'Demo registration' : 'Organization',
-        description: demo
-          ? 'Show this form in demos — fields map to Ethara matchmaking dimensions.'
-          : 'Tell us who you are and how you work with Ethara.',
+        title: 'Organization',
+        description:
+          'One onboarding form for Ethara clients and guests — fields map to matchmaking.',
         order: 0,
       },
       {
@@ -771,131 +755,110 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     return { sections, fields };
   }
 
-  async function upsertPublishedForm(input: {
-    code: string;
-    name: string;
-    description: string;
-    targetType: 'COMPANY' | 'VENDOR';
-    demoEvent?: boolean;
-    schemaVersion?: string;
-  }) {
-    const { sections, fields } = buildEtharaProfileFields(input.targetType, {
-      demoEvent: input.demoEvent,
-    });
-    const schema = { sections, fields };
-    const schemaHash =
-      input.schemaVersion ??
-      `ethara-events-${input.code}-v2${input.demoEvent ? '-demo' : ''}`;
+  const ONBOARDING_CODE = 'ETHARA_ONBOARDING';
+  const { sections: onboardingSections, fields: onboardingFields } =
+    buildEtharaOnboardingFields();
+  const onboardingSchema = {
+    sections: onboardingSections,
+    fields: onboardingFields,
+  };
+  const onboardingHash = 'ethara-onboarding-v1';
 
-    const form = await prisma.form.upsert({
-      where: { code: input.code },
-      create: {
-        code: input.code,
-        name: input.name,
-        description: input.description,
-        targetType: input.targetType,
-        isTemplate: Boolean(input.demoEvent),
+  const onboardingFormRow = await prisma.form.upsert({
+    where: { code: ONBOARDING_CODE },
+    create: {
+      code: ONBOARDING_CODE,
+      name: 'Ethara onboarding form',
+      description:
+        'Single onboarding form for Ethara clients and guests (categories, venues, services, partnerships).',
+      targetType: null,
+      isTemplate: false,
+    },
+    update: {
+      name: 'Ethara onboarding form',
+      description:
+        'Single onboarding form for Ethara clients and guests (categories, venues, services, partnerships).',
+      targetType: null,
+      isTemplate: false,
+    },
+  });
+
+  const existingOnboardingVersion = await prisma.formVersion.findFirst({
+    where: { formId: onboardingFormRow.id, version: 1 },
+  });
+
+  let onboardingVersionId: string;
+  if (existingOnboardingVersion) {
+    await prisma.formField.deleteMany({
+      where: { formVersionId: existingOnboardingVersion.id },
+    });
+    await prisma.formVersion.update({
+      where: { id: existingOnboardingVersion.id },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: existingOnboardingVersion.publishedAt ?? new Date(),
+        schemaJson: onboardingSchema as unknown as Prisma.InputJsonValue,
+        schemaHash: onboardingHash,
       },
-      update: {
-        name: input.name,
-        description: input.description,
-        targetType: input.targetType,
-        isTemplate: Boolean(input.demoEvent),
+    });
+    onboardingVersionId = existingOnboardingVersion.id;
+  } else {
+    const created = await prisma.formVersion.create({
+      data: {
+        formId: onboardingFormRow.id,
+        version: 1,
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        schemaJson: onboardingSchema as unknown as Prisma.InputJsonValue,
+        schemaHash: onboardingHash,
       },
     });
-
-    const existingVersion = await prisma.formVersion.findFirst({
-      where: { formId: form.id, version: 1 },
-    });
-
-    let versionId: string;
-    if (existingVersion) {
-      await prisma.formField.deleteMany({
-        where: { formVersionId: existingVersion.id },
-      });
-      await prisma.formVersion.update({
-        where: { id: existingVersion.id },
-        data: {
-          status: 'PUBLISHED',
-          publishedAt: existingVersion.publishedAt ?? new Date(),
-          schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash,
-        },
-      });
-      versionId = existingVersion.id;
-    } else {
-      const created = await prisma.formVersion.create({
-        data: {
-          formId: form.id,
-          version: 1,
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          schemaJson: schema as unknown as Prisma.InputJsonValue,
-          schemaHash,
-        },
-      });
-      versionId = created.id;
-    }
-
-    for (const [index, f] of fields.entries()) {
-      if (f.type === 'heading' || f.type === 'info') continue;
-      await prisma.formField.create({
-        data: {
-          formVersionId: versionId,
-          fieldKey: f.key,
-          label: f.label,
-          description: f.description,
-          fieldType: mapFieldType(f.type) as never,
-          required: f.required,
-          displayOrder: index,
-          options: (f.options ?? []) as unknown as Prisma.InputJsonValue,
-        },
-      });
-    }
-
-    return { form, versionId, schema, fields };
+    onboardingVersionId = created.id;
   }
 
-  const clientForm = await upsertPublishedForm({
-    code: 'CLIENT_EVENT_PROFILE',
-    name: 'Client Event Profile',
-    description:
-      'Client onboarding for Ethara event matchmaking (categories, venues, services).',
-    targetType: 'COMPANY',
-  });
-  const guestForm = await upsertPublishedForm({
-    code: 'GUEST_EVENT_PROFILE',
-    name: 'Guest Event Profile',
-    description:
-      'Guest and partner onboarding for Ethara venues, work, and services.',
-    targetType: 'VENDOR',
-  });
+  for (const [index, f] of onboardingFields.entries()) {
+    if (f.type === 'heading' || f.type === 'info') continue;
+    await prisma.formField.create({
+      data: {
+        formVersionId: onboardingVersionId,
+        fieldKey: f.key,
+        label: f.label,
+        description: f.description,
+        fieldType: mapFieldType(f.type) as never,
+        required: f.required,
+        displayOrder: index,
+        options: (f.options ?? []) as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
 
-  /** Showcase form for live demos — full Ethara field set for clients. */
-  await upsertPublishedForm({
-    code: 'ETHARA_DEMO_EVENT',
-    name: 'Ethara Event Matchmaking Demo',
-    description:
-      'Demo form aligned with ethara.com/en — categories, venues, services, partnership goals.',
-    targetType: 'COMPANY',
-    demoEvent: true,
-    schemaVersion: 'ethara-demo-event-v1',
-  });
+  const onboardingForm = {
+    form: onboardingFormRow,
+    versionId: onboardingVersionId,
+    fields: onboardingFields,
+  };
 
-  // Enable public registration against guest form by default if unset
-  const regForm = await prisma.systemSetting.findUnique({
+  // Remove every other form so the directory shows only Ethara onboarding
+  const obsoleteForms = await prisma.form.findMany({
+    where: { code: { not: ONBOARDING_CODE } },
+    select: { id: true },
+  });
+  if (obsoleteForms.length) {
+    const obsoleteIds = obsoleteForms.map((f) => f.id);
+    await prisma.formAssignment.deleteMany({
+      where: { formId: { in: obsoleteIds } },
+    });
+    await prisma.form.deleteMany({ where: { id: { in: obsoleteIds } } });
+  }
+
+  await prisma.systemSetting.upsert({
     where: { key: 'registration.formId' },
+    create: {
+      key: 'registration.formId',
+      value: { value: onboardingForm.form.id },
+    },
+    update: { value: { value: onboardingForm.form.id } },
   });
-  if (!regForm || !(regForm.value as { value?: string })?.value) {
-    await prisma.systemSetting.upsert({
-      where: { key: 'registration.formId' },
-      create: {
-        key: 'registration.formId',
-        value: { value: guestForm.form.id },
-      },
-      update: { value: { value: guestForm.form.id } },
-    });
-  }
   await prisma.systemSetting.upsert({
     where: { key: 'registration.enabled' },
     create: { key: 'registration.enabled', value: { value: true } },
@@ -1197,8 +1160,8 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
 
     await prisma.formAssignment.create({
       data: {
-        formId: clientForm.form.id,
-        formVersionId: clientForm.versionId,
+        formId: onboardingForm.form.id,
+        formVersionId: onboardingForm.versionId,
         organizationId: org.id,
         userId: user.id,
         isRequired: true,
@@ -1209,23 +1172,27 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       industry: client.industry,
       organization_summary: client.about,
       focus_events: client.focusEvents,
-      preferredCategories: client.preferredCategories,
-      requiredCapabilities: client.requiredCapabilities,
+      categories: client.preferredCategories,
+      capabilities: client.requiredCapabilities,
       regions: client.regions,
       commercialTags: client.commercialTags,
       contact_phone: '+971 2 656 9999',
+      partnership_goal: 'Meet partners who can activate Ethara venues and audiences.',
     };
 
     await prisma.formSubmission.create({
       data: {
-        formVersionId: clientForm.versionId,
+        formVersionId: onboardingForm.versionId,
         organizationId: org.id,
         submittedById: user.id,
         status: 'APPROVED',
         submittedAt: new Date(),
         reviewedAt: new Date(),
         reviewNotes: 'Verified — profile complete for matchmaking',
-        responses: responsesFor(clientForm.fields, responseData) as Prisma.InputJsonValue,
+        responses: responsesFor(
+          onboardingForm.fields,
+          responseData,
+        ) as Prisma.InputJsonValue,
       },
     });
 
@@ -1331,8 +1298,8 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
 
     await prisma.formAssignment.create({
       data: {
-        formId: guestForm.form.id,
-        formVersionId: guestForm.versionId,
+        formId: onboardingForm.form.id,
+        formVersionId: onboardingForm.versionId,
         organizationId: org.id,
         userId: user.id,
         isRequired: true,
@@ -1345,21 +1312,25 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       focus_events: guest.focusEvents,
       categories: guest.categories,
       capabilities: guest.capabilities,
-      operatingRegions: guest.operatingRegions,
+      regions: guest.operatingRegions,
       commercialTags: guest.commercialTags,
       contact_phone: '+971 2 656 9999',
+      partnership_goal: 'Connect with Ethara clients for the right event moments.',
     };
 
     await prisma.formSubmission.create({
       data: {
-        formVersionId: guestForm.versionId,
+        formVersionId: onboardingForm.versionId,
         organizationId: org.id,
         submittedById: user.id,
         status: 'APPROVED',
         submittedAt: new Date(),
         reviewedAt: new Date(),
         reviewNotes: 'Verified — profile complete for matchmaking',
-        responses: responsesFor(guestForm.fields, responseData) as Prisma.InputJsonValue,
+        responses: responsesFor(
+          onboardingForm.fields,
+          responseData,
+        ) as Prisma.InputJsonValue,
       },
     });
 

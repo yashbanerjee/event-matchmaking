@@ -109,37 +109,103 @@ export function overlapScore(a: string[], b: string[]): number {
   return union === 0 ? 0 : (intersection / union) * 100;
 }
 
+export type TagLabelIndex = ReadonlyMap<string, string> | Record<string, string>;
+
+function labelLookup(index: TagLabelIndex | undefined, raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const key = trimmed.toLowerCase();
+  if (!index) return trimmed;
+  if (index instanceof Map) {
+    return index.get(key) ?? trimmed;
+  }
+  return index[key] ?? trimmed;
+}
+
+function toLabelMap(index?: TagLabelIndex): Map<string, string> {
+  if (!index) return new Map();
+  if (index instanceof Map) return new Map(index);
+  return new Map(Object.entries(index));
+}
+
 /**
- * Shared tags with display casing preferred from `preferred` then `other`.
+ * Shared tags with Ethara display labels (not slugs).
  * Equivalences expand both sides before intersecting.
+ * Equivalence-only overlaps render as "YourTag ↔ TheirTag".
  */
 export function intersectDisplayTags(
   preferred: string[],
   other: string[],
   equivalences: TagEquivalence[] = [],
   limit = 4,
+  tagLabels?: TagLabelIndex,
 ): string[] {
-  const leftExpanded = new Set(expandWithMappings(preferred, equivalences));
-  const rightExpanded = new Set(expandWithMappings(other, equivalences));
-  const sharedKeys = [...leftExpanded].filter((k) => rightExpanded.has(k));
-  if (!sharedKeys.length) return [];
+  const pairs = matchTagPairs(preferred, other, equivalences, tagLabels, limit);
+  return pairs.map((pair) =>
+    pair.viaEquivalence &&
+    pair.viewerLabel.toLowerCase() !== pair.counterpartLabel.toLowerCase()
+      ? `${pair.viewerLabel} ↔ ${pair.counterpartLabel}`
+      : pair.viewerLabel,
+  );
+}
 
-  const labelByKey = new Map<string, string>();
-  for (const raw of [...preferred, ...other]) {
-    const key = raw.trim().toLowerCase();
-    if (!key || labelByKey.has(key)) continue;
-    labelByKey.set(key, raw.trim());
-  }
+export type MatchedTagPair = {
+  viewerLabel: string;
+  counterpartLabel: string;
+  viaEquivalence: boolean;
+};
 
-  const labels: string[] = [];
-  for (const key of sharedKeys) {
-    const label = labelByKey.get(key) ?? key;
-    if (!labels.some((l) => l.toLowerCase() === label.toLowerCase())) {
-      labels.push(label);
+/**
+ * Pair each viewer tag with a counterpart tag that overlaps after equivalences.
+ */
+export function matchTagPairs(
+  viewer: string[],
+  counterpart: string[],
+  equivalences: TagEquivalence[] = [],
+  tagLabels?: TagLabelIndex,
+  limit = 4,
+): MatchedTagPair[] {
+  const labels = toLabelMap(tagLabels);
+  const pairs: MatchedTagPair[] = [];
+  const seen = new Set<string>();
+
+  for (const viewerRaw of viewer) {
+    const viewerKey = viewerRaw.trim().toLowerCase();
+    if (!viewerKey) continue;
+    const viewerExpanded = new Set(
+      expandWithMappings([viewerRaw], equivalences),
+    );
+
+    for (const counterpartRaw of counterpart) {
+      const counterpartKey = counterpartRaw.trim().toLowerCase();
+      if (!counterpartKey) continue;
+      const counterpartExpanded = new Set(
+        expandWithMappings([counterpartRaw], equivalences),
+      );
+
+      let connected = false;
+      for (const key of viewerExpanded) {
+        if (counterpartExpanded.has(key)) {
+          connected = true;
+          break;
+        }
+      }
+      if (!connected) continue;
+
+      const id = `${viewerKey}::${counterpartKey}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+
+      pairs.push({
+        viewerLabel: labelLookup(labels, viewerRaw),
+        counterpartLabel: labelLookup(labels, counterpartRaw),
+        viaEquivalence: viewerKey !== counterpartKey,
+      });
+      if (pairs.length >= limit) return pairs;
     }
-    if (labels.length >= limit) break;
   }
-  return labels;
+
+  return pairs;
 }
 
 function formatTagList(tags: string[]): string {
@@ -149,19 +215,25 @@ function formatTagList(tags: string[]): string {
 
 /**
  * Build short, user-facing reasons from overlapping profile dimensions.
+ * Uses Ethara filter labels when provided so reasons match what users see.
  */
 export function buildMatchReasons(
   company: ProfileFeatures,
   vendor: ProfileFeatures,
   breakdown: ScoreBreakdown,
   equivalences: TagEquivalence[] = [],
+  tagLabels?: TagLabelIndex,
 ): string[] {
   const reasons: string[] = [];
   const threshold = 25;
+  const resolve = (raw: string) => labelLookup(tagLabels, raw);
 
   if (breakdown.industry >= threshold) {
-    const industry =
-      company.industry?.trim() || vendor.industry?.trim() || 'your industry';
+    const industry = resolve(
+      company.industry?.trim() ||
+        vendor.industry?.trim() ||
+        'your industry',
+    );
     reasons.push(`Same industry focus (${industry})`);
   }
 
@@ -169,11 +241,15 @@ export function buildMatchReasons(
     company.requirements,
     vendor.capabilities,
     equivalences,
+    4,
+    tagLabels,
   );
   const categoryNeedTags = intersectDisplayTags(
     company.requirements,
     vendor.categories,
     equivalences,
+    4,
+    tagLabels,
   );
 
   if (breakdown.capability >= threshold || needTags.length > 0) {
@@ -185,9 +261,8 @@ export function buildMatchReasons(
   }
 
   if (
-    breakdown.requirements >= threshold &&
+    (breakdown.requirements >= threshold || categoryNeedTags.length > 0) &&
     categoryNeedTags.length > 0 &&
-    // Skip if we already listed the same tags under capabilities
     !(
       needTags.length &&
       categoryNeedTags.every((t) =>
@@ -211,6 +286,8 @@ export function buildMatchReasons(
       company.regions,
       vendor.regions,
       equivalences,
+      4,
+      tagLabels,
     );
     reasons.push(
       tags.length
@@ -219,15 +296,17 @@ export function buildMatchReasons(
     );
   }
 
-  if (breakdown.mutualPreferences >= threshold) {
-    const tags = intersectDisplayTags(
-      company.preferredCategories,
-      vendor.categories.length ? vendor.categories : vendor.mutualPreferenceTags,
-      equivalences,
-    );
+  const preferenceTags = intersectDisplayTags(
+    company.preferredCategories,
+    vendor.categories.length ? vendor.categories : vendor.mutualPreferenceTags,
+    equivalences,
+    4,
+    tagLabels,
+  );
+  if (breakdown.mutualPreferences >= threshold || preferenceTags.length > 0) {
     reasons.push(
-      tags.length
-        ? `In your preferred categories: ${formatTagList(tags)}`
+      preferenceTags.length
+        ? `Linked to your preferences: ${formatTagList(preferenceTags)}`
         : 'Matches categories you prefer to meet',
     );
   }
@@ -237,6 +316,8 @@ export function buildMatchReasons(
       company.commercialTags,
       vendor.commercialTags,
       equivalences,
+      4,
+      tagLabels,
     );
     reasons.push(
       tags.length
@@ -278,6 +359,7 @@ export function calculateMatchScore(
   vendor: ProfileFeatures,
   weights: MatchingWeights = defaultMatchingWeights,
   equivalences: TagEquivalence[] = [],
+  tagLabels?: TagLabelIndex,
 ): MatchScoreResult {
   const expand = (values: string[]) =>
     expandWithMappings(values, equivalences);
@@ -333,7 +415,13 @@ export function calculateMatchScore(
     breakdown.mutualPreferences * weights.mutualPreferences;
 
   const rounded = Math.round(totalScore * 100) / 100;
-  const reasons = buildMatchReasons(company, vendor, breakdown, equivalences);
+  const reasons = buildMatchReasons(
+    company,
+    vendor,
+    breakdown,
+    equivalences,
+    tagLabels,
+  );
 
   const parts = [
     `capability ${breakdown.capability.toFixed(0)}`,

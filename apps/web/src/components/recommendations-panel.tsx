@@ -167,6 +167,8 @@ export function RecommendationsPanel({
 
   const recs = useQuery({
     queryKey: ['recommendations'],
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     queryFn: () =>
       apiFetch<{
         items: Recommendation[];

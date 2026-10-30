@@ -26,7 +26,10 @@ export class QrService {
   ) {}
 
   private deepLinkForCode(code: string) {
-    const base = this.env.appUrl.replace(/\/$/, '');
+    const base = String(this.env.appUrl || 'http://localhost:3000').replace(
+      /\/$/,
+      '',
+    );
     return `${base}/qr/${encodeURIComponent(code)}`;
   }
 
@@ -80,7 +83,32 @@ export class QrService {
       orderBy: { createdAt: 'asc' },
     });
     if (!org) {
-      throw new NotFoundException('No organization found for this account');
+      throw new NotFoundException(
+        'No client or guest organization found for this account. QR codes are only available for meeting profiles.',
+      );
+    }
+    if (!org.code?.trim()) {
+      throw new BadRequestException(
+        'Your organization is missing a QR code. Ask an admin to set the organization code.',
+      );
+    }
+
+    const deepLink = this.deepLinkForCode(org.code);
+    const mobileLink = this.mobileLinkForCode(org.code);
+
+    // Generate PNG on the server so the portal does not depend on browser
+    // bundling of the `qrcode` package (a common Next.js client failure mode).
+    let pngDataUrl: string | null = null;
+    try {
+      const QRCode = await import('qrcode');
+      pngDataUrl = await QRCode.toDataURL(deepLink, {
+        width: 512,
+        margin: 2,
+        color: { dark: '#0a0a0a', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      });
+    } catch {
+      pngDataUrl = null;
     }
 
     return {
@@ -88,8 +116,9 @@ export class QrService {
       code: org.code,
       name: org.name,
       type: org.type,
-      deepLink: this.deepLinkForCode(org.code),
-      mobileLink: this.mobileLinkForCode(org.code),
+      deepLink,
+      mobileLink,
+      pngDataUrl,
     };
   }
 

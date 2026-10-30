@@ -281,7 +281,10 @@ export class MatchmakingService {
           vendor.onboardingComplete &&
           isOrgActive(vendor.organization.status),
       );
-      const equivalences = await this.filters.listEquivalences();
+      const [equivalences, tagLabels] = await Promise.all([
+        this.filters.listEquivalences(),
+        this.filters.listTagLabelIndex(),
+      ]);
 
       const candidates: Array<{
         runId: string;
@@ -327,6 +330,7 @@ export class MatchmakingService {
             vendorFeatures,
             weights,
             equivalences,
+            tagLabels,
           );
 
           let totalScore = score.totalScore;

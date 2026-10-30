@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import QRCode from 'qrcode';
-import jsQR from 'jsqr';
 import {
   Download,
   MapPin,
@@ -45,6 +43,7 @@ type MyQr = {
   type: string;
   deepLink: string;
   mobileLink: string;
+  pngDataUrl?: string | null;
 };
 
 type QrResolve = {
@@ -96,6 +95,7 @@ type QrResolve = {
 };
 
 async function decodeQrFromFile(file: File): Promise<string | null> {
+  const jsQR = (await import('jsqr')).default;
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
@@ -122,6 +122,7 @@ export function QrExchangePanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [resolved, setResolved] = useState<QrResolve | null>(null);
@@ -176,14 +177,47 @@ export function QrExchangePanel({
 
   useEffect(() => {
     if (!myQr.data?.deepLink) return;
+    let cancelled = false;
     trackEvent('qr_view', { code: myQr.data.code });
-    void QRCode.toDataURL(myQr.data.deepLink, {
-      width: 512,
-      margin: 2,
-      color: { dark: '#0a0a0a', light: '#ffffff' },
-      errorCorrectionLevel: 'M',
-    }).then(setDataUrl);
-  }, [myQr.data?.deepLink, myQr.data?.code]);
+    setQrError(null);
+
+    async function renderQr() {
+      const payload = myQr.data;
+      if (!payload) return;
+
+      if (payload.pngDataUrl) {
+        if (!cancelled) setDataUrl(payload.pngDataUrl);
+        return;
+      }
+
+      try {
+        const QRCode = (await import('qrcode')).default;
+        const url = await QRCode.toDataURL(payload.deepLink, {
+          width: 512,
+          margin: 2,
+          color: { dark: '#0a0a0a', light: '#ffffff' },
+          errorCorrectionLevel: 'M',
+        });
+        if (!cancelled) setDataUrl(url);
+      } catch (err) {
+        // Last-resort image so the user still gets a scannable code.
+        const fallback = `https://quickchart.io/qr?text=${encodeURIComponent(payload.deepLink)}&size=512&margin=2`;
+        if (!cancelled) {
+          setDataUrl(fallback);
+          setQrError(
+            err instanceof Error
+              ? err.message
+              : 'Used fallback QR renderer',
+          );
+        }
+      }
+    }
+
+    void renderQr();
+    return () => {
+      cancelled = true;
+    };
+  }, [myQr.data]);
 
   const resolve = useMutation({
     mutationFn: (input: { code?: string; url?: string }) =>
@@ -409,7 +443,11 @@ export function QrExchangePanel({
                   />
                 ) : (
                   <div className="flex h-52 w-52 items-center justify-center text-sm text-[var(--muted)]">
-                    Generating…
+                    {myQr.isError
+                      ? 'Unavailable'
+                      : myQr.isLoading
+                        ? 'Loading…'
+                        : 'Generating…'}
                   </div>
                 )}
               </div>
@@ -418,8 +456,30 @@ export function QrExchangePanel({
               </p>
             </div>
             <p className="text-center text-sm font-semibold">
-              {myQr.data?.name ?? 'Loading…'}
+              {myQr.isError
+                ? 'Could not load your QR'
+                : (myQr.data?.name ?? 'Loading…')}
             </p>
+            {myQr.isError ? (
+              <div className="w-full max-w-sm space-y-2 text-center">
+                <p className="text-sm text-rose-700">
+                  {(myQr.error as Error)?.message ||
+                    'Failed to load your meeting QR code.'}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void myQr.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+            {qrError && dataUrl ? (
+              <p className="max-w-sm text-center text-xs text-[var(--muted)]">
+                {qrError}
+              </p>
+            ) : null}
             <div className="flex flex-wrap justify-center gap-2">
               <Button onClick={() => void downloadPng()} disabled={!dataUrl}>
                 <Download className="mr-2 h-4 w-4" />

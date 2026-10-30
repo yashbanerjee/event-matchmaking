@@ -124,4 +124,50 @@ describe('calculateMatchScore', () => {
 
     assert.equal(result.breakdown.mutualPreferences, 100);
   });
+
+  it('explains equivalence matches with Ethara display labels', () => {
+    const equivalences = [
+      { from: 'concerts', to: 'arts-culture', bidirectional: true },
+    ];
+    const tagLabels = {
+      concerts: 'Concerts',
+      'arts-culture': 'Arts & Culture',
+    };
+
+    const result = calculateMatchScore(
+      {
+        organizationId: 'c1',
+        industry: null,
+        capabilities: [],
+        categories: [],
+        regions: [],
+        requirements: [],
+        preferredCategories: ['concerts'],
+        commercialTags: [],
+        mutualPreferenceTags: [],
+      },
+      {
+        organizationId: 'v1',
+        industry: null,
+        capabilities: [],
+        categories: ['arts-culture'],
+        regions: [],
+        requirements: [],
+        preferredCategories: [],
+        commercialTags: [],
+        mutualPreferenceTags: [],
+      },
+      undefined,
+      equivalences,
+      tagLabels,
+    );
+
+    assert.equal(result.breakdown.mutualPreferences, 100);
+    assert.ok(
+      result.reasons.some((reason) =>
+        reason.includes('Concerts ↔ Arts & Culture'),
+      ),
+      `expected labeled pair in reasons, got: ${result.reasons.join(' | ')}`,
+    );
+  });
 });

@@ -109,6 +109,8 @@ export function TagMappingsPanel() {
       setFromTagId('');
       setToTagId('');
       void qc.invalidateQueries({ queryKey: ['filter-mappings'] });
+      // Re-score live recommendations with the new Ethara tag links
+      void qc.invalidateQueries({ queryKey: ['recommendations'] });
     },
   });
 
@@ -118,8 +120,10 @@ export function TagMappingsPanel() {
         method: 'DELETE',
         token: getAccessToken(),
       }),
-    onSuccess: () =>
-      void qc.invalidateQueries({ queryKey: ['filter-mappings'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['filter-mappings'] });
+      void qc.invalidateQueries({ queryKey: ['recommendations'] });
+    },
   });
 
   const rows = mappings.data ?? [];

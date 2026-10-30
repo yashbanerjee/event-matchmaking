@@ -43,7 +43,10 @@ export class RecommendationsService {
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) return { items: [], featured: [], perspective: null };
 
-    const equivalences = await this.filters.listEquivalences();
+    const [equivalences, tagLabels] = await Promise.all([
+      this.filters.listEquivalences(),
+      this.filters.listTagLabelIndex(),
+    ]);
 
     const myOrgs = await this.prisma.organization.findMany({
       where: { id: { in: orgIds } },
@@ -77,14 +80,18 @@ export class RecommendationsService {
             this.toVendorFeatures(vendor, vendor.organization),
             defaultMatchingWeights,
             equivalences,
+            tagLabels,
           );
           return {
             organizationId: vendor.organizationId,
             name: vendor.organization.name,
             type: 'VENDOR' as const,
-            industry: vendor.organization.industry,
-            categories: vendor.categories,
-            capabilities: vendor.capabilities,
+            industry: this.labelOf(
+              vendor.organization.industry,
+              tagLabels,
+            ),
+            categories: this.labelsOf(vendor.categories, tagLabels),
+            capabilities: this.labelsOf(vendor.capabilities, tagLabels),
             score: score.totalScore,
             reasons: score.reasons,
             explanation: score.explanation,
@@ -126,14 +133,24 @@ export class RecommendationsService {
             vendorFeatures,
             defaultMatchingWeights,
             equivalences,
+            tagLabels,
           );
           return {
             organizationId: company.organizationId,
             name: company.organization.name,
             type: 'COMPANY' as const,
-            industry: company.organization.industry,
-            categories: company.preferredCategories,
-            capabilities: company.requiredCapabilities,
+            industry: this.labelOf(
+              company.organization.industry,
+              tagLabels,
+            ),
+            categories: this.labelsOf(
+              company.preferredCategories,
+              tagLabels,
+            ),
+            capabilities: this.labelsOf(
+              company.requiredCapabilities,
+              tagLabels,
+            ),
             score: score.totalScore,
             reasons: score.reasons,
             explanation: score.explanation,
@@ -200,23 +217,28 @@ export class RecommendationsService {
     const fields: PublicProfileField[] = schema
       ? collectPublicProfileFields(schema, responses)
       : [];
+    const tagLabels = await this.filters.listTagLabelIndex();
 
     return {
       organizationId: organization.id,
       name: organization.name,
       type: organization.type,
-      industry: organization.industry,
+      industry: this.labelOf(organization.industry, tagLabels),
       region: organization.region,
       website: organization.website,
       logoUrl: this.logoOf(organization.customAttrs),
-      categories:
+      categories: this.labelsOf(
         organization.vendor?.categories ??
-        organization.company?.preferredCategories ??
-        [],
-      capabilities:
+          organization.company?.preferredCategories ??
+          [],
+        tagLabels,
+      ),
+      capabilities: this.labelsOf(
         organization.vendor?.capabilities ??
-        organization.company?.requiredCapabilities ??
-        [],
+          organization.company?.requiredCapabilities ??
+          [],
+        tagLabels,
+      ),
       featured: Boolean(
         organization.vendor?.featured || organization.company?.featured,
       ),
@@ -247,6 +269,21 @@ export class RecommendationsService {
     if (!customAttrs || typeof customAttrs !== 'object') return null;
     const logo = (customAttrs as Record<string, unknown>).logoUrl;
     return typeof logo === 'string' ? logo : null;
+  }
+
+  private labelOf(
+    value: string | null | undefined,
+    tagLabels: Record<string, string>,
+  ): string | null {
+    if (!value) return null;
+    return tagLabels[value.trim().toLowerCase()] ?? value;
+  }
+
+  private labelsOf(
+    values: string[],
+    tagLabels: Record<string, string>,
+  ): string[] {
+    return values.map((value) => this.labelOf(value, tagLabels) ?? value);
   }
 
   private toCompanyFeatures(

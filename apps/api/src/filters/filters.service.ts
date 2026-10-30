@@ -326,6 +326,26 @@ export class FiltersService {
     return edges;
   }
 
+  /**
+   * Normalize slug/value and label → Ethara display label for recommendation copy.
+   */
+  async listTagLabelIndex(): Promise<Record<string, string>> {
+    const tags = await this.prisma.filterTag.findMany({
+      where: { isActive: true },
+      select: { value: true, label: true },
+    });
+    const index: Record<string, string> = {};
+    for (const tag of tags) {
+      const label = tag.label.trim();
+      if (!label) continue;
+      const valueKey = tag.value.trim().toLowerCase();
+      const labelKey = label.toLowerCase();
+      if (valueKey) index[valueKey] = label;
+      index[labelKey] = label;
+    }
+    return index;
+  }
+
   optionsForDimension(dimensionId: string) {
     return this.prisma.filterTag.findMany({
       where: { dimensionId, isActive: true },
