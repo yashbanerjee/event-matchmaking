@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { MoreHorizontal } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -23,6 +25,7 @@ export type OrgRow = {
   address?: string | null;
   timeZone?: string;
   type?: string;
+  latestSubmission?: { id: string } | null;
   vendor?: {
     displayName?: string | null;
     approvalStatus?: string;
@@ -42,12 +45,20 @@ export function OrgRowActions({
   org,
   kind,
   queryKey,
+  onVerify,
+  verifying,
 }: {
   org: OrgRow;
   kind: 'company' | 'vendor';
   queryKey: unknown[];
+  onVerify?: () => void;
+  verifying?: boolean;
 }) {
   const qc = useQueryClient();
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [mode, setMode] = useState<'edit' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({
@@ -61,6 +72,17 @@ export function OrgRowActions({
     categories: (org.vendor?.categories ?? []).join(', '),
     capabilities: (org.vendor?.capabilities ?? []).join(', '),
   });
+
+  const profileHref =
+    kind === 'company'
+      ? `/admin/companies/${org.id}`
+      : `/admin/vendors/${org.id}`;
+  const formHref = org.latestSubmission?.id
+    ? `${profileHref}/form?submissionId=${org.latestSubmission.id}`
+    : `${profileHref}/form`;
+  const status =
+    org.vendor?.approvalStatus ?? org.company?.approvalStatus ?? org.status;
+  const verified = status === 'VERIFIED' || status === 'APPROVED';
 
   useEffect(() => {
     if (mode === 'edit') {
@@ -77,6 +99,40 @@ export function OrgRowActions({
       });
     }
   }, [mode, org]);
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 196;
+      setMenuPos({
+        top: rect.bottom + 6,
+        left: Math.max(8, rect.right - width),
+      });
+    };
+    update();
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -140,37 +196,105 @@ export function OrgRowActions({
       void qc.invalidateQueries({ queryKey });
       void qc.invalidateQueries({ queryKey: ['organization', org.id] });
       void qc.invalidateQueries({ queryKey: ['recommendations'] });
+      setOpen(false);
     },
   });
 
+  const itemClass =
+    'block w-full px-3 py-2 text-left text-sm text-[var(--foreground)] hover:bg-black/5';
+
   return (
     <>
-      <div className="inline-flex flex-nowrap items-center gap-1">
-        <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
-          Edit
-        </Button>
-        <Link href={`/admin/recommendations?orgId=${org.id}`}>
-          <Button size="sm" variant="ghost">
-            Recs
-          </Button>
-        </Link>
-        <Button
-          size="sm"
-          variant="ghost"
-          loading={toggleFeatured.isPending}
-          onClick={() => toggleFeatured.mutate()}
-          title={isFeatured ? 'Unfeature' : 'Feature'}
-        >
-          {isFeatured ? 'Unfeature' : 'Feature'}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setConfirmDelete(true)}
-        >
-          Delete
-        </Button>
-      </div>
+      <Button
+        ref={buttonRef}
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8 w-8 px-0"
+        aria-label={`Actions for ${org.name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </Button>
+
+      {open && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              className="fixed z-[80] min-w-48 overflow-hidden rounded-xl border border-[var(--border)] bg-white py-1 shadow-[var(--shadow)]"
+              style={{ top: menuPos.top, left: menuPos.left }}
+            >
+              <Link
+                href={formHref}
+                className={itemClass}
+                onClick={() => setOpen(false)}
+              >
+                {org.latestSubmission ? 'View form' : 'Form status'}
+              </Link>
+              {kind === 'company' ? (
+                <Link
+                  href={`${profileHref}#table`}
+                  className={itemClass}
+                  onClick={() => setOpen(false)}
+                >
+                  Allot table
+                </Link>
+              ) : null}
+              {kind === 'vendor' && !verified && onVerify ? (
+                <button
+                  type="button"
+                  className={itemClass}
+                  disabled={verifying}
+                  onClick={() => {
+                    setOpen(false);
+                    onVerify();
+                  }}
+                >
+                  {verifying ? 'Verifying…' : 'Verify'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={itemClass}
+                onClick={() => {
+                  setOpen(false);
+                  setMode('edit');
+                }}
+              >
+                Edit
+              </button>
+              <Link
+                href={`/admin/recommendations?orgId=${org.id}`}
+                className={itemClass}
+                onClick={() => setOpen(false)}
+              >
+                Recommendations
+              </Link>
+              <button
+                type="button"
+                className={itemClass}
+                disabled={toggleFeatured.isPending}
+                onClick={() => toggleFeatured.mutate()}
+              >
+                {isFeatured ? 'Unfeature' : 'Feature'}
+              </button>
+              <button
+                type="button"
+                className={`${itemClass} text-[var(--danger)]`}
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmDelete(true);
+                }}
+              >
+                Delete
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <Modal
         open={mode === 'edit'}

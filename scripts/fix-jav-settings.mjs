@@ -7,7 +7,8 @@ const updates = [
   { key: 'ai.primaryProvider', value: 'jav' },
   { key: 'ai.secondaryProvider', value: 'none' },
   { key: 'ai.javBaseUrl', value: 'https://openrouter.ai/api/v1' },
-  { key: 'ai.javChatModel', value: '~typesafe/jev-latest' },
+  { key: 'ai.javChatModel', value: 'qwen/qwen-2.5-72b-instruct' },
+  { key: 'ai.pairScoringMethod', value: 'structured_json' },
   { key: 'ai.matchmakingMode', value: 'llm' },
   { key: 'ai.matchmakingBlendWeight', value: 0.3 },
 ];

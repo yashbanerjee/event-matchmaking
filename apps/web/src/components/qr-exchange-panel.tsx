@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
-import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 
 type NowWindow = {
@@ -127,7 +126,6 @@ export function QrExchangePanel({
   const [scanError, setScanError] = useState<string | null>(null);
   const [resolved, setResolved] = useState<QrResolve | null>(null);
   const [choiceOpen, setChoiceOpen] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [meetNowOpen, setMeetNowOpen] = useState(false);
   const [nowWindow, setNowWindow] = useState<NowWindow | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -248,8 +246,8 @@ export function QrExchangePanel({
       fromOrgId: string;
       toOrgId: string;
       startsAt?: string;
-      placeId: string;
-      mode?: 'SCHEDULED' | 'NOW';
+      placeId?: string;
+      mode?: 'SCHEDULED' | 'NOW' | 'INTEREST';
     }) =>
       apiFetch('/meeting-requests', {
         method: 'POST',
@@ -257,7 +255,6 @@ export function QrExchangePanel({
         body: JSON.stringify(input),
       }),
     onSuccess: async (_data, vars) => {
-      setScheduleOpen(false);
       setMeetNowOpen(false);
       setChoiceOpen(false);
       setResolved(null);
@@ -665,7 +662,7 @@ export function QrExchangePanel({
       <Modal
         open={choiceOpen}
         title={`Meet ${resolved?.profile?.name ?? 'partner'}?`}
-        description="Start immediately at a free table, or schedule a time for later."
+        description="Meet now at a free table, or send interest and schedule later under Requests."
         onClose={() => setChoiceOpen(false)}
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -685,14 +682,18 @@ export function QrExchangePanel({
             type="button"
             className="rounded-2xl border border-[var(--border)] bg-white p-4 text-left transition hover:border-[var(--accent)]"
             onClick={() => {
-              setChoiceOpen(false);
-              setScheduleOpen(true);
+              if (!resolved?.fromOrgId || !resolved.toOrgId) return;
+              createRequest.mutate({
+                fromOrgId: resolved.fromOrgId,
+                toOrgId: resolved.toOrgId,
+                mode: 'INTEREST',
+              });
             }}
           >
             <ScanLine className="mb-2 h-5 w-5 text-[var(--muted)]" />
-            <p className="font-semibold">Schedule for later</p>
+            <p className="font-semibold">I&apos;m interested</p>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Choose a mutual free date, time, and place.
+              They can accept; then pick a time and place under Requests.
             </p>
           </button>
         </div>
@@ -793,30 +794,6 @@ export function QrExchangePanel({
         ) : null}
       </Modal>
 
-      <MeetingSchedulePicker
-        open={scheduleOpen}
-        title={`Request meeting${resolved?.profile ? ` · ${resolved.profile.name}` : ''}`}
-        counterpartName={resolved?.profile?.name}
-        fromOrgId={resolved?.fromOrgId}
-        toOrgId={resolved?.toOrgId}
-        submitting={createRequest.isPending}
-        error={scheduleError}
-        onClose={() => {
-          if (createRequest.isPending) return;
-          setScheduleOpen(false);
-          setScheduleError(null);
-        }}
-        onConfirm={({ startsAt, placeId }) => {
-          if (!resolved?.fromOrgId || !resolved.toOrgId) return;
-          createRequest.mutate({
-            fromOrgId: resolved.fromOrgId,
-            toOrgId: resolved.toOrgId,
-            startsAt,
-            placeId,
-            mode: 'SCHEDULED',
-          });
-        }}
-      />
     </>
   );
 }

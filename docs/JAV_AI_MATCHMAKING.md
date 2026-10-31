@@ -4,18 +4,32 @@
 | --- | --- |
 | **Document title** | JAV (Jev) AI scoring and descriptions |
 | **Product** | Ethara Event Matchmaking |
-| **Audience** | Clients, product owners, and developers |
+| **Audience** | Investors, product owners, and developers |
 | **Related** | [System flows](./SYSTEM_FLOWS.md) · [Matchmaking architecture](./MATCHMAKING_ARCHITECTURE.md) |
 
 ---
 
 ## 1. What JAV is
 
-**JAV** is the platform’s AI provider for matchmaking and recommendations. In practice it uses **Jev** (model id such as `~typesafe/jev-latest`) through **OpenRouter**.
+**JAV** is the platform’s OpenAI-compatible matchmaking provider (OpenRouter today; **self-hosted vLLM / LiteLLM** later via the same base URL).
+
+**Recommended setup (open models + custom reasons):**
+
+| Admin setting | Value |
+| --- | --- |
+| OpenRouter API key | Your `sk-or-v1-…` key |
+| API base URL | `https://openrouter.ai/api/v1` (or your server `/v1`) |
+| Matchmaking model id | e.g. `meta-llama/llama-3.3-70b-instruct`, `qwen/qwen-2.5-72b-instruct` |
+| Pair scoring method | **`structured_json`** — JSON `score` + **`rationale`** (2–3 sentences) |
+| Matchmaking system prompt | Tune scoring rules (editable in Admin → Settings) |
+| Matchmaking user message template | `{{investorProfile}}` / `{{innovatorProfile}}` placeholders |
+| Include onboarding in profile text | On — sends form answers to the model |
+
+Legacy **Jev Decisions** (`jev_decisions`) only returns tier labels (e.g. “Strong fit…”), not bespoke summaries.
 
 JAV does **not** replace the normal tag-based matching. It adds an extra opinion:
 
-> “How strong is the fit between this client and this guest for a short Ethara networking meeting?”
+> “How strong is the fit between this investor and this innovator for a short Ethara networking meeting?”
 
 That opinion becomes:
 
@@ -44,7 +58,7 @@ Together they produce a fairer ranking:
 
 ## 3. End-to-end flow (plain language)
 
-1. Client and guest complete the **Ethara onboarding form** and are approved.
+1. Investor and innovator complete the **Ethara onboarding form** and are approved.
 2. The system builds a short **text profile** for each side (industry, about, focus events, categories, capabilities, venues, commercial tags).
 3. The **rule engine** scores the pair on six dimensions (capability, industry, requirements, geography, commercial, preferences) → **rule score 0–100**.
 4. If AI is enabled, **JAV** reads both profiles and returns a fit rating plus a short reason → **AI score 0–100** and **description**.
@@ -84,8 +98,8 @@ For each organization the system concatenates fields such as:
 JAV calls OpenRouter’s **Decisions** API with:
 
 - Matching instructions (system prompt)
-- Client profile text
-- Guest profile text
+- Investor profile text
+- Innovator profile text
 - One question: how strong the match is for a short networking meeting
 
 **Step C — Jev returns a level from 0 to 4**
@@ -201,7 +215,7 @@ You can change the blend in Admin settings (`ai.matchmakingBlendWeight`).
 
 | Place | What happens |
 | --- | --- |
-| **Admin → Recommendations** | Precomputed client↔guest rows with rule score, AI score, description, and total |
+| **Admin → Recommendations** | Precomputed investor↔innovator rows with rule score, AI score, description, and total |
 | **Admin → Matchmaking** | Optional “Use AI to boost matching” on a run; AI score blends into candidate totals before scheduling |
 | **Discover / recommendations APIs** | Participants see ranked suggestions driven by the same preference + AI pipeline |
 

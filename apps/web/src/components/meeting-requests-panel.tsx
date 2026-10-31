@@ -233,8 +233,8 @@ export function MeetingRequestsPanel({
             Meeting requests
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-            Accept or decline incoming requests. Confirming locks the meeting
-            place and time.
+            Accept interest from recommendations, then pick a time and place. The
+            other party confirms to lock the meeting.
           </p>
         </div>
 
@@ -243,7 +243,7 @@ export function MeetingRequestsPanel({
         ) : items.length === 0 ? (
           <EmptyState
             title="No requests yet"
-            description="Send a request from recommendations with a free time and place, or wait for one from a counterpart."
+            description="Use I'm interested on a recommendation, or wait for someone to reach out to you."
           />
         ) : (
           <>

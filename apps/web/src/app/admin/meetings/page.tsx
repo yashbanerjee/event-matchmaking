@@ -17,6 +17,13 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { EventDateChips } from '@/components/event-date-chips';
+import {
+  eventDateTimeToIso,
+  isoToEventDateTime,
+  normalizeEventSchedule,
+  type EventSchedule,
+} from '@/lib/event-schedule';
 import { cn } from '@/lib/utils';
 
 type MeetingRow = {
@@ -46,29 +53,38 @@ type MeetingRow = {
 type OrgOption = { id: string; name: string; code: string };
 
 function toDateTimeLocal(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const parts = isoToEventDateTime(iso);
+  if (!parts.date || !parts.time) return '';
+  return `${parts.date}T${parts.time}`;
 }
 
 function fromDateTimeLocal(value: string) {
-  return new Date(value).toISOString();
+  const [date, time] = value.split('T');
+  if (!date || !time) return new Date(value).toISOString();
+  return eventDateTimeToIso(date, time);
 }
 
 function localDateKey(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return isoToEventDateTime(iso).date;
 }
 
 function localTimeKey(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return isoToEventDateTime(iso).time;
 }
+
+const MEETING_STATUS_FILTERS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All (except cancelled)' },
+  { value: 'PROPOSED', label: 'Proposed' },
+  { value: 'PUBLISHED', label: 'Published' },
+  { value: 'AWAITING_CONFIRMATION', label: 'Awaiting confirmation' },
+  { value: 'CONFIRMED', label: 'Confirmed' },
+  { value: 'RESCHEDULE_REQUESTED', label: 'Reschedule requested' },
+  { value: 'RESCHEDULED', label: 'Rescheduled' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'NO_SHOW', label: 'No show' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
 
 const emptyFilters = {
   date: '',
@@ -76,6 +92,7 @@ const emptyFilters = {
   timeTo: '',
   companyOrgId: '',
   vendorOrgId: '',
+  status: '',
   search: '',
 };
 
@@ -89,6 +106,33 @@ type RequestRow = {
   place?: { name: string; location?: string | null } | null;
   meeting?: { id: string } | null;
 };
+
+const ADMIN_MEETINGS_PAGE_SIZE = 2_000;
+
+async function fetchAllAdminMeetings() {
+  const token = getAccessToken();
+  const items: MeetingRow[] = [];
+  let page = 1;
+  let total = 0;
+
+  for (;;) {
+    const res = await apiFetch<{
+      items: MeetingRow[];
+      total: number;
+    }>(
+      `/meetings?page=${page}&pageSize=${ADMIN_MEETINGS_PAGE_SIZE}`,
+      { token },
+    );
+    total = res.total;
+    items.push(...res.items);
+    if (items.length >= total || res.items.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+
+  return { items, total };
+}
 
 export default function AdminMeetingsPage() {
   const qc = useQueryClient();
@@ -114,10 +158,7 @@ export default function AdminMeetingsPage() {
 
   const meetings = useQuery({
     queryKey: ['admin-meetings'],
-    queryFn: () =>
-      apiFetch<{ items: MeetingRow[] }>('/meetings?pageSize=100', {
-        token: getAccessToken(),
-      }),
+    queryFn: fetchAllAdminMeetings,
   });
 
   const requests = useQuery({
@@ -148,17 +189,13 @@ export default function AdminMeetingsPage() {
   const bookingWindow = useQuery({
     queryKey: ['meeting-booking-window'],
     queryFn: () =>
-      apiFetch<{ start: string | null; end: string | null }>(
-        '/meeting-requests/booking-window',
-        { token: getAccessToken() },
-      ),
+      apiFetch<EventSchedule>('/meeting-requests/booking-window', {
+        token: getAccessToken(),
+      }),
   });
-  const startsMin = bookingWindow.data?.start
-    ? `${bookingWindow.data.start}T00:00`
-    : undefined;
-  const startsMax = bookingWindow.data?.end
-    ? `${bookingWindow.data.end}T23:59`
-    : undefined;
+  const eventSchedule = normalizeEventSchedule(bookingWindow.data);
+  const [editDate, editTime] = editForm.startsAt.split('T');
+  const [createDate, createTime] = createForm.startsAt.split('T');
 
   const saveMeeting = useMutation({
     mutationFn: () => {
@@ -229,11 +266,16 @@ export default function AdminMeetingsPage() {
     onSettled: () => setDeletingId(null),
   });
 
-  const activeMeetings = useMemo(
-    () =>
-      (meetings.data?.items ?? []).filter((m) => m.status !== 'CANCELLED'),
-    [meetings.data?.items],
-  );
+  const activeMeetings = useMemo(() => {
+    const items = meetings.data?.items ?? [];
+    if (filters.status === 'CANCELLED') {
+      return items.filter((m) => m.status === 'CANCELLED');
+    }
+    if (filters.status) {
+      return items.filter((m) => m.status === filters.status);
+    }
+    return items.filter((m) => m.status !== 'CANCELLED');
+  }, [meetings.data?.items, filters.status]);
 
   const companyFilterOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -299,6 +341,7 @@ export default function AdminMeetingsPage() {
       filters.timeTo ||
       filters.companyOrgId ||
       filters.vendorOrgId ||
+      filters.status ||
       filters.search.trim(),
   );
 
@@ -349,7 +392,7 @@ export default function AdminMeetingsPage() {
                     : 'text-[var(--muted)]',
                 )}
               >
-                Calendar
+                Event days
               </button>
               <button
                 type="button"
@@ -381,6 +424,9 @@ export default function AdminMeetingsPage() {
           <div className="flex flex-wrap items-end justify-between gap-2">
             <p className="text-xs text-[var(--muted)]">
               Showing {rows.length} of {activeMeetings.length} meetings
+              {meetings.data?.total != null
+                ? ` (${meetings.data.total} in database)`
+                : ''}
             </p>
             {filtersActive ? (
               <Button
@@ -392,19 +438,34 @@ export default function AdminMeetingsPage() {
               </Button>
             ) : null}
           </div>
+          <div>
+            <p className="mb-1 text-sm text-[var(--muted)]">Date</p>
+            <EventDateChips
+              dates={eventSchedule.dates}
+              value={filters.date}
+              allowEmpty
+              onChange={(date) => setFilters((f) => ({ ...f, date }))}
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Date</span>
-              <Input
-                type="date"
-                value={filters.date}
+              <span className="mb-1 block text-[var(--muted)]">Status</span>
+              <select
+                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+                value={filters.status}
                 onChange={(e) =>
-                  setFilters((f) => ({ ...f, date: e.target.value }))
+                  setFilters((f) => ({ ...f, status: e.target.value }))
                 }
-              />
+              >
+                {MEETING_STATUS_FILTERS.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Client</span>
+              <span className="mb-1 block text-[var(--muted)]">Investor</span>
               <select
                 className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
                 value={filters.companyOrgId}
@@ -412,7 +473,7 @@ export default function AdminMeetingsPage() {
                   setFilters((f) => ({ ...f, companyOrgId: e.target.value }))
                 }
               >
-                <option value="">All clients</option>
+                <option value="">All investors</option>
                 {companyFilterOptions.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
@@ -421,7 +482,7 @@ export default function AdminMeetingsPage() {
               </select>
             </label>
             <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Guest</span>
+              <span className="mb-1 block text-[var(--muted)]">Innovator</span>
               <select
                 className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
                 value={filters.vendorOrgId}
@@ -429,7 +490,7 @@ export default function AdminMeetingsPage() {
                   setFilters((f) => ({ ...f, vendorOrgId: e.target.value }))
                 }
               >
-                <option value="">All guests</option>
+                <option value="">All innovators</option>
                 {vendorFilterOptions.map((org) => (
                   <option key={org.id} value={org.id}>
                     {org.name}
@@ -440,7 +501,7 @@ export default function AdminMeetingsPage() {
             <label className="block text-sm">
               <span className="mb-1 block text-[var(--muted)]">Search</span>
               <Input
-                placeholder="Status or name…"
+                placeholder="Investor or innovator name…"
                 value={filters.search}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, search: e.target.value }))
@@ -461,24 +522,16 @@ export default function AdminMeetingsPage() {
         ) : null}
 
         {viewMode === 'calendar' && !meetings.isLoading ? (
-          calendarEvents.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">
-              {activeMeetings.length === 0
-                ? 'No meetings or proposed requests yet. Create a manual meeting or wait for peer scheduling.'
-                : 'No events match these filters.'}
-            </p>
-          ) : (
-            <MeetingsCalendar
-              events={calendarEvents}
-              variant="admin"
-              onSelectEvent={(event) => {
-                if (event.kind !== 'meeting') return;
-                const meetingId = event.id.replace(/^meeting:/, '');
-                const meeting = rows.find((row) => row.id === meetingId);
-                if (meeting) openEdit(meeting);
-              }}
-            />
-          )
+          <MeetingsCalendar
+            events={calendarEvents}
+            variant="admin"
+            onSelectEvent={(event) => {
+              if (event.kind !== 'meeting') return;
+              const meetingId = event.id.replace(/^meeting:/, '');
+              const meeting = rows.find((row) => row.id === meetingId);
+              if (meeting) openEdit(meeting);
+            }}
+          />
         ) : null}
 
         {viewMode === 'list' && !meetings.isLoading && rows.length === 0 ? (
@@ -493,8 +546,8 @@ export default function AdminMeetingsPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Client</TH>
-                <TH>Guest</TH>
+                <TH>Investor</TH>
+                <TH>Innovator</TH>
                 <TH>Starts</TH>
                 <TH>Meeting place</TH>
                 <TH>Invited by</TH>
@@ -567,7 +620,7 @@ export default function AdminMeetingsPage() {
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            Client
+            Investor
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={editForm.companyOrgId}
@@ -575,7 +628,7 @@ export default function AdminMeetingsPage() {
                 setEditForm((f) => ({ ...f, companyOrgId: e.target.value }))
               }
             >
-              <option value="">Select client</option>
+              <option value="">Select investor</option>
               {(companies.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -584,7 +637,7 @@ export default function AdminMeetingsPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Guest
+            Innovator
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={editForm.vendorOrgId}
@@ -592,7 +645,7 @@ export default function AdminMeetingsPage() {
                 setEditForm((f) => ({ ...f, vendorOrgId: e.target.value }))
               }
             >
-              <option value="">Select guest</option>
+              <option value="">Select innovator</option>
               {(vendors.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -600,31 +653,38 @@ export default function AdminMeetingsPage() {
               ))}
             </select>
           </label>
-          <label className="block text-sm">
-            Starts
-            <Input
-              type="datetime-local"
-              className="mt-1"
-              min={startsMin}
-              max={startsMax}
-              value={editForm.startsAt}
-              onChange={(e) =>
-                setEditForm((f) => ({ ...f, startsAt: e.target.value }))
+          <div className="space-y-2">
+            <p className="text-sm">Event date</p>
+            <EventDateChips
+              dates={eventSchedule.dates}
+              value={editDate ?? ''}
+              onChange={(date) =>
+                setEditForm((f) => ({
+                  ...f,
+                  startsAt: `${date}T${editTime || eventSchedule.activeStart}`,
+                }))
               }
             />
-          </label>
-          {bookingWindow.data?.start || bookingWindow.data?.end ? (
+            <label className="block text-sm">
+              Start time
+              <Input
+                type="time"
+                className="mt-1"
+                min={eventSchedule.activeStart}
+                max={eventSchedule.activeEnd}
+                value={editTime ?? ''}
+                onChange={(e) =>
+                  setEditForm((f) => ({
+                    ...f,
+                    startsAt: `${editDate || eventSchedule.dates[0] || ''}T${e.target.value}`,
+                  }))
+                }
+              />
+            </label>
             <p className="text-xs text-[var(--muted)]">
-              Allowed period
-              {bookingWindow.data.start
-                ? ` from ${bookingWindow.data.start}`
-                : ''}
-              {bookingWindow.data.end
-                ? ` through ${bookingWindow.data.end}`
-                : ''}
-              .
+              Active hours {eventSchedule.activeStart}–{eventSchedule.activeEnd}.
             </p>
-          ) : null}
+          </div>
           <label className="block text-sm">
             Reason (optional)
             <Input
@@ -658,7 +718,7 @@ export default function AdminMeetingsPage() {
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            Client
+            Investor
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={createForm.companyOrgId}
@@ -666,7 +726,7 @@ export default function AdminMeetingsPage() {
                 setCreateForm((f) => ({ ...f, companyOrgId: e.target.value }))
               }
             >
-              <option value="">Select client</option>
+              <option value="">Select investor</option>
               {(companies.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -675,7 +735,7 @@ export default function AdminMeetingsPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Guest
+            Innovator
             <select
               className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
               value={createForm.vendorOrgId}
@@ -683,7 +743,7 @@ export default function AdminMeetingsPage() {
                 setCreateForm((f) => ({ ...f, vendorOrgId: e.target.value }))
               }
             >
-              <option value="">Select guest</option>
+              <option value="">Select innovator</option>
               {(vendors.data?.items ?? []).map((org) => (
                 <option key={org.id} value={org.id}>
                   {org.name}
@@ -691,31 +751,38 @@ export default function AdminMeetingsPage() {
               ))}
             </select>
           </label>
-          <label className="block text-sm">
-            Starts
-            <Input
-              type="datetime-local"
-              className="mt-1"
-              min={startsMin}
-              max={startsMax}
-              value={createForm.startsAt}
-              onChange={(e) =>
-                setCreateForm((f) => ({ ...f, startsAt: e.target.value }))
+          <div className="space-y-2">
+            <p className="text-sm">Event date</p>
+            <EventDateChips
+              dates={eventSchedule.dates}
+              value={createDate ?? ''}
+              onChange={(date) =>
+                setCreateForm((f) => ({
+                  ...f,
+                  startsAt: `${date}T${createTime || eventSchedule.activeStart}`,
+                }))
               }
             />
-          </label>
-          {bookingWindow.data?.start || bookingWindow.data?.end ? (
+            <label className="block text-sm">
+              Start time
+              <Input
+                type="time"
+                className="mt-1"
+                min={eventSchedule.activeStart}
+                max={eventSchedule.activeEnd}
+                value={createTime ?? ''}
+                onChange={(e) =>
+                  setCreateForm((f) => ({
+                    ...f,
+                    startsAt: `${createDate || eventSchedule.dates[0] || ''}T${e.target.value}`,
+                  }))
+                }
+              />
+            </label>
             <p className="text-xs text-[var(--muted)]">
-              Allowed period
-              {bookingWindow.data.start
-                ? ` from ${bookingWindow.data.start}`
-                : ''}
-              {bookingWindow.data.end
-                ? ` through ${bookingWindow.data.end}`
-                : ''}
-              .
+              Active hours {eventSchedule.activeStart}–{eventSchedule.activeEnd}.
             </p>
-          ) : null}
+          </div>
           <label className="block text-sm">
             Duration (minutes)
             <Input

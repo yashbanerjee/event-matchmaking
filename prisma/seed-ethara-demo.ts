@@ -1,10 +1,14 @@
 /**
- * Sample organizations aligned with https://www.ethara.com/en/events
- * (filters, venues, forms, clients, guests, meetings).
+ * Sample organizations for a 3-day UN Water matchmaking event
+ * (filters, forms, investors, innovators, meetings).
  */
 import { Prisma, PrismaClient } from '@prisma/client';
-import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { seedWaterFiltersAndForms } from './water-onboarding';
+import {
+  WATER_DEMO_INNOVATORS,
+  WATER_DEMO_INVESTORS,
+} from './water-demo-profiles';
 
 /** Shared password for the six sample accounts. */
 const SAMPLE_PASSWORD = 'EtharaEvents26!';
@@ -19,478 +23,59 @@ const LEGACY_SAMPLE_CODES = [
   'ETH_GST_03',
 ];
 const LEGACY_SAMPLE_EMAIL_SUFFIX = '@ethara-demo.com';
+const DEMO_EMAIL_SUFFIXES = [
+  '@ethara-demo.com',
+  '@ethara-sample.ae',
+  '@unwater.ethara.demo',
+];
 
 type TagDef = { value: string; label: string };
-
-/** Shared Ethara work / event tags (ethara.com/en Work + Upcoming Events). */
-const ETHARA_EVENT_TAGS: TagDef[] = [
-  { value: 'arts-culture', label: 'Arts & Culture' },
-  { value: 'concerts', label: 'Concerts' },
-  { value: 'family', label: 'Family' },
-  { value: 'sports', label: 'Sports' },
-  { value: 'gaming', label: 'Gaming' },
-  { value: 'festivals', label: 'Festivals' },
-  { value: 'motorsport', label: 'Motorsport (F1 / Supercross)' },
-  { value: 'combat-sports', label: 'Combat sports (UFC)' },
-  { value: 'basketball', label: 'Basketball (NBA)' },
-  { value: 'tennis', label: 'Tennis' },
-  { value: 'heritage', label: 'Heritage & culture' },
-  { value: 'public-art', label: 'Public art & light' },
-  { value: 'community', label: 'Community carnival' },
-  { value: 'entrepreneurship', label: 'Entrepreneurship' },
-  { value: 'yacht-lifestyle', label: 'Yacht & lifestyle' },
-  { value: 'climate', label: 'Climate & global forums' },
-];
-
-const DIMENSIONS: Array<{
-  code: string;
-  name: string;
-  description: string;
-  profileKey: string;
-  sortOrder: number;
-  tags: TagDef[];
-}> = [
-  {
-    code: 'event_categories',
-    name: 'Event categories',
-    description:
-      'Ethara work & event categories (concerts, sports, festivals, heritage — ethara.com/en)',
-    profileKey: 'categories',
-    sortOrder: 10,
-    tags: ETHARA_EVENT_TAGS,
-  },
-  {
-    code: 'preferred_categories',
-    name: 'Preferred categories',
-    description: 'Client preferred Ethara event / work categories',
-    profileKey: 'preferredCategories',
-    sortOrder: 20,
-    tags: ETHARA_EVENT_TAGS,
-  },
-  {
-    code: 'venues',
-    name: 'Venues & locations',
-    description: 'Ethara / OVG venues and destination locations',
-    profileKey: 'regions',
-    sortOrder: 30,
-    tags: [
-      { value: 'etihad-arena', label: 'Etihad Arena' },
-      { value: 'etihad-live', label: 'Etihad Live' },
-      { value: 'yas-marina-circuit', label: 'Yas Marina Circuit' },
-      { value: 'yas-gateway-park', label: 'Yas Gateway Park' },
-      { value: 'space42-arena', label: 'Space42 Arena' },
-      { value: 'coca-cola-arena', label: 'Coca-Cola Arena' },
-      { value: 'yas-conference-centre', label: 'Yas Conference Centre' },
-      { value: 'manarat-al-saadiyat', label: 'Manarat Al Saadiyat' },
-      { value: 'qasr-al-hosn', label: 'Qasr Al Hosn' },
-      { value: 'saadiyat', label: 'Saadiyat Island' },
-      { value: 'abu-dhabi', label: 'Abu Dhabi' },
-      { value: 'dubai', label: 'Dubai' },
-    ],
-  },
-  {
-    code: 'ethara_services',
-    name: 'Ethara services',
-    description:
-      'Services from ethara.com/en — world-class events, content, venue ops, sponsorship, tech',
-    profileKey: 'capabilities',
-    sortOrder: 35,
-    tags: [
-      { value: 'world-class-events', label: 'World-class events' },
-      { value: 'content-creation', label: 'Content & creation' },
-      { value: 'event-management', label: 'Event management' },
-      { value: 'marketing-comms', label: 'Marketing & communications' },
-      { value: 'venue-management', label: 'Venue management' },
-      { value: 'sponsorship-sales', label: 'Sponsorship & sales' },
-      { value: 'technology-innovation', label: 'Technology & innovation' },
-    ],
-  },
-  {
-    code: 'capabilities',
-    name: 'Capabilities',
-    description: 'Production and hospitality capabilities for Ethara events',
-    profileKey: 'capabilities',
-    sortOrder: 40,
-    tags: [
-      { value: 'live-production', label: 'Live production' },
-      { value: 'artist-liaison', label: 'Artist liaison' },
-      { value: 'ticketing', label: 'Ticketing' },
-      { value: 'vip-hospitality', label: 'VIP hospitality' },
-      { value: 'sports-ops', label: 'Sports operations' },
-      { value: 'family-programming', label: 'Family programming' },
-      { value: 'festival-ops', label: 'Festival operations' },
-      { value: 'broadcast', label: 'Broadcast & media' },
-      { value: 'sponsorship', label: 'Sponsorship activation' },
-      { value: 'security-crowd', label: 'Security & crowd' },
-      { value: 'world-class-events', label: 'World-class events' },
-      { value: 'content-creation', label: 'Content & creation' },
-      { value: 'event-management', label: 'Event management' },
-      { value: 'marketing-comms', label: 'Marketing & communications' },
-      { value: 'venue-management', label: 'Venue management' },
-      { value: 'sponsorship-sales', label: 'Sponsorship & sales' },
-      { value: 'technology-innovation', label: 'Technology & innovation' },
-    ],
-  },
-  {
-    code: 'commercial_tags',
-    name: 'Commercial focus',
-    description:
-      'Partnership types Ethara works with — brands, rights-holders, talent, media',
-    profileKey: 'commercialTags',
-    sortOrder: 50,
-    tags: [
-      { value: 'corporate', label: 'Corporate' },
-      { value: 'vip', label: 'VIP' },
-      { value: 'b2b', label: 'B2B partnerships' },
-      { value: 'sponsorship', label: 'Sponsorship' },
-      { value: 'rights-holder', label: 'Rights holder' },
-      { value: 'content-provider', label: 'Content provider' },
-      { value: 'brand-partner', label: 'Brand partner' },
-      { value: 'talent', label: 'Talent / artist' },
-      { value: 'media-partner', label: 'Media partner' },
-      { value: 'destination-marketing', label: 'Destination marketing' },
-    ],
-  },
-];
 
 const PLACES = [
   {
     code: 'ETIHAD_ARENA',
-    name: 'Etihad Arena',
-    location: 'Yas Island, Abu Dhabi',
-    capacity: 18000,
-    description: 'Arena for Hans Zimmer, Andrea Bocelli, RAF and major concerts.',
+    name: 'Blue Zone Dialogue Hall',
+    location: 'UN Water Conference, Abu Dhabi',
+    capacity: 40,
+    description: 'Official dialogue space for investor–innovator meetings.',
   },
   {
     code: 'ETIHAD_LIVE',
-    name: 'Etihad Live',
-    location: 'Yas Island, Abu Dhabi',
-    capacity: 25000,
-    description: 'After-race concert venue (Kings of Leon, Imagine Dragons, etc.).',
+    name: 'Investments for Water Lounge',
+    location: 'UN Water Conference, Abu Dhabi',
+    capacity: 24,
+    description: 'Finance and blended-capital meeting lounge.',
   },
   {
     code: 'YAS_MARINA',
-    name: 'Yas Marina Circuit',
-    location: 'Yas Island, Abu Dhabi',
-    capacity: 60000,
-    description: 'Home of Formula 1® Etihad Airways Abu Dhabi Grand Prix.',
+    name: 'Innovation Pavilion',
+    location: 'Oasis, Abu Dhabi',
+    capacity: 20,
+    description: 'Demo tables for water technology and utility solutions.',
   },
   {
     code: 'YAS_GATEWAY',
-    name: 'Yas Gateway Park',
-    location: 'Yas Island, Abu Dhabi',
-    capacity: 8000,
-    description: 'Outdoor venue for after-parties such as Anyma.',
+    name: 'WASH Partnership Room',
+    location: 'Oasis, Abu Dhabi',
+    capacity: 16,
+    description: 'Community WASH and philanthropy meetings.',
   },
   {
     code: 'COCA_COLA_ARENA',
-    name: 'Coca-Cola Arena',
-    location: 'Dubai',
-    capacity: 17000,
-    description: 'Ethara venue network arena for concerts and family shows.',
+    name: 'Climate Adaptation Suite',
+    location: 'UN Water Conference, Abu Dhabi',
+    capacity: 12,
+    description: 'Drought, flood, and nature-based solution meetings.',
   },
 ] as const;
 
-type DemoClient = {
-  code: string;
-  name: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  industry: string;
-  website: string;
-  preferredCategories: string[];
-  requiredCapabilities: string[];
-  regions: string[];
-  commercialTags: string[];
-  featured: boolean;
-  about: string;
-  focusEvents: string;
-};
-
-type DemoGuest = {
-  code: string;
-  name: string;
-  displayName: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  industry: string;
-  website: string;
-  categories: string[];
-  capabilities: string[];
-  operatingRegions: string[];
-  commercialTags: string[];
-  featured: boolean;
-  about: string;
-  focusEvents: string;
-};
-
-const CLIENTS: DemoClient[] = [
-  {
-    code: 'YASALAM',
-    name: 'Yasalam Live Productions',
-    email: 'layla.mansoori@yasalam.ae',
-    firstName: 'Layla',
-    lastName: 'Al Mansoori',
-    industry: 'Live entertainment',
-    website: 'https://www.yasalam.ae',
-    preferredCategories: ['concerts', 'arts-culture', 'festivals'],
-    requiredCapabilities: [
-      'live-production',
-      'artist-liaison',
-      'vip-hospitality',
-      'ticketing',
-    ],
-    regions: ['etihad-arena', 'etihad-live', 'abu-dhabi'],
-    commercialTags: ['vip', 'sponsorship', 'corporate'],
-    featured: true,
-    about:
-      'Abu Dhabi live entertainment company booking arena and after-race concerts across Ethara venues.',
-    focusEvents:
-      'Hans Zimmer Live, Andrea Bocelli with Yasalam Classics, Kings of Leon & Lewis Capaldi after-race',
-  },
-  {
-    code: 'GULFGP',
-    name: 'Gulf Grand Prix Partners',
-    email: 'omar.haddad@gulfgrandprix.ae',
-    firstName: 'Omar',
-    lastName: 'Haddad',
-    industry: 'Sports & motorsport',
-    website: 'https://www.gulfgrandprix.ae',
-    preferredCategories: ['sports', 'festivals', 'concerts'],
-    requiredCapabilities: [
-      'sports-ops',
-      'vip-hospitality',
-      'sponsorship',
-      'broadcast',
-    ],
-    regions: ['yas-marina-circuit', 'etihad-live', 'yas-gateway-park'],
-    commercialTags: ['corporate', 'sponsorship', 'rights-holder'],
-    featured: true,
-    about:
-      'Corporate hospitality and brand partnerships for motorsport weekends on Yas Island.',
-    focusEvents:
-      'Formula 1® Etihad Airways Abu Dhabi Grand Prix 2026 and after-race concerts',
-  },
-  {
-    code: 'FAMMOM',
-    name: 'Family Moments Agency',
-    email: 'sara.khalil@familymoments.ae',
-    firstName: 'Sara',
-    lastName: 'Khalil',
-    industry: 'Family entertainment',
-    website: 'https://www.familymoments.ae',
-    preferredCategories: ['family', 'gaming', 'festivals'],
-    requiredCapabilities: [
-      'family-programming',
-      'security-crowd',
-      'ticketing',
-      'live-production',
-    ],
-    regions: ['etihad-arena', 'coca-cola-arena', 'abu-dhabi'],
-    commercialTags: ['b2b', 'content-provider', 'corporate'],
-    featured: false,
-    about:
-      'Family and youth programming agency producing arena activations and school-holiday shows.',
-    focusEvents: 'RAF Next Gen, family arena shows, and gaming activations',
-  },
-];
-
-const GUESTS: DemoGuest[] = [
-  {
-    code: 'ZIMMERTOUR',
-    name: 'Zimmer Tour Operations',
-    displayName: 'Zimmer Tour Operations',
-    email: 'noah.richter@zimmertour.ae',
-    firstName: 'Noah',
-    lastName: 'Richter',
-    industry: 'Touring production',
-    website: 'https://www.zimmertour.ae',
-    categories: ['concerts', 'arts-culture'],
-    capabilities: [
-      'live-production',
-      'artist-liaison',
-      'broadcast',
-      'vip-hospitality',
-    ],
-    operatingRegions: ['etihad-arena', 'abu-dhabi', 'coca-cola-arena'],
-    commercialTags: ['vip', 'content-provider', 'sponsorship'],
-    featured: true,
-    about:
-      'Tour production team for arena classical and film-score concerts on Yas Island.',
-    focusEvents: 'Abu Dhabi Festival presents Hans Zimmer Live! · Etihad Arena',
-  },
-  {
-    code: 'MARINAEXP',
-    name: 'Marina Circuit Experiences',
-    displayName: 'Marina Circuit Experiences',
-    email: 'fatima.noor@marinaexperiences.ae',
-    firstName: 'Fatima',
-    lastName: 'Noor',
-    industry: 'Motorsport experiences',
-    website: 'https://www.marinaexperiences.ae',
-    categories: ['sports', 'festivals', 'concerts'],
-    capabilities: [
-      'sports-ops',
-      'vip-hospitality',
-      'sponsorship',
-      'festival-ops',
-      'security-crowd',
-    ],
-    operatingRegions: [
-      'yas-marina-circuit',
-      'etihad-live',
-      'yas-gateway-park',
-      'abu-dhabi',
-    ],
-    commercialTags: ['corporate', 'sponsorship', 'rights-holder'],
-    featured: true,
-    about:
-      'On-circuit hospitality, paddock access, and after-race concert logistics at Yas Marina.',
-    focusEvents:
-      'F1 Abu Dhabi GP 2026 · Imagine Dragons / The Chainsmokers after-race concerts',
-  },
-  {
-    code: 'RAFENT',
-    name: 'RAF Combat Entertainment',
-    displayName: 'RAF Combat Entertainment',
-    email: 'jordan.blake@rafcombat.ae',
-    firstName: 'Jordan',
-    lastName: 'Blake',
-    industry: 'Combat sports & gaming',
-    website: 'https://www.rafcombat.ae',
-    categories: ['gaming', 'sports', 'family'],
-    capabilities: [
-      'live-production',
-      'family-programming',
-      'ticketing',
-      'broadcast',
-      'security-crowd',
-    ],
-    operatingRegions: ['etihad-arena', 'space42-arena', 'abu-dhabi'],
-    commercialTags: ['b2b', 'content-provider', 'vip'],
-    featured: false,
-    about:
-      'Combat sports promoter delivering RAF main-card events and Next Gen youth programs.',
-    focusEvents:
-      'Real American Freestyle (RAF) Abu Dhabi · RAF Next Gen · Etihad Arena',
-  },
-];
-
-/** Extra verified accounts so each side can see up to 10 category recommendations. */
-const EXTRA_CATEGORY_SETS: string[][] = [
-  ['concerts', 'arts-culture'],
-  ['sports', 'festivals'],
-  ['family', 'gaming'],
-  ['concerts', 'festivals'],
-  ['sports', 'gaming'],
-  ['arts-culture', 'family'],
-  ['festivals', 'concerts'],
-];
-
-const EXTRA_CAPABILITY_SETS: string[][] = [
-  ['live-production', 'artist-liaison', 'vip-hospitality'],
-  ['sports-ops', 'sponsorship', 'broadcast'],
-  ['family-programming', 'ticketing', 'security-crowd'],
-  ['festival-ops', 'live-production', 'sponsorship'],
-  ['broadcast', 'vip-hospitality', 'ticketing'],
-  ['artist-liaison', 'family-programming', 'security-crowd'],
-  ['sports-ops', 'festival-ops', 'live-production'],
-];
-
-const EXTRA_REGION_SETS: string[][] = [
-  ['etihad-arena', 'abu-dhabi'],
-  ['yas-marina-circuit', 'etihad-live'],
-  ['coca-cola-arena', 'abu-dhabi'],
-  ['etihad-live', 'yas-gateway-park'],
-  ['space42-arena', 'abu-dhabi'],
-  ['yas-conference-centre', 'abu-dhabi'],
-  ['manarat-al-saadiyat', 'abu-dhabi'],
-];
-
-for (let i = 0; i < EXTRA_CATEGORY_SETS.length; i += 1) {
-  const n = i + 4;
-  const cats = EXTRA_CATEGORY_SETS[i]!;
-  const caps = EXTRA_CAPABILITY_SETS[i]!;
-  const regions = EXTRA_REGION_SETS[i]!;
-  CLIENTS.push({
-    code: `ETHCLI${String(n).padStart(2, '0')}`,
-    name: `Ethara Client ${n}`,
-    email: `client${n}@ethara-sample.ae`,
-    firstName: 'Client',
-    lastName: `${n}`,
-    industry: 'Event partnerships',
-    website: `https://www.ethara-sample.ae/client-${n}`,
-    preferredCategories: cats,
-    requiredCapabilities: caps,
-    regions,
-    commercialTags: ['corporate', 'b2b'],
-    featured: false,
-    about: `Demo client ${n} for category matchmaking (up to 10 recommendations).`,
-    focusEvents: `Category demo focus: ${cats.join(', ')}`,
-  });
-  GUESTS.push({
-    code: `ETHGST${String(n).padStart(2, '0')}`,
-    name: `Ethara Guest ${n}`,
-    displayName: `Ethara Guest ${n}`,
-    email: `guest${n}@ethara-sample.ae`,
-    firstName: 'Guest',
-    lastName: `${n}`,
-    industry: 'Event services',
-    website: `https://www.ethara-sample.ae/guest-${n}`,
-    categories: cats,
-    capabilities: caps,
-    operatingRegions: regions,
-    commercialTags: ['corporate', 'b2b'],
-    featured: false,
-    about: `Demo guest ${n} for category matchmaking (up to 10 recommendations).`,
-    focusEvents: `Category demo focus: ${cats.join(', ')}`,
-  });
-}
-
-function field(
-  sectionId: string,
-  order: number,
-  partial: {
-    key: string;
-    type: string;
-    label: string;
-    required?: boolean;
-    description?: string;
-    options?: { value: string; label: string }[];
-    filterDimensionId?: string | null;
-  },
-) {
-  return {
-    id: randomUUID(),
-    key: partial.key,
-    type: partial.type,
-    label: partial.label,
-    description: partial.description,
-    required: partial.required ?? false,
-    sectionId,
-    order,
-    options: partial.options,
-    filterDimensionId: partial.filterDimensionId ?? null,
-  };
-}
-
-function mapFieldType(type: string): Prisma.EnumFieldTypeFieldUpdateInput | string {
-  const map: Record<string, string> = {
-    text: 'SHORT_TEXT',
-    textarea: 'LONG_TEXT',
-    email: 'EMAIL',
-    select: 'SINGLE_SELECT',
-    multiselect: 'MULTI_SELECT',
-    heading: 'READ_ONLY',
-    info: 'READ_ONLY',
-  };
-  return map[type] ?? 'SHORT_TEXT';
-}
+const CLIENTS = WATER_DEMO_INVESTORS;
+const GUESTS = WATER_DEMO_INNOVATORS;
 
 export async function seedEtharaDemo(prisma: PrismaClient) {
-  console.log('Seeding Ethara event sample data (filters, places, clients, guests)…');
+  console.log(
+    'Seeding UN Water matchmaking sample data (filters, places, investors, innovators)…',
+  );
 
   const companyRole = await prisma.role.findUniqueOrThrow({
     where: { code: 'COMPANY_USER' },
@@ -500,94 +85,19 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   });
   const passwordHash = await bcrypt.hash(SAMPLE_PASSWORD, 12);
 
-  // ── Filters ──────────────────────────────────────────────────────────────
-  const dimensionIds: Record<string, string> = {};
-  const tagOptions: Record<string, { value: string; label: string }[]> = {};
-
-  for (const dim of DIMENSIONS) {
-    const created = await prisma.filterDimension.upsert({
-      where: { code: dim.code },
-      create: {
-        code: dim.code,
-        name: dim.name,
-        description: dim.description,
-        profileKey: dim.profileKey,
-        isActive: true,
-        sortOrder: dim.sortOrder,
-      },
-      update: {
-        name: dim.name,
-        description: dim.description,
-        profileKey: dim.profileKey,
-        isActive: true,
-        sortOrder: dim.sortOrder,
-      },
-    });
-    dimensionIds[dim.code] = created.id;
-    tagOptions[dim.code] = dim.tags;
-
-    for (const [index, tag] of dim.tags.entries()) {
-      await prisma.filterTag.upsert({
-        where: {
-          dimensionId_value: {
-            dimensionId: created.id,
-            value: tag.value,
-          },
-        },
-        create: {
-          dimensionId: created.id,
-          value: tag.value,
-          label: tag.label,
-          sortOrder: index,
-          isActive: true,
-        },
-        update: {
-          label: tag.label,
-          sortOrder: index,
-          isActive: true,
-        },
-      });
-    }
-  }
-
-  // Cross-map Ethara-related categories for richer matchmaking
-  async function mapPreferredToEvent(fromValue: string, toValue: string) {
-    const fromTag = await prisma.filterTag.findFirst({
-      where: {
-        dimensionId: dimensionIds.preferred_categories,
-        value: fromValue,
-      },
-    });
-    const toTag = await prisma.filterTag.findFirst({
-      where: {
-        dimensionId: dimensionIds.event_categories,
-        value: toValue,
-      },
-    });
-    if (!fromTag || !toTag) return;
-    await prisma.filterTagMapping.upsert({
-      where: {
-        fromTagId_toTagId: { fromTagId: fromTag.id, toTagId: toTag.id },
-      },
-      create: {
-        fromTagId: fromTag.id,
-        toTagId: toTag.id,
-        bidirectional: true,
-      },
-      update: { bidirectional: true },
-    });
-  }
-
-  await mapPreferredToEvent('concerts', 'arts-culture');
-  await mapPreferredToEvent('arts-culture', 'public-art');
-  await mapPreferredToEvent('sports', 'motorsport');
-  await mapPreferredToEvent('sports', 'combat-sports');
-  await mapPreferredToEvent('sports', 'basketball');
-  await mapPreferredToEvent('sports', 'tennis');
-  await mapPreferredToEvent('festivals', 'community');
-  await mapPreferredToEvent('festivals', 'heritage');
-  await mapPreferredToEvent('family', 'community');
-  await mapPreferredToEvent('gaming', 'entrepreneurship');
+  const water = await seedWaterFiltersAndForms(prisma);
+  const dimensionIds = water.dimensionIds;
+  const tagOptions = water.tagOptions;
+  const onboardingForm = {
+    form: water.investorForm.form,
+    versionId: water.investorForm.versionId,
+    fields: water.investorForm.fields,
+  };
+  const innovatorOnboardingForm = {
+    form: water.innovatorForm.form,
+    versionId: water.innovatorForm.versionId,
+    fields: water.innovatorForm.fields,
+  };
 
   // ── Places ───────────────────────────────────────────────────────────────
   const placeIds: Record<string, string> = {};
@@ -613,252 +123,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     placeIds[place.code] = row.id;
   }
 
-  // ── Single Ethara onboarding form (clients + guests) ─────────────────────
-  function buildEtharaOnboardingFields() {
-    const aboutSection = randomUUID();
-    const interestsSection = randomUUID();
-    const servicesSection = randomUUID();
-    const commercialSection = randomUUID();
-
-    const capabilityOptions = [
-      ...(tagOptions.ethara_services ?? []),
-      ...(tagOptions.capabilities ?? []).filter(
-        (t) =>
-          !(tagOptions.ethara_services ?? []).some((s) => s.value === t.value),
-      ),
-    ];
-
-    const fields = [
-      field(aboutSection, 0, {
-        key: 'heading_about',
-        type: 'heading',
-        label: 'About you',
-      }),
-      field(aboutSection, 1, {
-        key: 'industry',
-        type: 'text',
-        label: 'Industry / sector',
-        required: true,
-        description: 'e.g. Live entertainment, Sports rights, Brand marketing',
-      }),
-      field(aboutSection, 2, {
-        key: 'organization_summary',
-        type: 'textarea',
-        label: 'About your organization',
-        required: true,
-        description:
-          'How you create moments with Ethara venues, rights-holders, and audiences.',
-      }),
-      field(aboutSection, 3, {
-        key: 'focus_events',
-        type: 'textarea',
-        label: 'Focus Ethara events / work',
-        required: true,
-        description:
-          'e.g. F1 Abu Dhabi GP, Yasalam, NBA Abu Dhabi, UFC, Saadiyat Nights — ethara.com/en',
-      }),
-      field(aboutSection, 4, {
-        key: 'contact_phone',
-        type: 'text',
-        label: 'Contact phone',
-        required: false,
-      }),
-      field(interestsSection, 10, {
-        key: 'heading_interests',
-        type: 'heading',
-        label: 'Event interests',
-      }),
-      field(interestsSection, 11, {
-        key: 'categories',
-        type: 'multiselect',
-        label: 'Event / work categories',
-        required: true,
-        description:
-          'Concerts, motorsport, combat sports, heritage, public art, gaming, and more',
-        options: tagOptions.event_categories,
-        filterDimensionId: dimensionIds.event_categories,
-      }),
-      field(interestsSection, 12, {
-        key: 'regions',
-        type: 'multiselect',
-        label: 'Preferred venues / locations',
-        required: true,
-        options: tagOptions.venues,
-        filterDimensionId: dimensionIds.venues,
-      }),
-      field(servicesSection, 20, {
-        key: 'heading_services',
-        type: 'heading',
-        label: 'Services & capabilities',
-      }),
-      field(servicesSection, 21, {
-        key: 'capabilities',
-        type: 'multiselect',
-        label: 'Ethara services & capabilities',
-        required: true,
-        description:
-          'World-class events, content, venue management, sponsorship, tech, and production skills',
-        options: capabilityOptions,
-        filterDimensionId: dimensionIds.capabilities,
-      }),
-      field(commercialSection, 30, {
-        key: 'heading_commercial',
-        type: 'heading',
-        label: 'Partnership focus',
-      }),
-      field(commercialSection, 31, {
-        key: 'commercialTags',
-        type: 'multiselect',
-        label: 'Commercial / partnership type',
-        required: true,
-        options: tagOptions.commercial_tags,
-        filterDimensionId: dimensionIds.commercial_tags,
-      }),
-      field(commercialSection, 32, {
-        key: 'partnership_goal',
-        type: 'textarea',
-        label: 'What would a successful match look like?',
-        required: false,
-        description:
-          'Meetings, sponsorship activation, co-promotion, venue booking, talent, etc.',
-      }),
-    ];
-
-    const sections = [
-      {
-        id: aboutSection,
-        title: 'Organization',
-        description:
-          'One onboarding form for Ethara clients and guests — fields map to matchmaking.',
-        order: 0,
-      },
-      {
-        id: interestsSection,
-        title: 'Categories & venues',
-        description: 'Aligned with Ethara Work and venue portfolio.',
-        order: 1,
-      },
-      {
-        id: servicesSection,
-        title: 'Services',
-        description: 'Ethara services + production capabilities used in scoring.',
-        order: 2,
-      },
-      {
-        id: commercialSection,
-        title: 'Partnership',
-        description: 'Brands, rights-holders, talent, and media partners.',
-        order: 3,
-      },
-    ];
-
-    return { sections, fields };
-  }
-
-  const ONBOARDING_CODE = 'ETHARA_ONBOARDING';
-  const { sections: onboardingSections, fields: onboardingFields } =
-    buildEtharaOnboardingFields();
-  const onboardingSchema = {
-    sections: onboardingSections,
-    fields: onboardingFields,
-  };
-  const onboardingHash = 'ethara-onboarding-v1';
-
-  const onboardingFormRow = await prisma.form.upsert({
-    where: { code: ONBOARDING_CODE },
-    create: {
-      code: ONBOARDING_CODE,
-      name: 'Ethara onboarding form',
-      description:
-        'Single onboarding form for Ethara clients and guests (categories, venues, services, partnerships).',
-      targetType: null,
-      isTemplate: false,
-    },
-    update: {
-      name: 'Ethara onboarding form',
-      description:
-        'Single onboarding form for Ethara clients and guests (categories, venues, services, partnerships).',
-      targetType: null,
-      isTemplate: false,
-    },
-  });
-
-  const existingOnboardingVersion = await prisma.formVersion.findFirst({
-    where: { formId: onboardingFormRow.id, version: 1 },
-  });
-
-  let onboardingVersionId: string;
-  if (existingOnboardingVersion) {
-    await prisma.formField.deleteMany({
-      where: { formVersionId: existingOnboardingVersion.id },
-    });
-    await prisma.formVersion.update({
-      where: { id: existingOnboardingVersion.id },
-      data: {
-        status: 'PUBLISHED',
-        publishedAt: existingOnboardingVersion.publishedAt ?? new Date(),
-        schemaJson: onboardingSchema as unknown as Prisma.InputJsonValue,
-        schemaHash: onboardingHash,
-      },
-    });
-    onboardingVersionId = existingOnboardingVersion.id;
-  } else {
-    const created = await prisma.formVersion.create({
-      data: {
-        formId: onboardingFormRow.id,
-        version: 1,
-        status: 'PUBLISHED',
-        publishedAt: new Date(),
-        schemaJson: onboardingSchema as unknown as Prisma.InputJsonValue,
-        schemaHash: onboardingHash,
-      },
-    });
-    onboardingVersionId = created.id;
-  }
-
-  for (const [index, f] of onboardingFields.entries()) {
-    if (f.type === 'heading' || f.type === 'info') continue;
-    await prisma.formField.create({
-      data: {
-        formVersionId: onboardingVersionId,
-        fieldKey: f.key,
-        label: f.label,
-        description: f.description,
-        fieldType: mapFieldType(f.type) as never,
-        required: f.required,
-        displayOrder: index,
-        options: (f.options ?? []) as unknown as Prisma.InputJsonValue,
-      },
-    });
-  }
-
-  const onboardingForm = {
-    form: onboardingFormRow,
-    versionId: onboardingVersionId,
-    fields: onboardingFields,
-  };
-
-  // Remove every other form so the directory shows only Ethara onboarding
-  const obsoleteForms = await prisma.form.findMany({
-    where: { code: { not: ONBOARDING_CODE } },
-    select: { id: true },
-  });
-  if (obsoleteForms.length) {
-    const obsoleteIds = obsoleteForms.map((f) => f.id);
-    await prisma.formAssignment.deleteMany({
-      where: { formId: { in: obsoleteIds } },
-    });
-    await prisma.form.deleteMany({ where: { id: { in: obsoleteIds } } });
-  }
-
-  await prisma.systemSetting.upsert({
-    where: { key: 'registration.formId' },
-    create: {
-      key: 'registration.formId',
-      value: { value: onboardingForm.form.id },
-    },
-    update: { value: { value: onboardingForm.form.id } },
-  });
   await prisma.systemSetting.upsert({
     where: { key: 'registration.enabled' },
     create: { key: 'registration.enabled', value: { value: true } },
@@ -870,27 +134,43 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     update: {},
   });
 
-  // Meeting booking period (clients/guests can only schedule inside this range)
-  const windowStart = new Date();
-  windowStart.setUTCHours(0, 0, 0, 0);
-  const windowEnd = new Date(windowStart);
-  windowEnd.setUTCDate(windowEnd.getUTCDate() + 90);
-  const toYmd = (d: Date) => d.toISOString().slice(0, 10);
+  // Meeting booking period (investors/innovators can only schedule inside this range)
+  const eventDates = ['2026-12-07', '2026-12-08', '2026-12-09'];
+  const windowStart = eventDates[0]!;
+  const windowEnd = eventDates[eventDates.length - 1]!;
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.eventDates' },
+    create: {
+      key: 'ops.eventDates',
+      value: { value: eventDates.join(',') },
+    },
+    update: { value: { value: eventDates.join(',') } },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.eventActiveStart' },
+    create: { key: 'ops.eventActiveStart', value: { value: '09:00' } },
+    update: { value: { value: '09:00' } },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: 'ops.eventActiveEnd' },
+    create: { key: 'ops.eventActiveEnd', value: { value: '17:00' } },
+    update: { value: { value: '17:00' } },
+  });
   await prisma.systemSetting.upsert({
     where: { key: 'ops.meetingWindowStart' },
     create: {
       key: 'ops.meetingWindowStart',
-      value: { value: toYmd(windowStart) },
+      value: { value: windowStart },
     },
-    update: { value: { value: toYmd(windowStart) } },
+    update: { value: { value: windowStart } },
   });
   await prisma.systemSetting.upsert({
     where: { key: 'ops.meetingWindowEnd' },
     create: {
       key: 'ops.meetingWindowEnd',
-      value: { value: toYmd(windowEnd) },
+      value: { value: windowEnd },
     },
-    update: { value: { value: toYmd(windowEnd) } },
+    update: { value: { value: windowEnd } },
   });
   await prisma.systemSetting.upsert({
     where: { key: 'ops.meetingDurationMinutes' },
@@ -901,19 +181,16 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     update: {},
   });
 
-  // ── Cleanup previous sample orgs (current + legacy) ──────────────────────
-  const sampleCodes = [
-    ...CLIENTS.map((c) => c.code),
-    ...GUESTS.map((g) => g.code),
-    ...LEGACY_SAMPLE_CODES,
-  ];
-  const existingSampleOrgs = await prisma.organization.findMany({
-    where: { code: { in: sampleCodes } },
+  // ── Wipe all investors & innovators (full roster refresh) ─────────────────
+  console.log('Removing existing investor and innovator organizations…');
+
+  const existingPeerOrgs = await prisma.organization.findMany({
+    where: { type: { in: ['COMPANY', 'VENDOR'] } },
     select: { id: true, members: { select: { userId: true } } },
   });
-  const existingIds = existingSampleOrgs.map((o) => o.id);
+  const existingIds = existingPeerOrgs.map((o) => o.id);
   const legacyUserIds = [
-    ...new Set(existingSampleOrgs.flatMap((o) => o.members.map((m) => m.userId))),
+    ...new Set(existingPeerOrgs.flatMap((o) => o.members.map((m) => m.userId))),
   ];
 
   async function purgeOrgGraph(orgIds: string[]) {
@@ -973,6 +250,14 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     await prisma.eventRegistration.deleteMany({
       where: { organizationId: { in: orgIds } },
     });
+    await prisma.orgPeerRecommendation.deleteMany({
+      where: {
+        OR: [{ fromOrgId: { in: orgIds } }, { toOrgId: { in: orgIds } }],
+      },
+    });
+    await prisma.investorPlaceAssignment.deleteMany({
+      where: { organizationId: { in: orgIds } },
+    });
     await prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
   }
 
@@ -982,7 +267,9 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     where: {
       OR: [
         { id: { in: legacyUserIds } },
-        { email: { endsWith: LEGACY_SAMPLE_EMAIL_SUFFIX } },
+        ...DEMO_EMAIL_SUFFIXES.map((suffix) => ({
+          email: { endsWith: suffix },
+        })),
         {
           email: {
             in: [...CLIENTS, ...GUESTS].map((account) => account.email),
@@ -1056,58 +343,58 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     return out;
   }
 
-  const clientOrgs: Array<{
+  const investorOrgs: Array<{
     orgId: string;
     userId: string;
-    def: DemoClient;
+    def: (typeof CLIENTS)[number];
   }> = [];
-  const guestOrgs: Array<{
+  const innovatorOrgs: Array<{
     orgId: string;
     userId: string;
-    def: DemoGuest;
+    def: (typeof GUESTS)[number];
   }> = [];
 
-  // ── Clients ──────────────────────────────────────────────────────────────
-  for (const client of CLIENTS) {
+  // ── Investors ──────────────────────────────────────────────────────────────
+  for (const investor of CLIENTS) {
     const user = await upsertSampleUser({
-      email: client.email,
-      firstName: client.firstName,
-      lastName: client.lastName,
+      email: investor.email,
+      firstName: investor.firstName,
+      lastName: investor.lastName,
       roleId: companyRole.id,
     });
 
     const org = await prisma.organization.upsert({
-      where: { code: client.code },
+      where: { code: investor.code },
       create: {
-        code: client.code,
-        name: client.name,
+        code: investor.code,
+        name: investor.name,
         type: 'COMPANY',
         status: 'APPROVED',
-        industry: client.industry,
-        region: 'Abu Dhabi',
-        country: 'AE',
-        website: client.website,
+        industry: investor.industry,
+        region: investor.region,
+        country: investor.country,
+        website: investor.website,
         timeZone: 'Asia/Dubai',
         customAttrs: {
-          contactEmail: client.email,
-          contactName: `${client.firstName} ${client.lastName}`,
-          about: client.about,
-          focusEvents: client.focusEvents,
+          contactEmail: investor.email,
+          contactName: `${investor.firstName} ${investor.lastName}`,
+          about: investor.about,
+          focusEvents: investor.focusEvents,
         },
       },
       update: {
-        name: client.name,
+        name: investor.name,
         status: 'APPROVED',
-        industry: client.industry,
-        region: 'Abu Dhabi',
-        country: 'AE',
-        website: client.website,
+        industry: investor.industry,
+        region: investor.region,
+        country: investor.country,
+        website: investor.website,
         archivedAt: null,
         customAttrs: {
-          contactEmail: client.email,
-          contactName: `${client.firstName} ${client.lastName}`,
-          about: client.about,
-          focusEvents: client.focusEvents,
+          contactEmail: investor.email,
+          contactName: `${investor.firstName} ${investor.lastName}`,
+          about: investor.about,
+          focusEvents: investor.focusEvents,
         },
       },
     });
@@ -1116,31 +403,56 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       where: { organizationId: org.id },
       create: {
         organizationId: org.id,
-        preferredCategories: client.preferredCategories,
-        requiredCapabilities: client.requiredCapabilities,
-        commercialPrefs: { tags: client.commercialTags },
+        preferredCategories: investor.preferredCategories,
+        requiredCapabilities: investor.requiredCapabilities,
+        commercialPrefs: { tags: investor.commercialTags },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         matchingEligible: true,
-        featured: client.featured,
+        featured: investor.featured,
         normalizedProfile: {
-          about: client.about,
-          focusEvents: client.focusEvents,
-          regions: client.regions,
+          about: investor.about,
+          focusEvents: investor.focusEvents,
+          regions: investor.regions,
+          responses: {
+            industry: investor.industry,
+            organization_summary: investor.about,
+            focus_events: investor.focusEvents,
+            categories: investor.preferredCategories,
+            capabilities: investor.requiredCapabilities,
+            regions: investor.regions,
+            commercialTags: investor.commercialTags,
+            partnership_goal: investor.partnershipGoal,
+            ticket_size: investor.ticketSize,
+            investment_stages: investor.investmentStages,
+          },
         },
       },
       update: {
-        preferredCategories: client.preferredCategories,
-        requiredCapabilities: client.requiredCapabilities,
-        commercialPrefs: { tags: client.commercialTags },
+        preferredCategories: investor.preferredCategories,
+        requiredCapabilities: investor.requiredCapabilities,
+        commercialPrefs: { tags: investor.commercialTags },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         matchingEligible: true,
-        featured: client.featured,
+        featured: investor.featured,
+        profileVersion: { increment: 1 },
         normalizedProfile: {
-          about: client.about,
-          focusEvents: client.focusEvents,
-          regions: client.regions,
+          about: investor.about,
+          focusEvents: investor.focusEvents,
+          regions: investor.regions,
+          responses: {
+            industry: investor.industry,
+            organization_summary: investor.about,
+            focus_events: investor.focusEvents,
+            categories: investor.preferredCategories,
+            capabilities: investor.requiredCapabilities,
+            regions: investor.regions,
+            commercialTags: investor.commercialTags,
+            partnership_goal: investor.partnershipGoal,
+            ticket_size: investor.ticketSize,
+            investment_stages: investor.investmentStages,
+          },
         },
       },
     });
@@ -1153,9 +465,9 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         organizationId: org.id,
         userId: user.id,
         isPrimary: true,
-        title: 'Client lead',
+        title: investor.title,
       },
-      update: { isPrimary: true, title: 'Client lead' },
+      update: { isPrimary: true, title: investor.title },
     });
 
     await prisma.formAssignment.create({
@@ -1166,18 +478,20 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         userId: user.id,
         isRequired: true,
       },
-    });
+    }).catch(() => undefined);
 
     const responseData = {
-      industry: client.industry,
-      organization_summary: client.about,
-      focus_events: client.focusEvents,
-      categories: client.preferredCategories,
-      capabilities: client.requiredCapabilities,
-      regions: client.regions,
-      commercialTags: client.commercialTags,
+      industry: investor.industry,
+      organization_summary: investor.about,
+      focus_events: investor.focusEvents,
+      categories: investor.preferredCategories,
+      capabilities: investor.requiredCapabilities,
+      regions: investor.regions,
+      commercialTags: investor.commercialTags,
       contact_phone: '+971 2 656 9999',
-      partnership_goal: 'Meet partners who can activate Ethara venues and audiences.',
+      partnership_goal: investor.partnershipGoal,
+      ticket_size: investor.ticketSize,
+      investment_stages: investor.investmentStages,
     };
 
     await prisma.formSubmission.create({
@@ -1196,50 +510,50 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       },
     });
 
-    clientOrgs.push({ orgId: org.id, userId: user.id, def: client });
+    investorOrgs.push({ orgId: org.id, userId: user.id, def: investor });
   }
 
-  // ── Guests ───────────────────────────────────────────────────────────────
-  for (const guest of GUESTS) {
+  // ── Innovators ───────────────────────────────────────────────────────────────
+  for (const innovator of GUESTS) {
     const user = await upsertSampleUser({
-      email: guest.email,
-      firstName: guest.firstName,
-      lastName: guest.lastName,
+      email: innovator.email,
+      firstName: innovator.firstName,
+      lastName: innovator.lastName,
       roleId: vendorRole.id,
     });
 
     const org = await prisma.organization.upsert({
-      where: { code: guest.code },
+      where: { code: innovator.code },
       create: {
-        code: guest.code,
-        name: guest.name,
+        code: innovator.code,
+        name: innovator.name,
         type: 'VENDOR',
         status: 'APPROVED',
-        industry: guest.industry,
-        region: 'Abu Dhabi',
-        country: 'AE',
-        website: guest.website,
+        industry: innovator.industry,
+        region: innovator.region,
+        country: innovator.country,
+        website: innovator.website,
         timeZone: 'Asia/Dubai',
         customAttrs: {
-          contactEmail: guest.email,
-          contactName: `${guest.firstName} ${guest.lastName}`,
-          about: guest.about,
-          focusEvents: guest.focusEvents,
+          contactEmail: innovator.email,
+          contactName: `${innovator.firstName} ${innovator.lastName}`,
+          about: innovator.about,
+          focusEvents: innovator.focusEvents,
         },
       },
       update: {
-        name: guest.name,
+        name: innovator.name,
         status: 'APPROVED',
-        industry: guest.industry,
-        region: 'Abu Dhabi',
-        country: 'AE',
-        website: guest.website,
+        industry: innovator.industry,
+        region: innovator.region,
+        country: innovator.country,
+        website: innovator.website,
         archivedAt: null,
         customAttrs: {
-          contactEmail: guest.email,
-          contactName: `${guest.firstName} ${guest.lastName}`,
-          about: guest.about,
-          focusEvents: guest.focusEvents,
+          contactEmail: innovator.email,
+          contactName: `${innovator.firstName} ${innovator.lastName}`,
+          about: innovator.about,
+          focusEvents: innovator.focusEvents,
         },
       },
     });
@@ -1248,37 +562,64 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       where: { organizationId: org.id },
       create: {
         organizationId: org.id,
-        displayName: guest.displayName,
-        categories: guest.categories,
-        capabilities: guest.capabilities,
-        services: guest.capabilities,
-        operatingRegions: guest.operatingRegions,
-        commercialPrefs: { tags: guest.commercialTags },
+        displayName: innovator.displayName,
+        categories: innovator.categories,
+        capabilities: innovator.capabilities,
+        services: innovator.capabilities,
+        operatingRegions: innovator.operatingRegions,
+        commercialPrefs: { tags: innovator.commercialTags },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         onboardingComplete: true,
         matchingEligible: true,
-        featured: guest.featured,
+        featured: innovator.featured,
         normalizedProfile: {
-          about: guest.about,
-          focusEvents: guest.focusEvents,
+          about: innovator.about,
+          focusEvents: innovator.focusEvents,
+          responses: {
+            industry: innovator.industry,
+            organization_summary: innovator.about,
+            focus_events: innovator.focusEvents,
+            categories: innovator.categories,
+            capabilities: innovator.capabilities,
+            regions: innovator.operatingRegions,
+            commercialTags: innovator.commercialTags,
+            partnership_goal: innovator.partnershipGoal,
+            ticket_size: innovator.ticketSize,
+            investment_stages: innovator.stage,
+            impact_metrics: innovator.impactMetrics,
+          },
         },
       },
       update: {
-        displayName: guest.displayName,
-        categories: guest.categories,
-        capabilities: guest.capabilities,
-        services: guest.capabilities,
-        operatingRegions: guest.operatingRegions,
-        commercialPrefs: { tags: guest.commercialTags },
+        displayName: innovator.displayName,
+        categories: innovator.categories,
+        capabilities: innovator.capabilities,
+        services: innovator.capabilities,
+        operatingRegions: innovator.operatingRegions,
+        commercialPrefs: { tags: innovator.commercialTags },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         onboardingComplete: true,
         matchingEligible: true,
-        featured: guest.featured,
+        featured: innovator.featured,
+        profileVersion: { increment: 1 },
         normalizedProfile: {
-          about: guest.about,
-          focusEvents: guest.focusEvents,
+          about: innovator.about,
+          focusEvents: innovator.focusEvents,
+          responses: {
+            industry: innovator.industry,
+            organization_summary: innovator.about,
+            focus_events: innovator.focusEvents,
+            categories: innovator.categories,
+            capabilities: innovator.capabilities,
+            regions: innovator.operatingRegions,
+            commercialTags: innovator.commercialTags,
+            partnership_goal: innovator.partnershipGoal,
+            ticket_size: innovator.ticketSize,
+            investment_stages: innovator.stage,
+            impact_metrics: innovator.impactMetrics,
+          },
         },
       },
     });
@@ -1291,15 +632,15 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         organizationId: org.id,
         userId: user.id,
         isPrimary: true,
-        title: 'Guest lead',
+        title: innovator.title,
       },
-      update: { isPrimary: true, title: 'Guest lead' },
+      update: { isPrimary: true, title: innovator.title },
     });
 
     await prisma.formAssignment.create({
       data: {
-        formId: onboardingForm.form.id,
-        formVersionId: onboardingForm.versionId,
+        formId: innovatorOnboardingForm.form.id,
+        formVersionId: innovatorOnboardingForm.versionId,
         organizationId: org.id,
         userId: user.id,
         isRequired: true,
@@ -1307,20 +648,22 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
 
     const responseData = {
-      industry: guest.industry,
-      organization_summary: guest.about,
-      focus_events: guest.focusEvents,
-      categories: guest.categories,
-      capabilities: guest.capabilities,
-      regions: guest.operatingRegions,
-      commercialTags: guest.commercialTags,
-      contact_phone: '+971 2 656 9999',
-      partnership_goal: 'Connect with Ethara clients for the right event moments.',
+      industry: innovator.industry,
+      organization_summary: innovator.about,
+      focus_events: innovator.focusEvents,
+      categories: innovator.categories,
+      capabilities: innovator.capabilities,
+      regions: innovator.operatingRegions,
+      commercialTags: innovator.commercialTags,
+      ticket_size: innovator.ticketSize,
+      investment_stages: innovator.stage,
+      impact_metrics: innovator.impactMetrics,
+      partnership_goal: innovator.partnershipGoal,
     };
 
     await prisma.formSubmission.create({
       data: {
-        formVersionId: onboardingForm.versionId,
+        formVersionId: innovatorOnboardingForm.versionId,
         organizationId: org.id,
         submittedById: user.id,
         status: 'APPROVED',
@@ -1328,13 +671,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         reviewedAt: new Date(),
         reviewNotes: 'Verified — profile complete for matchmaking',
         responses: responsesFor(
-          onboardingForm.fields,
+          innovatorOnboardingForm.fields,
           responseData,
         ) as Prisma.InputJsonValue,
       },
     });
 
-    guestOrgs.push({ orgId: org.id, userId: user.id, def: guest });
+    innovatorOrgs.push({ orgId: org.id, userId: user.id, def: innovator });
   }
 
   // ── Meeting requests + meetings (full flow samples) ──────────────────────
@@ -1352,7 +695,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     startsAt: Date;
     durationMinutes: number;
     placeId: string;
-    status: 'CONFIRMED' | 'AWAITING_CONFIRMATION' | 'COMPLETED' | 'PROPOSED';
+    status:
+      | 'CONFIRMED'
+      | 'AWAITING_CONFIRMATION'
+      | 'COMPLETED'
+      | 'PROPOSED'
+      | 'IN_PROGRESS'
+      | 'NO_SHOW';
     objectives: string;
     score: number;
   }) {
@@ -1382,27 +731,27 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   {
     const startsAt = daysFromNow(5, 11, 0);
     const meeting = await createMeeting({
-      companyOrgId: clientOrgs[0]!.orgId,
-      vendorOrgId: guestOrgs[0]!.orgId,
+      companyOrgId: investorOrgs[0]!.orgId,
+      vendorOrgId: innovatorOrgs[0]!.orgId,
       startsAt,
       durationMinutes: 45,
       placeId: placeIds.ETIHAD_ARENA!,
       status: 'CONFIRMED',
       objectives:
-        'Align production rider and VIP hospitality for Hans Zimmer Live at Etihad Arena.',
+        'Discuss NRW reduction pilots and utility offtake for leak-detection systems.',
       score: 92,
     });
     await prisma.meetingRequest.create({
       data: {
-        fromOrgId: clientOrgs[0]!.orgId,
-        toOrgId: guestOrgs[0]!.orgId,
-        requestedById: clientOrgs[0]!.userId,
+        fromOrgId: investorOrgs[0]!.orgId,
+        toOrgId: innovatorOrgs[0]!.orgId,
+        requestedById: investorOrgs[0]!.userId,
         status: 'SCHEDULED',
         message:
-          'Interested in partnering on Hans Zimmer Live production at Etihad Arena.',
+          'Interested in piloting leak detection with Gulf utilities this year.',
         proposedStartsAt: startsAt,
         proposedEndsAt: meeting.endsAt,
-        proposedByOrgId: clientOrgs[0]!.orgId,
+        proposedByOrgId: investorOrgs[0]!.orgId,
         placeId: placeIds.ETIHAD_ARENA!,
         meetingId: meeting.id,
       },
@@ -1411,13 +760,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       data: [
         {
           meetingId: meeting.id,
-          userId: clientOrgs[0]!.userId,
+          userId: investorOrgs[0]!.userId,
           status: 'CONFIRMED',
           respondedAt: new Date(),
         },
         {
           meetingId: meeting.id,
-          userId: guestOrgs[0]!.userId,
+          userId: innovatorOrgs[0]!.userId,
           status: 'CONFIRMED',
           respondedAt: new Date(),
         },
@@ -1429,26 +778,26 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   {
     const startsAt = daysFromNow(-2, 10, 0);
     const meeting = await createMeeting({
-      companyOrgId: clientOrgs[1]!.orgId,
-      vendorOrgId: guestOrgs[1]!.orgId,
+      companyOrgId: investorOrgs[1]!.orgId,
+      vendorOrgId: innovatorOrgs[1]!.orgId,
       startsAt,
       durationMinutes: 30,
       placeId: placeIds.YAS_MARINA!,
       status: 'COMPLETED',
       objectives:
-        'Review F1 weekend hospitality packages and after-race concert guest flow.',
+        'Review wastewater reuse economics for irrigation projects in the Sahel.',
       score: 88,
     });
     await prisma.meetingRequest.create({
       data: {
-        fromOrgId: clientOrgs[1]!.orgId,
-        toOrgId: guestOrgs[1]!.orgId,
-        requestedById: clientOrgs[1]!.userId,
+        fromOrgId: investorOrgs[1]!.orgId,
+        toOrgId: innovatorOrgs[1]!.orgId,
+        requestedById: investorOrgs[1]!.userId,
         status: 'SCHEDULED',
-        message: 'Need circuit hospitality inventory for GP weekend brands.',
+        message: 'Need bankable reuse plants with municipal offtake.',
         proposedStartsAt: startsAt,
         proposedEndsAt: meeting.endsAt,
-        proposedByOrgId: guestOrgs[1]!.orgId,
+        proposedByOrgId: innovatorOrgs[1]!.orgId,
         placeId: placeIds.YAS_MARINA!,
         meetingId: meeting.id,
       },
@@ -1456,8 +805,8 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     await prisma.meetingFeedback.create({
       data: {
         meetingId: meeting.id,
-        organizationId: clientOrgs[1]!.orgId,
-        reviewerUserId: clientOrgs[1]!.userId,
+        organizationId: investorOrgs[1]!.orgId,
+        reviewerUserId: investorOrgs[1]!.userId,
         attendanceConfirmed: true,
         meetingQuality: 5,
         relevance: 5,
@@ -1467,7 +816,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         followUpRequired: true,
         outcome: 'FOLLOW_UP_REQUIRED',
         comments:
-          'Strong fit for F1 corporate packages. Follow up on Yas Gateway after-party inventory.',
+          'Strong alignment on reuse economics; follow up on Sahel municipal offtake term sheet.',
         isConfidential: true,
       },
     });
@@ -1478,25 +827,27 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     const startsAt = daysFromNow(8, 14, 30);
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
     const meeting = await createMeeting({
-      companyOrgId: clientOrgs[2]!.orgId,
-      vendorOrgId: guestOrgs[2]!.orgId,
+      companyOrgId: investorOrgs[2]!.orgId,
+      vendorOrgId: innovatorOrgs[2]!.orgId,
       startsAt,
       durationMinutes: 30,
       placeId: placeIds.ETIHAD_ARENA!,
       status: 'AWAITING_CONFIRMATION',
-      objectives: 'Plan RAF Next Gen family programming and ticketing journey.',
+      objectives:
+        'Discuss modular desal deployment for remote communities in Jordan and UAE.',
       score: 81,
     });
     await prisma.meetingRequest.create({
       data: {
-        fromOrgId: clientOrgs[2]!.orgId,
-        toOrgId: guestOrgs[2]!.orgId,
-        requestedById: clientOrgs[2]!.userId,
+        fromOrgId: investorOrgs[2]!.orgId,
+        toOrgId: innovatorOrgs[2]!.orgId,
+        requestedById: investorOrgs[2]!.userId,
         status: 'AWAITING_CONFIRMATION',
-        message: 'Looking to co-produce family activations around RAF Next Gen.',
+        message:
+          'Interested in co-financing a three-site solar desal bundle with your EPC partners.',
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
-        proposedByOrgId: clientOrgs[2]!.orgId,
+        proposedByOrgId: investorOrgs[2]!.orgId,
         placeId: placeIds.ETIHAD_ARENA!,
         meetingId: meeting.id,
       },
@@ -1509,15 +860,15 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
     await prisma.meetingRequest.create({
       data: {
-        fromOrgId: clientOrgs[0]!.orgId,
-        toOrgId: guestOrgs[1]!.orgId,
-        requestedById: clientOrgs[0]!.userId,
+        fromOrgId: investorOrgs[0]!.orgId,
+        toOrgId: innovatorOrgs[1]!.orgId,
+        requestedById: investorOrgs[0]!.userId,
         status: 'AWAITING_CONFIRMATION',
         message:
-          'Exploring after-race concert crossover for Kings of Leon weekend at Etihad Live.',
+          'Exploring blended finance for Sahel reuse scale-up after our NRW pilot learnings.',
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
-        proposedByOrgId: clientOrgs[0]!.orgId,
+        proposedByOrgId: investorOrgs[0]!.orgId,
         placeId: placeIds.ETIHAD_LIVE!,
       },
     });
@@ -1529,15 +880,15 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
     await prisma.meetingRequest.create({
       data: {
-        fromOrgId: clientOrgs[1]!.orgId,
-        toOrgId: guestOrgs[0]!.orgId,
-        requestedById: clientOrgs[1]!.userId,
+        fromOrgId: investorOrgs[1]!.orgId,
+        toOrgId: innovatorOrgs[0]!.orgId,
+        requestedById: investorOrgs[1]!.userId,
         status: 'AWAITING_CONFIRMATION',
         message:
-          'Discuss VIP concert hospitality packages for GP weekend guests.',
+          'Follow-up on smart metering tender — would like a joint utility intro in the Gulf.',
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
-        proposedByOrgId: clientOrgs[1]!.orgId,
+        proposedByOrgId: investorOrgs[1]!.orgId,
         placeId: placeIds.ETIHAD_ARENA!,
       },
     });
@@ -1545,29 +896,135 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
 
   // 6) Extra confirmed calendar meeting: Family ↔ Zimmer (optional collab)
   await createMeeting({
-    companyOrgId: clientOrgs[2]!.orgId,
-    vendorOrgId: guestOrgs[0]!.orgId,
+    companyOrgId: investorOrgs[2]!.orgId,
+    vendorOrgId: innovatorOrgs[0]!.orgId,
     startsAt: daysFromNow(3, 13, 0),
     durationMinutes: 30,
     placeId: placeIds.COCA_COLA_ARENA!,
     status: 'CONFIRMED',
-    objectives: 'Explore family-friendly classical crossover programming.',
+    objectives:
+      'Explore nature-based watershed program co-investment in West Africa.',
     score: 74,
   });
 
+  // 7–12) Today's floor pulse: mixed live / done / missed / remaining
+  const todayMeetings: Array<{
+    investor: number;
+    innovator: number;
+    hour: number;
+    minute: number;
+    status: 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_SHOW';
+    place: string;
+    score: number;
+    quality?: number;
+    outcome?: 'SUCCESSFUL_DISCUSSION' | 'INTERESTED_IN_PARTNERSHIP' | 'NOT_A_FIT';
+  }> = [
+    {
+      investor: 0,
+      innovator: 3,
+      hour: 9,
+      minute: 0,
+      status: 'COMPLETED',
+      place: 'ETIHAD_ARENA',
+      score: 86,
+      quality: 5,
+      outcome: 'SUCCESSFUL_DISCUSSION',
+    },
+    {
+      investor: 1,
+      innovator: 4,
+      hour: 10,
+      minute: 0,
+      status: 'COMPLETED',
+      place: 'YAS_MARINA',
+      score: 79,
+      quality: 4,
+      outcome: 'INTERESTED_IN_PARTNERSHIP',
+    },
+    {
+      investor: 3,
+      innovator: 6,
+      hour: 11,
+      minute: 0,
+      status: 'NO_SHOW',
+      place: 'COCA_COLA_ARENA',
+      score: 68,
+    },
+    {
+      investor: 0,
+      innovator: 0,
+      hour: 12,
+      minute: 0,
+      status: 'IN_PROGRESS',
+      place: 'ETIHAD_LIVE',
+      score: 91,
+    },
+    {
+      investor: 2,
+      innovator: 1,
+      hour: 15,
+      minute: 0,
+      status: 'CONFIRMED',
+      place: 'ETIHAD_ARENA',
+      score: 77,
+    },
+    {
+      investor: 4,
+      innovator: 11,
+      hour: 16,
+      minute: 30,
+      status: 'CONFIRMED',
+      place: 'YAS_MARINA',
+      score: 73,
+    },
+  ];
+
+  for (const row of todayMeetings) {
+    const startsAt = daysFromNow(0, row.hour, row.minute);
+    const meeting = await createMeeting({
+      companyOrgId: investorOrgs[row.investor]!.orgId,
+      vendorOrgId: innovatorOrgs[row.innovator]!.orgId,
+      startsAt,
+      durationMinutes: 30,
+      placeId: placeIds[row.place]!,
+      status: row.status,
+      objectives: 'On-site investor / innovator session.',
+      score: row.score,
+    });
+    if (row.quality && row.outcome) {
+      await prisma.meetingFeedback.create({
+        data: {
+          meetingId: meeting.id,
+          organizationId: investorOrgs[row.investor]!.orgId,
+          reviewerUserId: investorOrgs[row.investor]!.userId,
+          attendanceConfirmed: true,
+          meetingQuality: row.quality,
+          relevance: row.quality,
+          businessPotential: Math.max(3, row.quality - 1),
+          communicationQuality: row.quality,
+          interestLevel: row.quality,
+          followUpRequired: row.outcome === 'INTERESTED_IN_PARTNERSHIP',
+          outcome: row.outcome,
+          comments: 'Recorded from the event floor.',
+          isConfidential: false,
+        },
+      });
+    }
+  }
+
   console.log(`
-Ethara sample accounts ready (aligned with https://www.ethara.com/en/events)
+UN Water demo roster seeded (${CLIENTS.length} investors, ${GUESTS.length} innovators)
 
-Password for all sample users: ${SAMPLE_PASSWORD}
+Password for all demo users: ${SAMPLE_PASSWORD}
 
-Full-flow pair (strong category match — concerts / arts-culture):
-  Client: ${CLIENTS[0]!.email}  /  ${SAMPLE_PASSWORD}
-  Guest:  ${GUESTS[0]!.email}  /  ${SAMPLE_PASSWORD}
+Suggested strong match pair (NRW / digital water):
+  Investor: ${CLIENTS[1]!.email}  /  ${SAMPLE_PASSWORD}
+  Innovator:  ${GUESTS[0]!.email}  /  ${SAMPLE_PASSWORD}
 
-Clients (${CLIENTS.length} total, recommendations capped at 10):
+Investors (${CLIENTS.length} total, recommendations capped at 10):
 ${CLIENTS.map((c, i) => `  ${i + 1}) ${c.email}  — ${c.name}`).join('\n')}
 
-Guests (${GUESTS.length} total, recommendations capped at 10):
+Innovators (${GUESTS.length} total, recommendations capped at 10):
 ${GUESTS.map((g, i) => `  ${i + 1}) ${g.email}  — ${g.name}`).join('\n')}
 `);
 }

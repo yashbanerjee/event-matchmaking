@@ -15,8 +15,8 @@ const NAV_GROUPS = [
     label: 'Operate',
     items: [
       { href: '/admin', label: 'Overview' },
-      { href: '/admin/companies', label: 'Client' },
-      { href: '/admin/vendors', label: 'Guests' },
+      { href: '/admin/companies', label: 'Investor' },
+      { href: '/admin/vendors', label: 'Innovators' },
     ],
   },
   {
@@ -52,7 +52,7 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="flex flex-1 flex-col gap-5 pb-4">
+    <nav className="sidebar-nav flex flex-col gap-5 pb-4">
       {NAV_GROUPS.map((group) => (
         <div key={group.label} className="space-y-1">
           <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-muted)]">
@@ -83,6 +83,12 @@ function SidebarNav({
   );
 }
 
+const PREFETCH_HREFS = [
+  ...NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href)),
+  '/vendor',
+  '/portal',
+];
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -91,6 +97,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    PREFETCH_HREFS.forEach((href) => router.prefetch(href));
+  }, [router]);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -152,11 +162,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <aside
         id="admin-sidebar"
         className={cn(
-          'admin-sidebar sidebar-pad-bottom fixed inset-y-0 left-0 z-50 flex max-w-full flex-col gap-6 overflow-y-auto bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] transition-transform duration-200 ease-out sm:sticky sm:top-0 sm:z-auto sm:h-screen sm:translate-x-0 sm:transition-none',
+          'admin-sidebar z-50 flex max-w-full flex-col gap-6 bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] transition-transform duration-200 ease-out sm:translate-x-0 sm:transition-none',
           navOpen ? 'translate-x-0' : '-translate-x-full sm:translate-x-0',
         )}
       >
-        <div className="flex items-start justify-between gap-3 px-2">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-2">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]">
               {BRAND.name}
@@ -178,14 +188,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
         <SidebarNav pathname={pathname} onNavigate={() => setNavOpen(false)} />
 
-        <div className="mt-auto space-y-2 border-t border-white/10 pt-4">
+        <div className="sidebar-footer mt-auto space-y-2 border-t border-white/10 pt-4">
           <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Link href="/vendor" onClick={() => setNavOpen(false)}>
             <Button
               variant="ghost"
               className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
             >
-              Open guest panel
+              Open innovator panel
             </Button>
           </Link>
           <Link href="/portal" onClick={() => setNavOpen(false)}>
@@ -193,7 +203,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               variant="ghost"
               className="w-full justify-start text-[var(--sidebar-fg)] hover:bg-white/10"
             >
-              Open client portal
+              Open investor portal
             </Button>
           </Link>
           <Button
@@ -206,7 +216,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="page-pad min-h-screen min-w-0">
+      <main className="page-pad min-h-dvh min-w-0">
         <div className="w-full max-w-full">{children}</div>
       </main>
     </div>

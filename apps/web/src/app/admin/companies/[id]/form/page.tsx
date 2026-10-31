@@ -28,13 +28,13 @@ function CompanyFormReviewContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Client"
+        eyebrow="Investor"
         title="Submitted form"
-        description="Review answers, verify the client, or request improvements."
+        description="Review answers, verify the investor, or request improvements."
         actions={
           <Link href="/admin/companies">
             <Button variant="outline" size="sm">
-              Back to clients
+              Back to investors
             </Button>
           </Link>
         }

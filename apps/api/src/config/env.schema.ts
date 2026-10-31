@@ -70,7 +70,10 @@ export const envSchema = z.object({
   JAV_AI_BASE_URL: z.string().optional().default(''),
   JAV_AI_API_KEY: z.string().optional().default(''),
   OPENROUTER_API_KEY: z.string().optional().default(''),
-  JAV_AI_CHAT_MODEL: z.string().optional().default(''),
+  JAV_AI_CHAT_MODEL: z
+    .string()
+    .optional()
+    .default('qwen/qwen-2.5-72b-instruct'),
   JAV_AI_EMBEDDING_MODEL: z.string().optional().default(''),
   JAV_AI_FINE_TUNED_MODEL: z.string().optional().default(''),
   JAV_AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
@@ -79,6 +82,10 @@ export const envSchema = z.object({
     .default('llm'),
   AI_MATCHMAKING_BLEND_WEIGHT: z.coerce.number().min(0).max(1).default(0.3),
   AI_MATCHMAKING_PROMPT: z.string().optional().default(''),
+  AI_MATCHMAKING_USER_TEMPLATE: z.string().optional().default(''),
+  AI_PAIR_SCORING_METHOD: z
+    .enum(['structured_json', 'jev_decisions'])
+    .default('structured_json'),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
   FEATURE_SEMANTIC_SEARCH: z
@@ -88,6 +95,12 @@ export const envSchema = z.object({
   MEETING_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
   MEETING_WINDOW_START: z.string().optional().default(''),
   MEETING_WINDOW_END: z.string().optional().default(''),
+  MEETING_EVENT_DATES: z
+    .string()
+    .optional()
+    .default('2026-12-07,2026-12-08,2026-12-09'),
+  MEETING_ACTIVE_START: z.string().optional().default('09:00'),
+  MEETING_ACTIVE_END: z.string().optional().default('17:00'),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   RPO_HOURS: z.coerce.number().positive().default(24),
   RTO_HOURS: z.coerce.number().positive().default(4),

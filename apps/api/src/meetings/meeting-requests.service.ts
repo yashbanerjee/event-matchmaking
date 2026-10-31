@@ -90,47 +90,16 @@ export class MeetingRequestsService {
     placeId: string;
     startsAt: Date;
     endsAt: Date;
+    ownerOrgIds?: string[];
     excludeRequestId?: string;
   }) {
-    const place = await this.prisma.place.findFirst({
-      where: { id: input.placeId, isActive: true },
+    return this.places.assertAvailableForMeeting({
+      placeId: input.placeId,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      ownerOrgIds: input.ownerOrgIds,
+      excludeRequestId: input.excludeRequestId,
     });
-    if (!place) {
-      throw new BadRequestException('Place not available');
-    }
-
-    const placeBusy = await this.prisma.meeting.findFirst({
-      where: {
-        placeId: place.id,
-        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
-        startsAt: { lt: input.endsAt },
-        endsAt: { gt: input.startsAt },
-      },
-    });
-    if (placeBusy) {
-      throw new BadRequestException(
-        `${place.name} is already booked for that time. Choose another free place.`,
-      );
-    }
-
-    const proposalBusy = await this.prisma.meetingRequest.findFirst({
-      where: {
-        placeId: place.id,
-        status: { in: ['AWAITING_CONFIRMATION', 'INTEREST_ACCEPTED'] },
-        ...(input.excludeRequestId
-          ? { id: { not: input.excludeRequestId } }
-          : {}),
-        proposedStartsAt: { lt: input.endsAt },
-        proposedEndsAt: { gt: input.startsAt },
-      },
-    });
-    if (proposalBusy) {
-      throw new BadRequestException(
-        `${place.name} is already held by another proposed meeting. Choose another free place.`,
-      );
-    }
-
-    return place;
   }
 
   private async assertPartiesFree(input: {
@@ -152,7 +121,7 @@ export class MeetingRequestsService {
     });
     if (partyBusy) {
       throw new BadRequestException(
-        'Client or guest already has a meeting in that window',
+        'Investor or innovator already has a meeting in that window',
       );
     }
 
@@ -172,7 +141,7 @@ export class MeetingRequestsService {
     });
     if (proposalBusy) {
       throw new BadRequestException(
-        'Client or guest already has a proposed meeting in that window',
+        'Investor or innovator already has a proposed meeting in that window',
       );
     }
   }
@@ -181,7 +150,7 @@ export class MeetingRequestsService {
     startsAt: Date;
     endsAt: Date;
   } {
-    // Snap to the next whole minute so "now" holds are stable across clients.
+    // Snap to the next whole minute so "now" holds are stable across investors.
     const startsAt = new Date(Date.now());
     startsAt.setSeconds(0, 0);
     if (startsAt.getTime() < Date.now() - 5_000) {
@@ -237,7 +206,7 @@ export class MeetingRequestsService {
       })),
       message: partiesFree
         ? null
-        : 'Client or guest already has a meeting in this window',
+        : 'Investor or innovator already has a meeting in this window',
     };
   }
 
@@ -249,7 +218,7 @@ export class MeetingRequestsService {
       message?: string;
       startsAt?: string;
       placeId?: string;
-      mode?: 'SCHEDULED' | 'NOW';
+      mode?: 'SCHEDULED' | 'NOW' | 'INTEREST';
     },
   ) {
     this.assertMember(actor, input.fromOrgId);
@@ -257,21 +226,19 @@ export class MeetingRequestsService {
       throw new BadRequestException('Cannot request a meeting with yourself');
     }
 
-    const mode = input.mode === 'NOW' ? 'NOW' : 'SCHEDULED';
-    const hasPlace = Boolean(input.placeId?.trim());
-    if (!hasPlace) {
-      throw new BadRequestException(
-        'Select a free meeting place before sending the request',
-      );
-    }
+    const mode =
+      input.mode === 'NOW'
+        ? 'NOW'
+        : input.mode === 'SCHEDULED' && input.startsAt?.trim()
+          ? 'SCHEDULED'
+          : input.mode === 'INTEREST' || !input.startsAt?.trim()
+            ? 'INTEREST'
+            : 'SCHEDULED';
 
-    if (mode === 'SCHEDULED') {
-      const hasStarts = Boolean(input.startsAt?.trim());
-      if (!hasStarts) {
-        throw new BadRequestException(
-          'Select a free time slot and meeting place before sending the request',
-        );
-      }
+    if (mode === 'SCHEDULED' && !input.startsAt?.trim()) {
+      throw new BadRequestException(
+        'Select a free time slot and meeting place before sending the request',
+      );
     }
 
     const [fromOrg, toOrg] = await Promise.all([
@@ -305,6 +272,41 @@ export class MeetingRequestsService {
       );
     }
 
+    if (mode === 'INTEREST') {
+      const message =
+        input.message?.trim() ||
+        'Would like to connect and schedule a meeting if you are interested.';
+      const created = await this.prisma.meetingRequest.create({
+        data: {
+          fromOrgId: input.fromOrgId,
+          toOrgId: input.toOrgId,
+          requestedById: actor.id,
+          message,
+          status: 'PENDING',
+        },
+        include: {
+          fromOrg: true,
+          toOrg: true,
+          place: true,
+        },
+      });
+
+      await this.audit.record({
+        actorId: actor.id,
+        action: 'meeting_request.create',
+        entityType: 'MeetingRequest',
+        entityId: created.id,
+        outcome: 'SUCCESS',
+        metadata: { mode: 'INTEREST' },
+      });
+
+      void this.notifyOrgs(created.id, 'request_created').catch((err) =>
+        this.logger.warn(err.message),
+      );
+
+      return created;
+    }
+
     const duration = await this.config.getNumber(
       'ops.meetingDurationMinutes',
       15,
@@ -318,6 +320,12 @@ export class MeetingRequestsService {
       const window = this.computeNowWindow(duration);
       startsAt = window.startsAt;
       endsAt = window.endsAt;
+      const bookingWindow = await this.config.getMeetingBookingWindow();
+      this.config.assertInstantInMeetingWindow(
+        startsAt,
+        bookingWindow,
+        duration,
+      );
       message =
         input.message?.trim() ||
         MEET_NOW_MESSAGE_PREFIX;
@@ -327,15 +335,31 @@ export class MeetingRequestsService {
         throw new BadRequestException('Invalid start time');
       }
       const bookingWindow = await this.config.getMeetingBookingWindow();
-      this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
+      this.config.assertInstantInMeetingWindow(
+        startsAt,
+        bookingWindow,
+        duration,
+      );
       endsAt = new Date(startsAt.getTime() + duration * 60_000);
       message = input.message?.trim() || null;
     }
 
-    const place = await this.assertPlaceFree({
-      placeId: input.placeId!,
+    const assigned = await this.places.resolveInvestorPlace({
+      organizationIds: [input.fromOrgId, input.toOrgId],
       startsAt,
       endsAt,
+    });
+    const placeId = assigned?.id ?? input.placeId?.trim();
+    if (!placeId) {
+      throw new BadRequestException(
+        'Select a free meeting place before sending the request',
+      );
+    }
+    const place = await this.assertPlaceFree({
+      placeId,
+      startsAt,
+      endsAt,
+      ownerOrgIds: [input.fromOrgId, input.toOrgId],
     });
     await this.assertPartiesFree({
       orgIds: [input.fromOrgId, input.toOrgId],
@@ -461,7 +485,7 @@ export class MeetingRequestsService {
   async proposeSchedule(
     actor: AuthUser,
     id: string,
-    input: { startsAt: string; placeId: string },
+    input: { startsAt: string; placeId?: string },
   ) {
     const request = await this.getRequestOrThrow(id);
     // Either side can propose after interest is accepted.
@@ -482,13 +506,23 @@ export class MeetingRequestsService {
       throw new BadRequestException('Invalid start time');
     }
     const window = await this.config.getMeetingBookingWindow();
-    this.config.assertInstantInMeetingWindow(startsAt, window);
+    this.config.assertInstantInMeetingWindow(startsAt, window, duration);
     const endsAt = new Date(startsAt.getTime() + duration * 60_000);
 
-    const place = await this.assertPlaceFree({
-      placeId: input.placeId,
+    const assigned = await this.places.resolveInvestorPlace({
+      organizationIds: [request.fromOrgId, request.toOrgId],
       startsAt,
       endsAt,
+    });
+    const placeId = assigned?.id ?? input.placeId;
+    if (!placeId) {
+      throw new BadRequestException('Select a free meeting place');
+    }
+    const place = await this.assertPlaceFree({
+      placeId,
+      startsAt,
+      endsAt,
+      ownerOrgIds: [request.fromOrgId, request.toOrgId],
       excludeRequestId: id,
     });
     await this.assertPartiesFree({
@@ -530,12 +564,11 @@ export class MeetingRequestsService {
       request.status === 'AWAITING_CONFIRMATION' ||
       (request.status === 'INTEREST_ACCEPTED' &&
         Boolean(request.proposedStartsAt) &&
-        Boolean(request.proposedEndsAt) &&
-        Boolean(request.placeId));
+        Boolean(request.proposedEndsAt));
     if (!canConfirmScheduledStatus) {
       throw new BadRequestException('Nothing to confirm');
     }
-    if (!request.proposedStartsAt || !request.proposedEndsAt || !request.placeId) {
+    if (!request.proposedStartsAt || !request.proposedEndsAt) {
       throw new BadRequestException('Schedule details are incomplete');
     }
 
@@ -588,10 +621,20 @@ export class MeetingRequestsService {
       (request.proposedEndsAt.getTime() - request.proposedStartsAt.getTime()) /
         60_000,
     );
-    const place = await this.assertPlaceFree({
-      placeId: request.placeId,
+    const assigned = await this.places.resolveInvestorPlace({
+      organizationIds: [request.fromOrgId, request.toOrgId],
       startsAt: request.proposedStartsAt,
       endsAt: request.proposedEndsAt,
+    });
+    const confirmedPlaceId = assigned?.id ?? request.placeId;
+    if (!confirmedPlaceId) {
+      throw new BadRequestException('Select a meeting place');
+    }
+    const place = await this.assertPlaceFree({
+      placeId: confirmedPlaceId,
+      startsAt: request.proposedStartsAt,
+      endsAt: request.proposedEndsAt,
+      ownerOrgIds: [request.fromOrgId, request.toOrgId],
       excludeRequestId: id,
     });
     await this.assertPartiesFree({
@@ -606,13 +649,15 @@ export class MeetingRequestsService {
         data: {
           companyOrgId,
           vendorOrgId,
-          placeId: request.placeId,
+          placeId: place.id,
           startsAt: request.proposedStartsAt!,
           endsAt: request.proposedEndsAt!,
           durationMinutes: duration,
           timeZone: 'Asia/Dubai',
           mode: 'IN_PERSON',
-          venue: place.name,
+          venue: place.location
+            ? `${place.name} · ${place.location}`
+            : place.name,
           status: 'CONFIRMED',
           idempotencyKey: `peer-meeting:${request.id}`,
         },
@@ -668,7 +713,11 @@ export class MeetingRequestsService {
     return {
       start: window.start,
       end: window.end,
+      dates: window.dates,
+      activeStart: window.activeStart,
+      activeEnd: window.activeEnd,
       durationMinutes,
+      timezone: 'Asia/Dubai',
     };
   }
 
@@ -694,9 +743,13 @@ export class MeetingRequestsService {
     }
     const window = await this.config.getMeetingBookingWindow();
     this.config.assertDateInMeetingWindow(date, window);
-    const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-    const dayStart = Date.UTC(y, m - 1, d, 9, 0, 0, 0);
-    const dayEnd = Date.UTC(y, m - 1, d, 17, 0, 0, 0);
+    const dayStart = new Date(
+      `${date}T${window.activeStart}:00+04:00`,
+    ).getTime();
+    const dayEnd = new Date(`${date}T${window.activeEnd}:00+04:00`).getTime();
+    if (!Number.isFinite(dayStart) || !Number.isFinite(dayEnd)) {
+      throw new BadRequestException('Invalid event hours');
+    }
 
     let partyOrgIds: string[] = [];
     let excludeRequestId: string | undefined;
@@ -721,7 +774,8 @@ export class MeetingRequestsService {
     const dayStartDate = new Date(dayStart);
     const dayEndDate = new Date(dayEnd);
 
-    const [busyMeetings, busyProposals, places] = await Promise.all([
+    const [busyMeetings, busyProposals, places, partyOrgs, dayAssignments] =
+      await Promise.all([
       this.prisma.meeting.findMany({
         where: {
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
@@ -755,7 +809,19 @@ export class MeetingRequestsService {
         where: { isActive: true },
         select: { id: true },
       }),
+      this.prisma.organization.findMany({
+        where: { id: { in: partyOrgIds } },
+        select: { id: true, type: true },
+      }),
+      this.prisma.investorPlaceAssignment.findMany({
+        where: {
+          startsAt: { lt: dayEndDate },
+          endsAt: { gt: dayStartDate },
+        },
+        select: { organizationId: true, placeId: true, startsAt: true, endsAt: true },
+      }),
     ]);
+    const companyOrgId = partyOrgs.find((org) => org.type === 'COMPANY')?.id;
 
     const busyIntervals: Array<{ startsAt: Date; endsAt: Date }> = [
       ...busyMeetings.map((m) => ({
@@ -867,15 +933,33 @@ export class MeetingRequestsService {
         (m) => m.startsAt < endsAt && m.endsAt > startsAt,
       );
       if (!partiesBusy) {
-        const freePlaceExists = placeIds.some(
-          (placeId) =>
-            !placeBusyAll.some(
-              (hold) =>
-                hold.placeId === placeId &&
-                hold.startsAt < endsAt &&
-                hold.endsAt > startsAt,
-            ),
+        const assigned = companyOrgId
+          ? dayAssignments.find(
+              (row) =>
+                row.organizationId === companyOrgId &&
+                row.startsAt < endsAt &&
+                row.endsAt > startsAt,
+            )
+          : undefined;
+        const reservedIds = new Set(
+          dayAssignments
+            .filter(
+              (row) => row.startsAt < endsAt && row.endsAt > startsAt,
+            )
+            .map((row) => row.placeId),
         );
+        const freePlaceExists = assigned
+          ? true
+          : placeIds.some(
+              (placeId) =>
+                !reservedIds.has(placeId) &&
+                !placeBusyAll.some(
+                  (hold) =>
+                    hold.placeId === placeId &&
+                    hold.startsAt < endsAt &&
+                    hold.endsAt > startsAt,
+                ),
+            );
         if (freePlaceExists) {
           slots.push({
             startsAt: startsAt.toISOString(),
@@ -973,7 +1057,7 @@ export class MeetingRequestsService {
     };
 
     const bodies: Record<typeof kind, string> = {
-      request_created: `${request.fromOrg.name} wants to meet ${request.toOrg.name}.`,
+      request_created: `${request.fromOrg.name} is interested in connecting with ${request.toOrg.name}. Accept if you'd like to meet — they'll propose a time and place next.`,
       interest_accepted: `${request.toOrg.name} accepted. Propose a time slot and place.`,
       schedule_proposed: `A time and place were proposed for ${request.fromOrg.name} ↔ ${request.toOrg.name}. Please confirm or decline.`,
       meet_now_proposed: `${request.fromOrg.name} wants to meet now at ${placeLabel} (${startsLabel}). Confirm within 10 minutes.`,

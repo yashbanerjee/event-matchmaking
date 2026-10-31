@@ -4,11 +4,13 @@ import type {
   AiProvider,
   PairMatchScoreInput,
   PairMatchScoreResult,
+  PairScoringMethod,
   ProfileExtractionInput,
   ProfileExtractionResult,
   SemanticSimilarityInput,
 } from './ai.provider';
 import { DEFAULT_MATCHMAKING_PROMPT } from './matchmaking-prompt';
+import { pairMatchScoreViaChat } from './pair-score-chat';
 
 const extractionSchema = z.object({
   capabilities: z.array(z.string()).default([]),
@@ -26,6 +28,8 @@ export type JavProviderConfig = {
   /** Embedding model id for semantic similarity */
   embeddingModel: string;
   temperature: number;
+  /** structured_json = OpenAI-compatible chat (OSS on OpenRouter or self-hosted). */
+  pairScoringMethod: PairScoringMethod;
   /** Extra headers (e.g. OpenRouter HTTP-Referer / X-Title) */
   extraHeaders?: Record<string, string>;
 };
@@ -142,6 +146,20 @@ export class JavAiProvider implements AiProvider {
   async pairMatchScore(
     input: PairMatchScoreInput,
   ): Promise<PairMatchScoreResult> {
+    if (this.config.pairScoringMethod === 'structured_json') {
+      return pairMatchScoreViaChat(
+        {
+          apiKey: this.config.apiKey,
+          baseUrl: this.baseUrl,
+          chatModel: this.config.chatModel,
+          temperature: this.config.temperature,
+          timeoutMs: this.config.timeoutMs,
+          extraHeaders: this.config.extraHeaders,
+        },
+        input,
+      );
+    }
+
     const system = input.systemPrompt?.trim() || DEFAULT_MATCHMAKING_PROMPT;
     const criteria = [
       'Poor fit — little overlap in needs or categories',
@@ -159,14 +177,14 @@ export class JavAiProvider implements AiProvider {
         model: this.config.chatModel,
         state: {
           instructions: system.slice(0, 4000),
-          clientProfile: input.left.slice(0, 6000),
-          guestProfile: input.right.slice(0, 6000),
+          investorProfile: input.left.slice(0, 6000),
+          innovatorProfile: input.right.slice(0, 6000),
         },
         questions: {
           fit: {
             type: 'score',
             instructions:
-              'How strong is the match for a short Ethara networking meeting between this client and guest?',
+              'How strong is the match for a short Ethara networking meeting between this investor and innovator?',
             criteria,
           },
         },

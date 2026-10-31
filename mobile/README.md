@@ -1,6 +1,6 @@
 # Ethara Matchmaking — Flutter app
 
-Production-oriented mobile client for Ethara Event Matchmaking (client & guest).
+Production-oriented mobile investor for Ethara Event Matchmaking (investor & innovator).
 
 ## Features
 

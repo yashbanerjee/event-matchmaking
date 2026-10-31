@@ -24,16 +24,26 @@ export interface SemanticSimilarityInput {
 }
 
 export interface PairMatchScoreInput {
+  /** Investor (company) profile text */
   left: string;
+  /** Innovator (vendor) profile text */
   right: string;
   systemPrompt?: string;
+  /** Filled user message (Admin → matchmaking user template). */
+  userMessage?: string;
   temperature?: number;
 }
+
+export type PairScoringMethod = 'structured_json' | 'jev_decisions';
 
 export interface PairMatchScoreResult {
   /** Normalized 0–1 compatibility */
   score: number;
   rationale?: string;
+  /** Optional bullet reasons from the model (shown to admins and in portal copy). */
+  reasons?: string[];
+  mismatch?: string;
+  agenda?: string;
 }
 
 export interface AiProvider {

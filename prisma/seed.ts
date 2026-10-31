@@ -75,12 +75,12 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number], string[]> = {
 };
 
 const defaultMatchingWeights = {
-  capability: 0.3,
-  industry: 0.2,
-  requirements: 0.2,
-  geography: 0.1,
-  commercial: 0.1,
-  mutualPreferences: 0.1,
+  challenge: 0.3,
+  solution: 0.2,
+  geography: 0.15,
+  commercial: 0.15,
+  stage: 0.1,
+  ticket: 0.1,
 };
 
 async function main() {
@@ -237,7 +237,8 @@ async function main() {
     { key: 'ai.primaryProvider', value: 'jav' },
     { key: 'ai.secondaryProvider', value: 'none' },
     { key: 'ai.javBaseUrl', value: 'https://openrouter.ai/api/v1' },
-    { key: 'ai.javChatModel', value: '~typesafe/jev-latest' },
+    { key: 'ai.javChatModel', value: 'qwen/qwen-2.5-72b-instruct' },
+    { key: 'ai.pairScoringMethod', value: 'structured_json' },
     { key: 'ai.javTemperature', value: 0.2 },
     { key: 'ai.matchmakingMode', value: 'llm' },
     { key: 'ai.matchmakingBlendWeight', value: 0.3 },
@@ -269,7 +270,8 @@ async function main() {
     { key: 'ai.primaryProvider', value: 'jav' },
     { key: 'ai.secondaryProvider', value: 'none' },
     { key: 'ai.javBaseUrl', value: 'https://openrouter.ai/api/v1' },
-    { key: 'ai.javChatModel', value: '~typesafe/jev-latest' },
+    { key: 'ai.javChatModel', value: 'qwen/qwen-2.5-72b-instruct' },
+    { key: 'ai.pairScoringMethod', value: 'structured_json' },
     { key: 'ai.matchmakingMode', value: 'llm' },
     { key: 'ai.matchmakingBlendWeight', value: 0.3 },
     { key: 'ops.semanticSearch', value: true },

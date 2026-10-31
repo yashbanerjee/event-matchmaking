@@ -51,9 +51,9 @@ export default function PortalRequestsPage() {
       pendingForms={onboarding.data?.pendingCount}
     >
       <PageHeader
-        eyebrow="Client / Delegate"
+        eyebrow="Investor / Delegate"
         title="Meeting requests"
-        description="Accept or decline meeting requests. Confirming locks the meeting place and time."
+        description="Accept interest from recommendations, propose a time and place, then confirm to lock the meeting."
       />
       <MeetingRequestsPanel
         myOrgIds={me.data?.organizationIds ?? []}

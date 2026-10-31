@@ -48,7 +48,13 @@ export class InvitationsService {
     const expiresAt = new Date(
       Date.now() + this.env.invitationTtlDays * 86_400_000,
     );
-    const registrationUrl = `${this.env.appUrl}/register?token=${token}`;
+    const path =
+      org.type === 'COMPANY'
+        ? '/register/investor'
+        : org.type === 'VENDOR'
+          ? '/register/innovator'
+          : '/register';
+    const registrationUrl = `${this.env.appUrl}${path}?token=${token}`;
 
     const invitation = await this.prisma.$transaction(async (tx) => {
       const created = await tx.invitation.create({

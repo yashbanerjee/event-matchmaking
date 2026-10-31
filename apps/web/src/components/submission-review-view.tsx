@@ -178,7 +178,7 @@ export function SubmissionReviewView({
       ),
     onSuccess: async (res) => {
       const base =
-        kind === 'vendor' ? 'Guest marked verified.' : 'Submission approved.';
+        kind === 'vendor' ? 'Innovator marked verified.' : 'Submission approved.';
       setMessage(
         res.emailSent && res.email
           ? `${base} Verification email sent to ${res.email}.`
@@ -288,7 +288,7 @@ export function SubmissionReviewView({
         <Card>
           <p className="text-sm text-[var(--muted)]">
             No form has been submitted for this{' '}
-            {kind === 'vendor' ? 'guest' : 'client'} yet.
+            {kind === 'vendor' ? 'innovator' : 'investor'} yet.
           </p>
         </Card>
       ) : null}

@@ -6,6 +6,34 @@ import {
   overlapScore,
 } from './scoring.js';
 
+const baseInvestor = {
+  organizationId: 'c1',
+  industry: 'Venture capital',
+  capabilities: [] as string[],
+  categories: [] as string[],
+  regions: ['mena'],
+  requirements: ['treatment-tech', 'data-ai'],
+  preferredCategories: ['drinking-water', 'water-quality'],
+  commercialTags: ['equity'],
+  mutualPreferenceTags: [] as string[],
+  investmentStages: ['early-revenue', 'growth'],
+  ticketSize: '1m-5m',
+};
+
+const baseInnovator = {
+  organizationId: 'v1',
+  industry: 'Startup / scale-up',
+  capabilities: ['treatment-tech', 'data-ai'],
+  categories: ['drinking-water'],
+  regions: ['mena', 'gcc'],
+  requirements: [] as string[],
+  preferredCategories: [] as string[],
+  commercialTags: ['equity'],
+  mutualPreferenceTags: ['drinking-water'],
+  investmentStages: ['early-revenue'],
+  ticketSize: '250k-1m',
+};
+
 describe('overlapScore', () => {
   it('returns 0 when either side is empty', () => {
     assert.equal(overlapScore([], ['a']), 0);
@@ -18,72 +46,43 @@ describe('overlapScore', () => {
 });
 
 describe('calculateMatchScore', () => {
-  it('produces explainable weighted score', () => {
-    const result = calculateMatchScore(
-      {
-        organizationId: 'c1',
-        industry: 'Manufacturing',
-        capabilities: [],
-        categories: [],
-        regions: ['EU'],
-        requirements: ['CNC', 'ISO9001'],
-        preferredCategories: ['manufacturing'],
-        commercialTags: ['net30'],
-        mutualPreferenceTags: [],
-      },
-      {
-        organizationId: 'v1',
-        industry: 'Manufacturing',
-        capabilities: ['CNC', 'ISO9001', 'Welding'],
-        categories: ['manufacturing'],
-        regions: ['EU', 'UK'],
-        requirements: [],
-        preferredCategories: [],
-        commercialTags: ['net30'],
-        mutualPreferenceTags: [],
-      },
-    );
+  it('scores water complementarity with stage and ticket', () => {
+    const result = calculateMatchScore(baseInvestor, baseInnovator);
 
-    assert.ok(result.totalScore > 40);
-    assert.ok(result.explanation.includes('Score'));
+    assert.ok(result.totalScore > 50);
+    assert.ok(result.breakdown.challenge > 0);
+    assert.ok(result.breakdown.solution > 0);
+    assert.ok(result.breakdown.stage >= 60);
+    assert.ok(result.breakdown.ticket >= 60);
+    assert.ok(result.matchedChallengeTags.includes('drinking-water'));
     assert.ok(result.reasons.length > 0);
-    assert.ok(
-      result.reasons.some((r) => r.toLowerCase().includes('industry')),
-    );
-    assert.ok(
-      result.reasons.some((r) => r.toLowerCase().includes('cnc')),
-    );
-    assert.equal(result.breakdown.industry, 100);
   });
 
   it('does not treat missing data as a positive match', () => {
-    const result = calculateMatchScore(
-      {
-        organizationId: 'c1',
-        industry: null,
-        capabilities: [],
-        categories: [],
-        regions: [],
-        requirements: [],
-        preferredCategories: [],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
-      {
-        organizationId: 'v1',
-        industry: null,
-        capabilities: [],
-        categories: [],
-        regions: [],
-        requirements: [],
-        preferredCategories: [],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
-    );
+    const empty = {
+      ...baseInvestor,
+      industry: null,
+      preferredCategories: [],
+      requirements: [],
+      regions: [],
+      commercialTags: [],
+      investmentStages: [],
+      ticketSize: null,
+    };
+    const emptyVendor = {
+      ...baseInnovator,
+      industry: null,
+      categories: [],
+      capabilities: [],
+      regions: [],
+      commercialTags: [],
+      investmentStages: [],
+      ticketSize: null,
+    };
 
+    const result = calculateMatchScore(empty, emptyVendor);
     assert.equal(result.totalScore, 0);
-    assert.ok(result.missingDimensions.includes('capability'));
+    assert.ok(result.missingDimensions.length > 0);
   });
 
   it('matches preferred categories through tag equivalences', () => {
@@ -96,36 +95,16 @@ describe('calculateMatchScore', () => {
     ]);
 
     const result = calculateMatchScore(
-      {
-        organizationId: 'c1',
-        industry: null,
-        capabilities: [],
-        categories: [],
-        regions: [],
-        requirements: [],
-        preferredCategories: ['food'],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
-      {
-        organizationId: 'v1',
-        industry: null,
-        capabilities: [],
-        categories: ['hotel'],
-        regions: [],
-        requirements: [],
-        preferredCategories: [],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
+      { ...baseInvestor, preferredCategories: ['food'] },
+      { ...baseInnovator, categories: ['hotel'] },
       undefined,
       equivalences,
     );
 
-    assert.equal(result.breakdown.mutualPreferences, 100);
+    assert.equal(result.breakdown.challenge, 100);
   });
 
-  it('explains equivalence matches with Ethara display labels', () => {
+  it('explains equivalence matches with display labels', () => {
     const equivalences = [
       { from: 'concerts', to: 'arts-culture', bidirectional: true },
     ];
@@ -135,39 +114,18 @@ describe('calculateMatchScore', () => {
     };
 
     const result = calculateMatchScore(
-      {
-        organizationId: 'c1',
-        industry: null,
-        capabilities: [],
-        categories: [],
-        regions: [],
-        requirements: [],
-        preferredCategories: ['concerts'],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
-      {
-        organizationId: 'v1',
-        industry: null,
-        capabilities: [],
-        categories: ['arts-culture'],
-        regions: [],
-        requirements: [],
-        preferredCategories: [],
-        commercialTags: [],
-        mutualPreferenceTags: [],
-      },
+      { ...baseInvestor, preferredCategories: ['concerts'] },
+      { ...baseInnovator, categories: ['arts-culture'] },
       undefined,
       equivalences,
       tagLabels,
     );
 
-    assert.equal(result.breakdown.mutualPreferences, 100);
+    assert.equal(result.breakdown.challenge, 100);
     assert.ok(
       result.reasons.some((reason) =>
         reason.includes('Concerts ↔ Arts & Culture'),
       ),
-      `expected labeled pair in reasons, got: ${result.reasons.join(' | ')}`,
     );
   });
 });

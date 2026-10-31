@@ -64,7 +64,7 @@ export default function FeedbackPage() {
       <PageHeader
         eyebrow="Match & meet"
         title="Feedback & reviews"
-        description="Post-meeting feedback and peer reviews from clients and guests."
+        description="Post-meeting feedback and peer reviews from investors and innovators."
       />
 
       <Card>

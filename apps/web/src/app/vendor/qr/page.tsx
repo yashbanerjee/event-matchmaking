@@ -16,9 +16,9 @@ export default function VendorQrPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Guest workspace"
+        eyebrow="Innovator workspace"
         title="QR meeting exchange"
-        description="Save or share your QR, then scan a client to view their public profile and book a meeting."
+        description="Save or share your QR, then scan an investor to view their public profile and book a meeting."
       />
       <QrExchangePanel
         requestsHref="/vendor/requests"

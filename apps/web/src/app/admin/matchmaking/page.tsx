@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
 import { TagMappingsPanel } from '@/components/tag-mappings-panel';
@@ -9,8 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { EventDateChips } from '@/components/event-date-chips';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import {
+  DEFAULT_EVENT_DATES,
+  normalizeEventSchedule,
+  type EventSchedule,
+} from '@/lib/event-schedule';
 
 type MatchRun = {
   id: string;
@@ -38,24 +44,35 @@ type MatchRun = {
   }>;
 };
 
-function todayIsoDate() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 export default function MatchmakingPage() {
   const qc = useQueryClient();
-  const [scheduleDate, setScheduleDate] = useState(todayIsoDate);
+  const [scheduleDate, setScheduleDate] = useState(DEFAULT_EVENT_DATES[0]!);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
   const [duration, setDuration] = useState(15);
   const [useAi, setUseAi] = useState(true);
-  const [forceRegenerate, setForceRegenerate] = useState(false);
   const [lastRunId, setLastRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const bookingWindow = useQuery({
+    queryKey: ['meeting-booking-window'],
+    queryFn: () =>
+      apiFetch<EventSchedule>('/meeting-requests/booking-window', {
+        token: getAccessToken(),
+      }),
+  });
+  const eventSchedule = normalizeEventSchedule(bookingWindow.data);
+
+  useEffect(() => {
+    if (!bookingWindow.data) return;
+    const next = normalizeEventSchedule(bookingWindow.data);
+    setScheduleDate((current) =>
+      next.dates.includes(current) ? current : (next.dates[0] ?? ''),
+    );
+    setStartTime(next.activeStart);
+    setEndTime(next.activeEnd);
+    setDuration(next.durationMinutes);
+  }, [bookingWindow.data]);
 
   const dateStatus = useQuery({
     queryKey: ['matchmaking-date-status', scheduleDate],
@@ -109,7 +126,6 @@ export default function MatchmakingPage() {
     },
     onSuccess: (data) => {
       setLastRunId(data.id);
-      setForceRegenerate(false);
       void qc.invalidateQueries({ queryKey: ['matchmaking-date-status'] });
       void qc.invalidateQueries({ queryKey: ['admin-meetings'] });
     },
@@ -118,24 +134,10 @@ export default function MatchmakingPage() {
     },
   });
 
-  const publish = useMutation({
-    mutationFn: (scheduleVersionId: string) =>
-      apiFetch(`/matchmaking/schedules/${scheduleVersionId}/publish`, {
-        method: 'POST',
-        token: getAccessToken(),
-        body: JSON.stringify({}),
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['matchmaking-run', lastRunId] });
-      void qc.invalidateQueries({ queryKey: ['admin-meetings'] });
-    },
-  });
-
   const topCandidates = useMemo(
     () => (run.data?.candidates ?? []).slice(0, 12),
     [run.data?.candidates],
   );
-  const scheduleVersion = run.data?.scheduleVersions?.[0];
   const meetingCount = dateStatus.data?.meetingCount ?? 0;
   const aiEnabled = aiHealth.data?.aiEnabled ?? false;
 
@@ -144,16 +146,17 @@ export default function MatchmakingPage() {
       <PageHeader
         eyebrow="Match & meet"
         title="Matchmaking"
-        description="Score clients against guests on Ethara categories, venues, services, and commercial tags — optionally boost with AI."
+        description="Score investor–innovator pairs for admin review. Participants express interest from Recommendations and schedule meetings themselves."
       />
 
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Generate schedule</h2>
+            <h2 className="text-lg font-semibold">Score all pairs</h2>
             <p className="text-sm text-[var(--muted)]">
-              Matches preferred categories ↔ event categories, capabilities /
-              Ethara services, venues, and commercial focus.
+              Produces ranked candidates only — no automatic meeting times.
+              Use Recommendations to surface matches; users schedule under
+              Requests.
             </p>
           </div>
           {meetingCount > 0 && (
@@ -162,18 +165,20 @@ export default function MatchmakingPage() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-sm">
-            <span className="text-[var(--muted)]">Schedule date</span>
-            <Input
-              type="date"
+          <label className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
+            <span className="text-[var(--muted)]">Event date</span>
+            <EventDateChips
+              dates={eventSchedule.dates}
               value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
+              onChange={setScheduleDate}
             />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[var(--muted)]">Start</span>
             <Input
               type="time"
+              min={eventSchedule.activeStart}
+              max={eventSchedule.activeEnd}
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
             />
@@ -182,6 +187,8 @@ export default function MatchmakingPage() {
             <span className="text-[var(--muted)]">End</span>
             <Input
               type="time"
+              min={eventSchedule.activeStart}
+              max={eventSchedule.activeEnd}
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
             />
@@ -208,11 +215,11 @@ export default function MatchmakingPage() {
             />
             <span>
               <span className="font-medium">
-                Use AI to boost matching (Jev via OpenRouter)
+                Use AI to boost matching (Qwen 2.5 via OpenRouter)
               </span>
               <span className="mt-0.5 block text-[var(--muted)]">
-                Blends tag scores with semantic similarity on about / focus
-                events / services
+                Blends rule scores with model fit scores and plain-language
+                match reasons
                 {aiEnabled
                   ? ' (configured AI provider).'
                   : ' (local text similarity if AI is off).'}
@@ -224,18 +231,6 @@ export default function MatchmakingPage() {
           </Badge>
         </div>
 
-        {meetingCount > 0 && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-[var(--brand)]"
-              checked={forceRegenerate}
-              onChange={(e) => setForceRegenerate(e.target.checked)}
-            />
-            Replace existing meetings for this date
-          </label>
-        )}
-
         {error && (
           <p className="text-sm text-[var(--danger)]" role="alert">
             {error}
@@ -243,22 +238,9 @@ export default function MatchmakingPage() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            loading={startRun.isPending}
-            disabled={meetingCount > 0 && !forceRegenerate}
-            onClick={() => startRun.mutate()}
-          >
-            Run matchmaking
+          <Button loading={startRun.isPending} onClick={() => startRun.mutate()}>
+            Run scoring
           </Button>
-          {scheduleVersion && scheduleVersion.status !== 'PUBLISHED' && (
-            <Button
-              variant="outline"
-              loading={publish.isPending}
-              onClick={() => publish.mutate(scheduleVersion.id)}
-            >
-              Publish schedule
-            </Button>
-          )}
         </div>
       </Card>
 
@@ -270,8 +252,7 @@ export default function MatchmakingPage() {
             {run.data.config?.useAi && <Badge variant="success">AI</Badge>}
             <span className="text-sm text-[var(--muted)]">
               {String(run.data.scheduleDate).slice(0, 10)} ·{' '}
-              {run.data.candidates?.length ?? 0} candidates ·{' '}
-              {scheduleVersion?.meetings?.length ?? 0} meetings
+              {run.data.candidates?.length ?? 0} scored pairs
             </span>
           </div>
           <Table>

@@ -6,7 +6,7 @@
 | --- | --- |
 | **Document title** | System flows and matchmaking guide |
 | **Product** | Ethara Event Matchmaking |
-| **Audience** | Client stakeholders, product owners, and developers |
+| **Audience** | Investor stakeholders, product owners, and developers |
 | **Version** | 1.0 |
 | **Status** | Current |
 | **Related documents** | [Architecture](./ARCHITECTURE.md) · [Deployment](./DEPLOYMENT.md) · [Runbooks](./RUNBOOKS.md) |
@@ -22,7 +22,7 @@
 5. [End-to-end business flow](#5-end-to-end-business-flow)
 6. [Matchmaking explained](#6-matchmaking-explained)
 7. [Operator guide (admin)](#7-operator-guide-admin)
-8. [Participant guide (client & guest)](#8-participant-guide-client--guest)
+8. [Participant guide (investor & innovator)](#8-participant-guide-investor--innovator)
 9. [Technical overview for developers](#9-technical-overview-for-developers)
 10. [API & code reference](#10-api--code-reference)
 11. [Demo walkthrough](#11-demo-walkthrough)
@@ -33,7 +33,7 @@
 
 This document explains how the Ethara Event Matchmaking platform works so that:
 
-- **Clients and stakeholders** understand the business process, value, and how meetings are created.
+- **Investors and stakeholders** understand the business process, value, and how meetings are created.
 - **Operators (admins)** know the exact steps to configure an event, onboard participants, run matching, and publish schedules.
 - **Developers** understand architecture, data mapping, scoring logic, and where the code lives.
 
@@ -43,11 +43,11 @@ It describes the product as implemented today.
 
 ## 2. What the platform does
 
-The platform helps Ethara-style events connect **clients** (organizations seeking partnerships or services) with **guests** (partners, suppliers, rights-holders, talent, and service providers).
+The platform helps Ethara-style events connect **investors** (organizations seeking partnerships or services) with **innovators** (partners, suppliers, rights-holders, talent, and service providers).
 
 It supports:
 
-1. **Onboarding** — one Ethara-aligned profile form for both clients and guests.
+1. **Onboarding** — one Ethara-aligned profile form for both investors and innovators.
 2. **Matching** — scored suggestions based on event categories, venues, services, and commercial focus (optional AI boost).
 3. **Scheduling** — automatic meeting slots without double-booking.
 4. **Live networking** — meeting requests, QR exchange, and meet-now confirmations.
@@ -68,17 +68,17 @@ flowchart LR
 | Role | Description | Primary access |
 | --- | --- | --- |
 | **Admin / Operator** | Configures filters, forms, invites participants, runs matchmaking, publishes meetings | Web admin console |
-| **Client** | Organization looking for relevant guests to meet | Web client portal and mobile app |
-| **Guest** | Partner or provider available for meetings | Web guest workspace and mobile app |
+| **Investor** | Organization looking for relevant innovators to meet | Web investor portal and mobile app |
+| **Innovator** | Partner or provider available for meetings | Web innovator workspace and mobile app |
 | **Operations** | Adjusts meetings, overrides, jobs, and day-of logistics | Admin console |
 
 ### Naming used in the product
 
 | Shown in the UI | Meaning in the system |
 | --- | --- |
-| Client | Company organization |
-| Guest | Vendor organization |
-| Ethara onboarding form | Single shared profile form for clients and guests |
+| Investor | Company organization |
+| Innovator | Vendor organization |
+| Ethara onboarding form | Single shared profile form for investors and innovators |
 
 ---
 
@@ -90,7 +90,7 @@ flowchart LR
 | **Equivalence** | A link between related tags (for example Sports ↔ Motorsport) so they count as related in scoring |
 | **Onboarding form** | The Ethara profile questionnaire used for matching |
 | **Eligible profile** | Approved participant included in matchmaking |
-| **Match score** | Number from 0–100 explaining how well a client and guest fit |
+| **Match score** | Number from 0–100 explaining how well an investor and innovator fit |
 | **Matchmaking run** | One admin job that scores pairs and drafts a day’s schedule |
 | **Proposed meeting** | Draft meeting created by a run, not yet published |
 | **Confirmed meeting** | Published meeting visible to both parties |
@@ -134,7 +134,7 @@ Outcome: the event has a shared vocabulary for matching.
 
 **Path A — Admin invite**
 
-1. Admin invites a client or guest by email.
+1. Admin invites an investor or innovator by email.
 2. Participant receives an invitation.
 3. Participant registers and joins their organization.
 
@@ -142,13 +142,13 @@ Outcome: the event has a shared vocabulary for matching.
 
 1. Participant opens the public registration page.
 2. Verifies identity (OTP).
-3. Chooses client or guest role and submits the onboarding form.
+3. Chooses investor or innovator role and submits the onboarding form.
 
 Outcome: organizations and users exist in the system.
 
 ### Stage 3 — Complete onboarding
 
-**Owner:** Client or guest
+**Owner:** Investor or innovator
 
 Participants answer:
 
@@ -179,7 +179,7 @@ A profile is included in matchmaking when it is:
 - Active
 - Verified / approved
 - Marked matching-eligible
-- For guests: onboarding complete
+- For innovators: onboarding complete
 
 ### Stage 6 — Run matchmaking
 
@@ -189,7 +189,7 @@ A profile is included in matchmaking when it is:
 2. Optionally enable **Use AI to boost matching**.
 3. Start the run.
 
-The system scores every eligible client–guest pair, then places the best pairs into available time slots.
+The system scores every eligible investor–innovator pair, then places the best pairs into available time slots.
 
 ### Stage 7 — Preview
 
@@ -214,7 +214,7 @@ Publishing:
 
 ### Stage 9 — Live networking
 
-**Owners:** Clients and guests
+**Owners:** Investors and innovators
 
 During the event, participants can:
 
@@ -237,15 +237,15 @@ During the event, participants can:
 ```mermaid
 flowchart TB
   subgraph inputs [Inputs]
-    Clients[Eligible clients]
-    Guests[Eligible guests]
+    Investors[Eligible investors]
+    Innovators[Eligible innovators]
     Filters[Filters and tag equivalences]
     Weights[Matching weights]
     Config[Schedule config date time duration AI flag]
   end
 
   subgraph scoring [Scoring engine]
-    Pair[Build all client × guest pairs]
+    Pair[Build all investor × innovator pairs]
     Expand[Expand tags via equivalences]
     Dims[Score 6 dimensions]
     Det[Deterministic total 0–100]
@@ -267,8 +267,8 @@ flowchart TB
     Confirmed[Confirmed meetings and notifications]
   end
 
-  Clients --> Pair
-  Guests --> Pair
+  Investors --> Pair
+  Innovators --> Pair
   Filters --> Expand
   Weights --> Dims
   Config --> Slots
@@ -287,7 +287,7 @@ flowchart TB
 | Layer | Responsibility |
 | --- | --- |
 | Inputs | Eligible profiles, Ethara tags/equivalences, weights, run settings |
-| Scoring | Pair every client with every guest; tag overlap (+ optional AI blend) |
+| Scoring | Pair every investor with every innovator; tag overlap (+ optional AI blend) |
 | Scheduling | Place best pairs into free slots without double-booking |
 | Outputs | Candidates, proposed meetings → publish → confirmed + notify |
 
@@ -306,7 +306,7 @@ Matching is primarily **rules and tags**. AI is optional and only adjusts rankin
 
 ### 6.2 What data is compared
 
-| Profile area | Client meaning | Guest meaning |
+| Profile area | Investor meaning | Innovator meaning |
 | --- | --- | --- |
 | Categories | Preferred Ethara event / work types | Event / work types they represent |
 | Capabilities / services | What they need | What they offer |
@@ -323,20 +323,20 @@ Examples of Ethara-aligned tags:
 
 ### 6.3 How the score is calculated
 
-Each client–guest pair receives a weighted score. Default weights:
+Each investor–innovator pair receives a weighted score. Default weights:
 
 | Dimension | Weight | Plain-language meaning |
 | --- | --- | --- |
-| Capability | 30% | Do the guest’s skills match what the client needs? |
+| Capability | 30% | Do the innovator’s skills match what the investor needs? |
 | Industry | 20% | Are they in related industries? |
-| Requirements | 20% | Do needs align with guest categories or capabilities? |
+| Requirements | 20% | Do needs align with innovator categories or capabilities? |
 | Geography | 10% | Do preferred venues / locations overlap? |
 | Commercial | 10% | Do partnership types align? |
 | Preferences | 10% | Do preferred event categories match? |
 
 **Total score** = weighted sum of dimension scores (each dimension is 0–100).
 
-Related tags configured by admin (equivalences) expand matches. For example, a client interested in **Sports** can still score well against a guest tagged **Motorsport**.
+Related tags configured by admin (equivalences) expand matches. For example, an investor interested in **Sports** can still score well against an innovator tagged **Motorsport**.
 
 ### 6.4 Optional AI boost
 
@@ -354,16 +354,16 @@ After scoring:
 
 1. Eligible pairs above a minimum score are ranked highest first.
 2. The scheduler fills the day greedily:
-   - One meeting per client–guest pair
+   - One meeting per investor–innovator pair
    - No overlapping meetings for the same person
    - Respect meeting length, buffers, and breaks
-   - Prefer spacing between a guest’s consecutive meetings
+   - Prefer spacing between an innovator’s consecutive meetings
 3. Draft meetings are created as **Proposed**.
 4. After publish, they become **Confirmed**.
 
 ```mermaid
 flowchart TD
-  A[Load eligible clients and guests] --> B[Score every pair]
+  A[Load eligible investors and innovators] --> B[Score every pair]
   B --> C{AI enabled?}
   C -->|Yes| D[Blend AI similarity]
   C -->|No| E[Keep tag score]
@@ -394,7 +394,7 @@ flowchart TD
 2. **Forms** — confirm only **Ethara onboarding form** is published  
 3. **Places** — add rooms / tables if meetings are in person  
 4. **Settings** — meeting window dates, duration, AI flags if needed  
-5. **Clients / Guests** — invite or import participants  
+5. **Investors / Innovators** — invite or import participants  
 6. **Review submissions** — approve eligible profiles  
 7. **Matchmaking** — run, preview, publish  
 8. **Meetings** — monitor calendar and day-of changes  
@@ -404,8 +404,8 @@ flowchart TD
 | Menu | Purpose |
 | --- | --- |
 | Overview | Event snapshot |
-| Client | Invite and manage clients |
-| Guests | Invite and manage guests |
+| Investor | Invite and manage investors |
+| Innovators | Invite and manage innovators |
 | Forms | Onboarding form builder and directory |
 | Filters | Tags and dimensions |
 | Matchmaking | Run matching, AI option, tag mappings |
@@ -428,7 +428,7 @@ flowchart TD
 
 ---
 
-## 8. Participant guide (client & guest)
+## 8. Participant guide (investor & innovator)
 
 ### 8.1 First-time journey
 
@@ -440,9 +440,9 @@ flowchart TD
 
 ### 8.2 Where to go
 
-| Need | Client | Guest |
+| Need | Investor | Innovator |
 | --- | --- | --- |
-| Home overview | Client portal home | Guest workspace home |
+| Home overview | Investor portal home | Innovator workspace home |
 | Complete profile | Onboarding | Forms |
 | Suggested people | Home / Discover (mobile) | Home / Discover (mobile) |
 | Meeting requests | Requests | Requests |
@@ -464,7 +464,7 @@ flowchart TD
 
 | Component | Location | Responsibility |
 | --- | --- | --- |
-| Web application | `apps/web` | Admin, client portal, guest workspace, public pages |
+| Web application | `apps/web` | Admin, investor portal, innovator workspace, public pages |
 | API | `apps/api` | REST API, matchmaking orchestration, auth, forms |
 | Worker | `apps/worker` | Async invitations, notifications, corrections |
 | Mobile | `mobile/` | Flutter app (home, discover, requests, meetings, QR) |
@@ -478,9 +478,9 @@ Supporting infrastructure: PostgreSQL, Redis, RabbitMQ.
 
 ```mermaid
 flowchart TB
-  subgraph surfaces [Client surfaces]
+  subgraph surfaces [Investor surfaces]
     AdminUI[Admin web]
-    PortalUI[Client / Guest web]
+    PortalUI[Investor / Innovator web]
     App[Mobile app]
   end
   subgraph services [Services]
@@ -506,7 +506,7 @@ flowchart TB
 
 Form code: `ETHARA_ONBOARDING`
 
-| Form field key | Client storage | Guest storage |
+| Form field key | Investor storage | Innovator storage |
 | --- | --- | --- |
 | `categories` | `Company.preferredCategories` | `Vendor.categories` |
 | `capabilities` | `Company.requiredCapabilities` | `Vendor.capabilities` |
@@ -521,7 +521,7 @@ Sync entry point: `FormsService.normalizeProfile` in `apps/api/src/forms/forms.s
 
 1. `POST /matchmaking/runs` validates `scheduleConfigSchema` (includes `useAi`).
 2. `MatchmakingService.processRun`:
-   - Loads eligible clients and guests
+   - Loads eligible investors and innovators
    - Loads tag equivalences
    - Scores each pair via `calculateMatchScore`
    - Optionally blends AI semantic similarity
@@ -596,8 +596,8 @@ Default `blendWeight` ≈ `0.3` (`ai.matchmakingBlendWeight`).
 | Audience | Routes |
 | --- | --- |
 | Admin | `/admin`, `/admin/companies`, `/admin/vendors`, `/admin/forms`, `/admin/filters`, `/admin/matchmaking`, `/admin/meetings`, `/admin/places`, `/admin/settings` |
-| Client | `/portal`, `/portal/onboarding`, `/portal/requests`, `/portal/meetings`, `/portal/qr` |
-| Guest | `/vendor`, `/vendor/forms`, `/vendor/requests`, `/vendor/meetings`, `/vendor/qr` |
+| Investor | `/portal`, `/portal/onboarding`, `/portal/requests`, `/portal/meetings`, `/portal/qr` |
+| Innovator | `/vendor`, `/vendor/forms`, `/vendor/requests`, `/vendor/meetings`, `/vendor/qr` |
 | Public | `/login`, `/register`, `/register/event`, `/qr/[code]` |
 
 ---
@@ -609,7 +609,7 @@ Use this checklist when presenting the product.
 1. Seed demo data: `npm run db:seed:ethara`
 2. Confirm **Forms** shows **Ethara onboarding form** only.
 3. Confirm **Filters** include Ethara categories, services, and venues.
-4. Sign in as a seeded client and guest; profiles should already be eligible.
+4. Sign in as a seeded investor and innovator; profiles should already be eligible.
 5. As admin, open **Matchmaking**, choose a date, optionally enable AI, and run.
 6. Review scores and explanations, then publish.
 7. Show **Meetings** calendar and participant agendas.

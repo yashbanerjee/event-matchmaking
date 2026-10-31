@@ -14,4 +14,13 @@ describe('meeting transitions', () => {
   it('rejects completed -> confirmed', () => {
     assert.equal(canTransition('COMPLETED', 'CONFIRMED'), false);
   });
+
+  it('allows confirmed or awaiting -> in progress', () => {
+    assert.equal(canTransition('CONFIRMED', 'IN_PROGRESS'), true);
+    assert.equal(canTransition('AWAITING_CONFIRMATION', 'IN_PROGRESS'), true);
+  });
+
+  it('allows in progress -> completed', () => {
+    assert.equal(canTransition('IN_PROGRESS', 'COMPLETED'), true);
+  });
 });

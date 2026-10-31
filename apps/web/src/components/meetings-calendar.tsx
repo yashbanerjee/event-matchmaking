@@ -1,10 +1,21 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EventDateChips } from '@/components/event-date-chips';
 import { MeetingPlaceLink } from '@/components/meeting-place-link';
+import { apiFetch } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth-store';
+import {
+  formatEventDate,
+  hourFromHm,
+  normalizeEventSchedule,
+  parseYmdLocal,
+  type EventSchedule,
+} from '@/lib/event-schedule';
 import { cn } from '@/lib/utils';
 import { statusTone } from '@/lib/status';
 
@@ -25,17 +36,13 @@ export type CalendarEvent = {
   meta?: Record<string, string | null | undefined>;
 };
 
-type ViewMode = 'month' | 'week' | 'day';
-
-const WEEKDAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const HOUR_START = 7;
-const HOUR_END = 21;
-const HOURS = Array.from(
-  { length: HOUR_END - HOUR_START },
-  (_, i) => HOUR_START + i,
-);
 const HOUR_PX = 56;
+
+function hourRange(start: number, end: number) {
+  const from = Math.max(0, Math.min(23, start));
+  const to = Math.max(from + 1, Math.min(24, end));
+  return Array.from({ length: to - from }, (_, i) => from + i);
+}
 
 function startOfDay(date: Date) {
   const next = new Date(date);
@@ -49,41 +56,12 @@ function endOfDay(date: Date) {
   return next;
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function startOfWeek(date: Date) {
-  const next = startOfDay(date);
-  next.setDate(next.getDate() - next.getDay());
-  return next;
-}
-
 function sameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
-}
-
-function formatMonthTitle(date: Date) {
-  return date.toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-function formatWeekTitle(anchor: Date, days = 7) {
-  const start = startOfWeek(anchor);
-  const end = addDays(start, days - 1);
-  const sameMonth = start.getMonth() === end.getMonth();
-  if (sameMonth) {
-    return `${start.toLocaleDateString(undefined, { month: 'long' })} ${start.getDate()} – ${end.getDate()}, ${end.getFullYear()}`;
-  }
-  return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
 function formatDayTitle(date: Date) {
@@ -176,11 +154,16 @@ function eventsForDay(events: CalendarEvent[], day: Date) {
     );
 }
 
-function positionInDay(event: CalendarEvent, day: Date) {
+function positionInDay(
+  event: CalendarEvent,
+  day: Date,
+  hourStart: number,
+  hourEnd: number,
+) {
   const dayStart = new Date(day);
-  dayStart.setHours(HOUR_START, 0, 0, 0);
+  dayStart.setHours(hourStart, 0, 0, 0);
   const dayEnd = new Date(day);
-  dayEnd.setHours(HOUR_END, 0, 0, 0);
+  dayEnd.setHours(hourEnd, 0, 0, 0);
   const total = dayEnd.getTime() - dayStart.getTime();
   const start = Math.max(new Date(event.startsAt).getTime(), dayStart.getTime());
   const end = Math.min(eventEnd(event).getTime(), dayEnd.getTime());
@@ -190,7 +173,12 @@ function positionInDay(event: CalendarEvent, day: Date) {
 }
 
 /** Pack overlapping events into columns so week/day grids stay readable. */
-function layoutDayEvents(events: CalendarEvent[], day: Date) {
+function layoutDayEvents(
+  events: CalendarEvent[],
+  day: Date,
+  hourStart: number,
+  hourEnd: number,
+) {
   const timed = events.map((event) => {
     const start = new Date(event.startsAt).getTime();
     const end = eventEnd(event).getTime();
@@ -232,17 +220,17 @@ function layoutDayEvents(events: CalendarEvent[], day: Date) {
   flush();
   return placed.map((item) => ({
     ...item,
-    ...positionInDay(item.event, day),
+    ...positionInDay(item.event, day, hourStart, hourEnd),
   }));
 }
 
-function nowOffsetPercent(day: Date) {
+function nowOffsetPercent(day: Date, hourStart: number, hourEnd: number) {
   const now = new Date();
   if (!sameDay(now, day)) return null;
   const dayStart = new Date(day);
-  dayStart.setHours(HOUR_START, 0, 0, 0);
+  dayStart.setHours(hourStart, 0, 0, 0);
   const dayEnd = new Date(day);
-  dayEnd.setHours(HOUR_END, 0, 0, 0);
+  dayEnd.setHours(hourEnd, 0, 0, 0);
   if (now < dayStart || now > dayEnd) return null;
   return (
     ((now.getTime() - dayStart.getTime()) /
@@ -440,6 +428,8 @@ function TimeGrid({
   onPick,
   onSelectDay,
   compactMobile,
+  hourStart,
+  hourEnd,
 }: {
   days: Date[];
   events: CalendarEvent[];
@@ -448,23 +438,26 @@ function TimeGrid({
   onPick: (event: CalendarEvent) => void;
   onSelectDay?: (day: Date) => void;
   compactMobile?: boolean;
+  hourStart: number;
+  hourEnd: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
+  const hours = hourRange(hourStart, hourEnd);
 
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
     const focusDay = days.find((d) => sameDay(d, today)) ?? days[0];
     if (!focusDay) return;
-    const pct = nowOffsetPercent(focusDay);
+    const pct = nowOffsetPercent(focusDay, hourStart, hourEnd);
     if (pct == null) {
-      node.scrollTop = Math.max(0, 3 * HOUR_PX);
+      node.scrollTop = 0;
       return;
     }
-    const totalHeight = (HOUR_END - HOUR_START) * HOUR_PX;
+    const totalHeight = (hourEnd - hourStart) * HOUR_PX;
     node.scrollTop = Math.max(0, (pct / 100) * totalHeight - node.clientHeight / 3);
-  }, [days, today]);
+  }, [days, today, hourStart, hourEnd]);
 
   return (
     <div
@@ -546,7 +539,7 @@ function TimeGrid({
         })}
 
         <div className="relative border-r border-[var(--border)] bg-[var(--card-elevated)]/40">
-          {HOURS.map((hour) => (
+          {hours.map((hour) => (
             <div
               key={hour}
               className="border-b border-[var(--border)]/80 pr-1.5 text-right text-[10px] tabular-nums text-[var(--muted)]"
@@ -562,8 +555,13 @@ function TimeGrid({
         </div>
 
         {days.map((day) => {
-          const laidOut = layoutDayEvents(eventsForDay(events, day), day);
-          const nowPct = nowOffsetPercent(day);
+          const laidOut = layoutDayEvents(
+            eventsForDay(events, day),
+            day,
+            hourStart,
+            hourEnd,
+          );
+          const nowPct = nowOffsetPercent(day, hourStart, hourEnd);
           const isToday = sameDay(day, today);
           return (
             <div
@@ -573,7 +571,7 @@ function TimeGrid({
                 isToday && 'bg-[var(--accent-soft)]/15',
               )}
             >
-              {HOURS.map((hour) => (
+              {hours.map((hour) => (
                 <div
                   key={hour}
                   className="border-b border-[var(--border)]/70"
@@ -653,415 +651,133 @@ export function MeetingsCalendar({
   events: CalendarEvent[];
   onSelectEvent?: (event: CalendarEvent) => void;
   className?: string;
-  /** Admin: leaner chrome — no legend, week agenda strip, or empty details pane */
+  /** Admin: leaner chrome — no empty details pane */
   variant?: 'default' | 'admin';
 }) {
   const lean = variant === 'admin';
-  const [view, setView] = useState<ViewMode>('month');
-  const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const today = startOfDay(new Date());
+  const [selectedYmd, setSelectedYmd] = useState<string>('');
+  const today = useMemo(() => startOfDay(new Date()), []);
+
+  const scheduleQuery = useQuery({
+    queryKey: ['meeting-booking-window'],
+    queryFn: () =>
+      apiFetch<EventSchedule>('/meeting-requests/booking-window', {
+        token: getAccessToken(),
+      }),
+  });
+  const schedule = normalizeEventSchedule(scheduleQuery.data);
+  const eventDays = schedule.dates.map(parseYmdLocal);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
-    const apply = () => {
-      setIsMobile(mq.matches);
-      if (mq.matches) {
-        setView((current) => (current === 'week' ? 'day' : current));
-      }
-    };
+    const apply = () => setIsMobile(mq.matches);
     apply();
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
+
+  useEffect(() => {
+    if (selectedYmd && schedule.dates.includes(selectedYmd)) return;
+    const todayYmd = schedule.dates.find((ymd) => sameDay(parseYmdLocal(ymd), today));
+    setSelectedYmd(todayYmd ?? schedule.dates[0] ?? '');
+  }, [schedule.dates, selectedYmd, today]);
 
   const selected = useMemo(
     () => events.find((event) => event.id === selectedId) ?? null,
     [events, selectedId],
   );
 
-  const title =
-    view === 'month'
-      ? formatMonthTitle(cursor)
-      : view === 'week'
-        ? formatWeekTitle(cursor, isMobile ? 3 : 7)
-        : formatDayTitle(cursor);
+  const selectedDay =
+    eventDays.find((day, index) => schedule.dates[index] === selectedYmd) ??
+    eventDays[0] ??
+    today;
 
-  const monthCells = useMemo(() => {
-    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const gridStart = startOfWeek(first);
-    return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
-  }, [cursor]);
-
-  const weekDays = useMemo(() => {
-    if (isMobile) {
-      // Google-style compact 3-day strip centered on cursor
-      return Array.from({ length: 3 }, (_, index) => addDays(cursor, index));
-    }
-    const start = startOfWeek(cursor);
-    return Array.from({ length: 7 }, (_, index) => addDays(start, index));
-  }, [cursor, isMobile]);
-
-  function goToday() {
-    setCursor(startOfDay(new Date()));
-  }
-
-  function goPrev() {
-    if (view === 'month') {
-      setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1));
-      return;
-    }
-    if (view === 'week') {
-      setCursor(addDays(cursor, isMobile ? -3 : -7));
-      return;
-    }
-    setCursor(addDays(cursor, -1));
-  }
-
-  function goNext() {
-    if (view === 'month') {
-      setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1));
-      return;
-    }
-    if (view === 'week') {
-      setCursor(addDays(cursor, isMobile ? 3 : 7));
-      return;
-    }
-    setCursor(addDays(cursor, 1));
-  }
+  const hourStart = hourFromHm(schedule.activeStart, 9);
+  const hourEnd = Math.max(hourStart + 1, hourFromHm(schedule.activeEnd, 17));
+  const gridDays = isMobile ? [selectedDay] : eventDays;
 
   function pickEvent(event: CalendarEvent) {
     setSelectedId(event.id);
     onSelectEvent?.(event);
   }
 
-  const mobileViews: ViewMode[] = isMobile
-    ? ['day', 'week', 'month']
-    : ['month', 'week', 'day'];
-
-  const visibleRangeEvents =
-    view === 'month'
-      ? events.filter((event) => {
-          const d = new Date(event.startsAt);
-          return (
-            d.getMonth() === cursor.getMonth() &&
-            d.getFullYear() === cursor.getFullYear()
-          );
-        }).length
-      : view === 'week'
-        ? weekDays.reduce((n, day) => n + eventsForDay(events, day).length, 0)
-        : eventsForDay(events, cursor).length;
+  const visibleCount = eventDays.reduce(
+    (n, day) => n + eventsForDay(events, day).length,
+    0,
+  );
 
   return (
     <div className={cn('space-y-3 md:space-y-4', className)}>
       <div
         className={cn(
-          'z-10 flex flex-wrap items-center gap-2',
+          'z-10 space-y-3',
           !lean &&
             'rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-3 py-3 shadow-[0_8px_24px_rgba(10,10,10,0.05)] backdrop-blur-md',
         )}
       >
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 rounded-full px-3"
-          onClick={goToday}
-        >
-          Today
-        </Button>
-        <div className="flex items-center rounded-full border border-[var(--border)] bg-white">
-          <button
-            type="button"
-            aria-label="Previous"
-            className="rounded-l-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
-            onClick={goPrev}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next"
-            className="rounded-r-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
-            onClick={goNext}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <h3 className="h-display min-w-0 flex-1 truncate text-base font-semibold tracking-tight md:text-lg">
-          {title}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="h-display min-w-0 text-base font-semibold tracking-tight md:text-lg">
+            Event days
+            {!lean ? (
+              <span className="ml-2 text-xs font-medium text-[var(--muted)]">
+                {visibleCount} item{visibleCount === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </h3>
           {!lean ? (
-            <span className="ml-2 text-xs font-medium text-[var(--muted)]">
-              {visibleRangeEvents} item{visibleRangeEvents === 1 ? '' : 's'}
-            </span>
+            <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />{' '}
+                Meeting
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Request
+              </span>
+            </div>
           ) : null}
-        </h3>
-        {!lean ? (
-          <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />{' '}
-              Meeting
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Request
-            </span>
-          </div>
-        ) : null}
-        <div className="inline-flex rounded-full border border-[var(--border)] bg-[var(--card-elevated)] p-0.5">
-          {mobileViews.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setView(mode)}
-              className={cn(
-                'rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition-colors',
-                view === mode
-                  ? 'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--foreground)]',
-              )}
-            >
-              {isMobile && mode === 'week' ? '3 days' : mode}
-            </button>
-          ))}
         </div>
+        <p className="text-xs text-[var(--muted)]">
+          {schedule.dates.map((ymd) => formatEventDate(ymd, 'short')).join(' · ')}
+          {' · '}
+          {schedule.activeStart}–{schedule.activeEnd}
+        </p>
+        <EventDateChips
+          dates={schedule.dates}
+          value={selectedYmd}
+          onChange={setSelectedYmd}
+        />
       </div>
 
-      {/* Month view */}
-      {view === 'month' ? (
-        <div className="space-y-3">
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_10px_28px_rgba(10,10,10,0.05)]">
-            <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--card-elevated)]/90">
-              {(isMobile ? WEEKDAYS_SHORT : WEEKDAYS).map((day, index) => (
-                <div
-                  key={`${day}-${index}`}
-                  className="px-1 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] md:text-[11px]"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {monthCells.map((day) => {
-                const inMonth = day.getMonth() === cursor.getMonth();
-                const isToday = sameDay(day, today);
-                const isSelected = sameDay(day, cursor);
-                const dayEvents = eventsForDay(events, day);
-                const previewLimit = isMobile ? 0 : dayEvents.length > 4 ? 2 : 3;
-                return (
-                  <button
-                    key={day.toISOString()}
-                    type="button"
-                    onClick={() => {
-                      setCursor(day);
-                      if (isMobile) return;
-                      setView('day');
-                    }}
-                    onDoubleClick={() => {
-                      setCursor(day);
-                      setView('day');
-                    }}
-                    className={cn(
-                      'relative border-b border-r border-[var(--border)] text-left transition-colors',
-                      isMobile
-                        ? 'flex min-h-[3.25rem] flex-col items-center justify-start gap-1 px-0.5 py-1.5'
-                        : 'min-h-24 p-1.5 align-top hover:bg-[var(--highlight-soft)]/55 sm:min-h-[7.25rem]',
-                      !inMonth && 'bg-[var(--card-elevated)]/70 text-[var(--muted)]',
-                      isSelected && isMobile && 'bg-[var(--accent-soft)]/50',
-                      isToday && !isMobile && 'bg-[var(--accent-soft)]/40',
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'flex w-full items-center',
-                        isMobile ? 'justify-center' : 'justify-between gap-1',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'inline-flex items-center justify-center rounded-full text-xs font-semibold',
-                          isMobile ? 'h-7 w-7' : 'h-6 w-6',
-                          isToday &&
-                            'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm',
-                          isSelected &&
-                            !isToday &&
-                            isMobile &&
-                            'bg-black/90 text-white',
-                        )}
-                      >
-                        {day.getDate()}
-                      </span>
-                      {!isMobile && dayEvents.length > 0 ? (
-                        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[var(--muted)]">
-                          {dayEvents.length}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {isMobile ? (
-                      <div className="flex max-w-full flex-wrap justify-center gap-0.5">
-                        {dayEvents.slice(0, 4).map((event) => (
-                          <span
-                            key={event.id}
-                            className={cn(
-                              'h-1.5 w-1.5 rounded-full',
-                              eventColor(event).dot,
-                            )}
-                          />
-                        ))}
-                        {dayEvents.length > 4 ? (
-                          <span className="text-[8px] leading-none text-[var(--muted)]">
-                            +
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="mt-1 space-y-1">
-                        {dayEvents.slice(0, previewLimit).map((event) => {
-                          const colors = eventColor(event);
-                          return (
-                            <div
-                              key={event.id}
-                              role="presentation"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                pickEvent(event);
-                              }}
-                              className={cn(
-                                'flex items-start gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-tight sm:text-[11px]',
-                                colors.bg,
-                                colors.border,
-                                colors.text,
-                              )}
-                              title={`${formatTime(event.startsAt)} ${event.title}`}
-                            >
-                              <span
-                                className={cn(
-                                  'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                                  colors.dot,
-                                )}
-                              />
-                              <span className="min-w-0 truncate">
-                                <span className="font-semibold tabular-nums opacity-80">
-                                  {formatTime(event.startsAt)}
-                                </span>{' '}
-                                {event.title}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        {dayEvents.length > previewLimit ? (
-                          <p className="px-0.5 text-[10px] font-medium text-[var(--muted)]">
-                            +{dayEvents.length - previewLimit} more · open day
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Agenda under month — always on mobile; desktop when day selected via count */}
-          {isMobile ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <p className="text-sm font-semibold">
-                  {sameDay(cursor, today) ? 'Today' : formatDayTitle(cursor)}
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 rounded-full"
-                  onClick={() => setView('day')}
-                >
-                  Day timeline
-                </Button>
-              </div>
-              <DayAgendaList
-                day={cursor}
-                events={events}
-                selectedId={selectedId}
-                onPick={pickEvent}
-              />
-            </div>
-          ) : null}
-        </div>
+      {eventDays.length > 0 ? (
+        <TimeGrid
+          days={gridDays}
+          events={events}
+          selectedId={selectedId}
+          selectedDay={selectedDay}
+          onPick={pickEvent}
+          onSelectDay={(day) => {
+            const match = schedule.dates.find((ymd) =>
+              sameDay(parseYmdLocal(ymd), day),
+            );
+            if (match) setSelectedYmd(match);
+          }}
+          compactMobile={isMobile}
+          hourStart={hourStart}
+          hourEnd={hourEnd}
+        />
       ) : null}
 
-      {/* Week / Day time grids + readable agenda for the focused day */}
-      {view === 'week' || view === 'day' ? (
-        <div className="space-y-3">
-          <TimeGrid
-            days={view === 'day' ? [cursor] : weekDays}
-            events={events}
-            selectedId={selectedId}
-            selectedDay={cursor}
-            onPick={pickEvent}
-            onSelectDay={view === 'week' ? setCursor : undefined}
-            compactMobile={isMobile}
-          />
-          {view === 'week' && !lean ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-white p-3 shadow-[0_8px_24px_rgba(10,10,10,0.04)] sm:p-4">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold">
-                  Agenda ·{' '}
-                  {sameDay(cursor, today) ? 'Today' : formatDayTitle(cursor)}
-                </p>
-                <p className="text-xs text-[var(--muted)]">
-                  Tap a day column header to switch this list
-                </p>
-              </div>
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {weekDays.map((day) => {
-                  const count = eventsForDay(events, day).length;
-                  const isActive = sameDay(day, cursor);
-                  const isToday = sameDay(day, today);
-                  return (
-                    <button
-                      key={day.toISOString()}
-                      type="button"
-                      onClick={() => setCursor(day)}
-                      className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
-                        isActive
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                          : 'border-[var(--border)] bg-[var(--card-elevated)] hover:border-[var(--accent)]/40',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          isToday && 'text-[var(--accent-hover)]',
-                        )}
-                      >
-                        {day.toLocaleDateString(undefined, {
-                          weekday: 'short',
-                        })}{' '}
-                        {day.getDate()}
-                      </span>
-                      {count > 0 ? (
-                        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] tabular-nums">
-                          {count}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-              <DayAgendaList
-                day={cursor}
-                events={events}
-                selectedId={selectedId}
-                onPick={pickEvent}
-              />
-            </div>
-          ) : null}
-        </div>
+      {isMobile || !lean ? (
+        <DayAgendaList
+          day={selectedDay}
+          events={events}
+          selectedId={selectedId}
+          onPick={pickEvent}
+        />
       ) : null}
 
-      {/* Details: skip empty pane in admin; show only when something is selected */}
       {(lean ? Boolean(selected) : selected || !isMobile) ? (
         <EventDetails
           selected={selected}
@@ -1128,8 +844,8 @@ export function toCalendarEvents(input: {
       longitude: m.place?.longitude ?? null,
       mapAddress: m.place?.mapAddress ?? null,
       meta: {
-        Client: m.companyOrg.name,
-        Guest: m.vendorOrg.name,
+        Investor: m.companyOrg.name,
+        Innovator: m.vendorOrg.name,
         ...(m.location || m.place?.name || m.venue
           ? {
               'Meeting place':

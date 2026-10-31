@@ -6,10 +6,55 @@ import {
   type SettingFieldDef,
 } from './integration-settings.catalog';
 
+const EVENT_TIME_ZONE = 'Asia/Dubai';
+const DEFAULT_EVENT_DATES = ['2026-12-07', '2026-12-08', '2026-12-09'];
+const DEFAULT_ACTIVE_START = '09:00';
+const DEFAULT_ACTIVE_END = '17:00';
+
 export type MeetingBookingWindow = {
   start: string | null;
   end: string | null;
+  dates: string[];
+  activeStart: string;
+  activeEnd: string;
 };
+
+function parseEventDates(raw: string): string[] {
+  const dates = raw
+    .split(/[,\n]/)
+    .map((part) => part.trim())
+    .filter((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+  return [...new Set(dates)].sort();
+}
+
+function parseHm(value: string): number {
+  if (!/^\d{2}:\d{2}$/.test(value)) return NaN;
+  const [hour, minute] = value.split(':').map(Number) as [number, number];
+  return hour * 60 + minute;
+}
+
+function formatInTimeZone(instant: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+function minutesInTimeZone(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0);
+  const minute = Number(
+    parts.find((part) => part.type === 'minute')?.value ?? 0,
+  );
+  return hour * 60 + minute;
+}
 
 /**
  * Resolves Admin → System Settings over code/env bootstrap defaults.
@@ -60,13 +105,36 @@ export class EffectiveConfigService {
     return Number.isFinite(n) ? n : fallback;
   }
 
-  /** Inclusive YYYY-MM-DD booking period configured in Admin → Operations. */
+  /** Event days and active hours configured in Admin → Event dates. */
   async getMeetingBookingWindow(): Promise<MeetingBookingWindow> {
+    const datesRaw = (await this.getString('ops.eventDates', '')).trim();
+    const dates = parseEventDates(datesRaw);
+    const resolvedDates = dates.length > 0 ? dates : DEFAULT_EVENT_DATES;
     const startRaw = (await this.getString('ops.meetingWindowStart', '')).trim();
     const endRaw = (await this.getString('ops.meetingWindowEnd', '')).trim();
-    const start = /^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : null;
-    const end = /^\d{4}-\d{2}-\d{2}$/.test(endRaw) ? endRaw : null;
-    return { start, end };
+    const start =
+      resolvedDates[0] ??
+      (/^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : null);
+    const end =
+      resolvedDates[resolvedDates.length - 1] ??
+      (/^\d{4}-\d{2}-\d{2}$/.test(endRaw) ? endRaw : null);
+    const activeStartRaw = (
+      await this.getString('ops.eventActiveStart', DEFAULT_ACTIVE_START)
+    ).trim();
+    const activeEndRaw = (
+      await this.getString('ops.eventActiveEnd', DEFAULT_ACTIVE_END)
+    ).trim();
+    return {
+      start,
+      end,
+      dates: resolvedDates,
+      activeStart: /^\d{2}:\d{2}$/.test(activeStartRaw)
+        ? activeStartRaw
+        : DEFAULT_ACTIVE_START,
+      activeEnd: /^\d{2}:\d{2}$/.test(activeEndRaw)
+        ? activeEndRaw
+        : DEFAULT_ACTIVE_END,
+    };
   }
 
   assertDateInMeetingWindow(
@@ -75,6 +143,11 @@ export class EffectiveConfigService {
   ): void {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) {
       throw new BadRequestException('date must be YYYY-MM-DD');
+    }
+    if (window.dates.length > 0 && !window.dates.includes(dateYmd)) {
+      throw new BadRequestException(
+        `Meetings can only be booked on event dates: ${window.dates.join(', ')}`,
+      );
     }
     if (window.start && dateYmd < window.start) {
       throw new BadRequestException(
@@ -91,12 +164,30 @@ export class EffectiveConfigService {
   assertInstantInMeetingWindow(
     instant: Date,
     window: MeetingBookingWindow,
+    durationMinutes = 0,
   ): void {
     if (Number.isNaN(instant.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
-    const ymd = instant.toISOString().slice(0, 10);
+    const ymd = formatInTimeZone(instant, EVENT_TIME_ZONE);
     this.assertDateInMeetingWindow(ymd, window);
+
+    const startMin = parseHm(window.activeStart);
+    const endMin = parseHm(window.activeEnd);
+    if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return;
+
+    const minutes = minutesInTimeZone(instant, EVENT_TIME_ZONE);
+    if (minutes < startMin) {
+      throw new BadRequestException(
+        `Meetings can only start from ${window.activeStart} (event time)`,
+      );
+    }
+    const latestStart = Math.max(startMin, endMin - Math.max(0, durationMinutes));
+    if (minutes >= endMin || (durationMinutes > 0 && minutes > latestStart)) {
+      throw new BadRequestException(
+        `Meetings must finish by ${window.activeEnd} (event time)`,
+      );
+    }
   }
 
   envFallback(field: SettingFieldDef): unknown {

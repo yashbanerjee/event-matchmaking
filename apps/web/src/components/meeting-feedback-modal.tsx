@@ -239,7 +239,9 @@ export function meetingHasEnded(meeting: {
   startsAt: string;
   status: string;
 }) {
-  if (['CANCELLED', 'NO_SHOW'].includes(meeting.status)) return false;
+  if (['CANCELLED', 'NO_SHOW', 'IN_PROGRESS'].includes(meeting.status)) {
+    return false;
+  }
   if (meeting.status === 'COMPLETED') return true;
   const end = meeting.endsAt
     ? new Date(meeting.endsAt)

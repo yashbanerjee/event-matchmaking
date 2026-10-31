@@ -24,6 +24,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EnvService } from '../config/env.service';
 import { EmailService } from '../integrations/email/email.service';
 import { AuthService } from '../auth/auth.service';
+import { FormsService } from '../forms/forms.service';
 import { hashToken, timingSafeEqualHex } from '../common/crypto.util';
 
 const OTP_TTL_MS = 10 * 60_000;
@@ -39,6 +40,7 @@ export class RegistrationService {
     private readonly email: EmailService,
     private readonly jwt: JwtService,
     private readonly auth: AuthService,
+    private readonly forms: FormsService,
   ) {}
 
   async getPublicConfig() {
@@ -287,7 +289,7 @@ export class RegistrationService {
     const orgType = registration.role === 'CLIENT' ? 'COMPANY' : 'VENDOR';
     const roleCode =
       registration.role === 'CLIENT' ? 'COMPANY_USER' : 'VENDOR_USER';
-    const roleLabel = registration.role === 'CLIENT' ? 'Client' : 'Guest';
+    const roleLabel = registration.role === 'CLIENT' ? 'Investor' : 'Innovator';
     const name =
       registration.organizationName?.trim() ||
       `${input.firstName} ${input.lastName}`.trim() ||
@@ -464,6 +466,8 @@ export class RegistrationService {
       });
     }
 
+    await this.forms.normalizeProfile(created.submission.id);
+
     return this.auth.createSessionForUser(created.user.id, email);
   }
 
@@ -488,8 +492,8 @@ export class RegistrationService {
           sectionId,
           order: maxOrder + 1,
           options: [
-            { value: 'CLIENT', label: 'Client' },
-            { value: 'GUEST', label: 'Guest' },
+            { value: 'CLIENT', label: 'Investor' },
+            { value: 'GUEST', label: 'Innovator' },
           ],
         },
       ],

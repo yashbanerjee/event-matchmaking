@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { VendorShell } from '@/components/vendor-shell';
@@ -15,20 +15,17 @@ export default function VendorLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!getAccessToken()) {
       router.replace('/login');
       return;
     }
-    setReady(true);
     void ensurePushSubscription();
   }, [router]);
 
   const me = useQuery({
     queryKey: ['me'],
-    enabled: ready,
     queryFn: () =>
       apiFetch<{
         email: string;
@@ -50,13 +47,8 @@ export default function VendorLayout({
 
   const onboarding = useQuery({
     queryKey: ['portal-onboarding'],
-    enabled: ready,
     queryFn: () => fetchOnboarding(),
   });
-
-  if (!ready || me.isLoading) {
-    return <div className="p-8 text-sm text-[var(--muted)]">Loading…</div>;
-  }
 
   return (
     <VendorShell

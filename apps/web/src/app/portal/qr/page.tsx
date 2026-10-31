@@ -43,7 +43,7 @@ export default function PortalQrPage() {
       pendingForms={onboarding.data?.pendingCount}
     >
       <PageHeader
-        eyebrow="Client workspace"
+        eyebrow="Investor workspace"
         title="QR meeting exchange"
         description="Save or share your QR, then scan a partner to view their public profile and book a meeting."
       />

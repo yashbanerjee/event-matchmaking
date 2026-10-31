@@ -217,6 +217,7 @@ model User {
   auditLogs             AuditLog[]
   passwordResetTokens   PasswordResetToken[]
   pushSubscriptions     PushSubscription[]
+  investorPlaceAssignments InvestorPlaceAssignment[]
 
   @@index([status])
   @@map("users")
@@ -392,6 +393,7 @@ model Organization {
   availabilityWindows AvailabilityWindow[]
   peerRecommendationsFrom OrgPeerRecommendation[] @relation("PeerRecFrom")
   peerRecommendationsTo   OrgPeerRecommendation[] @relation("PeerRecTo")
+  placeAssignments    InvestorPlaceAssignment[]
 
   @@index([type, status])
   @@index([name])
@@ -835,9 +837,32 @@ model Place {
 
   meetings        Meeting[]
   meetingRequests MeetingRequest[]
+  investorAssignments InvestorPlaceAssignment[]
 
   @@index([isActive, name])
   @@map("places")
+}
+
+/// Investor home table for a day or time window. Meetings in that window use this place.
+model InvestorPlaceAssignment {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  placeId        String   @db.Uuid
+  startsAt       DateTime
+  endsAt         DateTime
+  allDay         Boolean  @default(true)
+  note           String?
+  createdById    String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  place        Place        @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation(fields: [createdById], references: [id])
+
+  @@index([organizationId, startsAt, endsAt])
+  @@index([placeId, startsAt, endsAt])
+  @@map("investor_place_assignments")
 }
 
 model MeetingRequest {

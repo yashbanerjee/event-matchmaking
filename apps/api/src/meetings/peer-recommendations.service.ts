@@ -6,35 +6,49 @@ import {
 } from '@nestjs/common';
 import {
   calculateMatchScore,
+  companyToProfileFeatures,
+  selectDiverseTop,
+  vendorToProfileFeatures,
   type ProfileFeatures,
 } from '@em/domain';
-import { defaultMatchingWeights } from '@em/shared';
+import {
+  defaultMatchingWeights,
+  PEER_RECOMMENDATIONS_MAX_PER_ORG,
+} from '@em/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
 import { AiService } from '../integrations/ai/ai.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
-import { DEFAULT_MATCHMAKING_PROMPT } from '../integrations/ai/matchmaking-prompt';
+import { buildMatchmakingPairCards } from '../integrations/ai/profile-narrative';
 import type { AuthUser } from '../common/decorators';
 import { AuditService } from '../audit/audit.service';
 
-function profileNarrative(
-  features: ProfileFeatures,
-  extras?: { about?: string; focusEvents?: string },
-): string {
-  return [
-    extras?.about,
-    extras?.focusEvents,
-    features.industry,
-    features.preferredCategories.join(' '),
-    features.categories.join(' '),
-    features.capabilities.join(' '),
-    features.requirements.join(' '),
-    features.regions.join(' '),
-    features.commercialTags.join(' '),
-  ]
-    .filter(Boolean)
-    .join('\n');
+const DEFAULT_PEER_RECOMPUTE_LLM_CANDIDATES = 12;
+const DEFAULT_PEER_RECOMPUTE_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      for (;;) {
+        const index = nextIndex;
+        nextIndex += 1;
+        if (index >= items.length) return;
+        results[index] = await fn(items[index]!, index);
+      }
+    }),
+  );
+
+  return results;
 }
 
 function localTextSimilarity(left: string, right: string): number {
@@ -69,7 +83,7 @@ export class PeerRecommendationsService {
   ) {}
 
   /**
-   * Fire-and-forget recompute for a newly eligible client/guest.
+   * Fire-and-forget recompute for a newly eligible investor/innovator.
    * Scores this org against all opposite peers (both directions).
    */
   scheduleRecompute(organizationId: string, reason = 'eligibility') {
@@ -89,14 +103,17 @@ export class PeerRecommendationsService {
       .finally(() => this.inflight.delete(organizationId));
   }
 
-  async listForOrganization(organizationId: string, limit = 50) {
+  async listForOrganization(
+    organizationId: string,
+    limit = PEER_RECOMMENDATIONS_MAX_PER_ORG,
+  ) {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
       select: { id: true, name: true, type: true },
     });
     if (!org) throw new NotFoundException('Organization not found');
 
-    const max = Math.min(Math.max(limit, 1), 100);
+    const max = Math.min(Math.max(limit, 1), PEER_RECOMMENDATIONS_MAX_PER_ORG);
     const items = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId: organizationId },
       include: {
@@ -122,7 +139,7 @@ export class PeerRecommendationsService {
 
     return {
       organization: org,
-      counterpartLabel: org.type === 'COMPANY' ? 'guests' : 'clients',
+      counterpartLabel: org.type === 'COMPANY' ? 'innovators' : 'investors',
       items: items.map((row) => ({
         id: row.id,
         toOrg: row.toOrg,
@@ -142,7 +159,7 @@ export class PeerRecommendationsService {
 
   /**
    * Eligible opposite-type orgs not yet recommended for this viewer.
-   * Client → guests only; guest → clients only.
+   * Investor → innovators only; innovator → investors only.
    */
   async listCandidates(
     organizationId: string,
@@ -199,7 +216,7 @@ export class PeerRecommendationsService {
       return {
         organization: org,
         counterpartType: 'VENDOR' as const,
-        counterpartLabel: 'guests' as const,
+        counterpartLabel: 'innovators' as const,
         items: vendors.map((v) => v.organization),
       };
     }
@@ -234,7 +251,7 @@ export class PeerRecommendationsService {
     return {
       organization: org,
       counterpartType: 'COMPANY' as const,
-      counterpartLabel: 'clients' as const,
+      counterpartLabel: 'investors' as const,
       items: companies.map((c) => c.organization),
     };
   }
@@ -264,13 +281,26 @@ export class PeerRecommendationsService {
 
     // Same direction as the recommendation engine
     if (fromOrg.type === 'COMPANY' && toOrg.type !== 'VENDOR') {
-      throw new BadRequestException('Clients can only be recommended guests');
+      throw new BadRequestException('Investors can only be recommended innovators');
     }
     if (fromOrg.type === 'VENDOR' && toOrg.type !== 'COMPANY') {
-      throw new BadRequestException('Guests can only be recommended clients');
+      throw new BadRequestException('Innovators can only be recommended investors');
     }
     if (fromOrgId === toOrgId) {
       throw new BadRequestException('Cannot recommend an organization to itself');
+    }
+
+    const existingPair = await this.prisma.orgPeerRecommendation.findUnique({
+      where: { fromOrgId_toOrgId: { fromOrgId, toOrgId } },
+      select: { id: true },
+    });
+    const currentCount = await this.prisma.orgPeerRecommendation.count({
+      where: { fromOrgId },
+    });
+    if (!existingPair && currentCount >= PEER_RECOMMENDATIONS_MAX_PER_ORG) {
+      throw new BadRequestException(
+        `Maximum ${PEER_RECOMMENDATIONS_MAX_PER_ORG} recommendations per organization. Remove one before adding.`,
+      );
     }
 
     const note =
@@ -326,6 +356,8 @@ export class PeerRecommendationsService {
         },
       },
     });
+
+    await this.enforceMaxPerOrg(fromOrgId);
 
     await this.audit.record({
       actorId: actor.id,
@@ -417,7 +449,7 @@ export class PeerRecommendationsService {
           vendor: { select: { matchingEligible: true, featured: true } },
           peerRecommendationsFrom: {
             orderBy: { totalScore: 'desc' },
-            take: 5,
+            take: PEER_RECOMMENDATIONS_MAX_PER_ORG,
             include: {
               toOrg: {
                 select: { id: true, name: true, type: true, industry: true },
@@ -445,7 +477,7 @@ export class PeerRecommendationsService {
           totalScore: row.totalScore,
           aiScore: row.aiScore,
           aiDescription: row.aiDescription,
-          reasons: row.reasons,
+          reasons: row.reasons as string[],
           computedAt: row.computedAt,
         })),
       })),
@@ -456,6 +488,7 @@ export class PeerRecommendationsService {
   }
 
   async recomputeForOrganization(organizationId: string) {
+    const started = Date.now();
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
       include: { company: true, vendor: true },
@@ -489,8 +522,12 @@ export class PeerRecommendationsService {
 
     const aiEnabled = await this.ai.isEnabled();
     const aiMode = aiEnabled
-      ? await this.config.getString('ai.matchmakingMode', 'embedding')
+      ? await this.config.getString('ai.matchmakingMode', 'llm')
       : 'embedding';
+    const includeOnboarding = await this.config.getBoolean(
+      'ai.includeOnboardingInProfile',
+      true,
+    );
     const blend = aiEnabled
       ? Math.max(
           0,
@@ -504,6 +541,27 @@ export class PeerRecommendationsService {
       ? await this.config.getString('ai.matchmakingPrompt', '')
       : '';
     const temperature = await this.config.getNumber('ai.javTemperature', 0.2);
+
+    const llmCandidateLimit = Math.min(
+      30,
+      Math.max(
+        PEER_RECOMMENDATIONS_MAX_PER_ORG,
+        await this.config.getNumber(
+          'ai.peerRecomputeLlmCandidates',
+          DEFAULT_PEER_RECOMPUTE_LLM_CANDIDATES,
+        ),
+      ),
+    );
+    const llmConcurrency = Math.min(
+      10,
+      Math.max(
+        1,
+        await this.config.getNumber(
+          'ai.peerRecomputeConcurrency',
+          DEFAULT_PEER_RECOMPUTE_CONCURRENCY,
+        ),
+      ),
+    );
 
     let upserted = 0;
 
@@ -520,45 +578,51 @@ export class PeerRecommendationsService {
         include: { organization: true },
         take: 200,
       });
-      const companyFeatures = this.toCompanyFeatures(org.company, org);
+      const companyFeatures = companyToProfileFeatures({
+        organizationId: org.company.organizationId,
+        preferredCategories: org.company.preferredCategories,
+        requiredCapabilities: org.company.requiredCapabilities,
+        commercialPrefs: org.company.commercialPrefs,
+        normalizedProfile: org.company.normalizedProfile,
+        organization: org,
+      });
 
-      for (const vendor of vendors) {
-        const vendorFeatures = this.toVendorFeatures(
-          vendor,
-          vendor.organization,
-        );
-        const pair = await this.scorePair({
+      const scored = await this.scoreCounterpartsForRecompute({
+        fromOrgId: org.id,
+        fromProfileVersion: org.company.profileVersion,
+        counterparts: vendors.map((vendor) => ({
+          toOrgId: vendor.organizationId,
+          toProfileVersion: vendor.profileVersion,
           companyFeatures,
-          vendorFeatures,
-          companyNorm: org.company.normalizedProfile,
+          vendorFeatures: vendorToProfileFeatures({
+            organizationId: vendor.organizationId,
+            capabilities: vendor.capabilities,
+            categories: vendor.categories,
+            operatingRegions: vendor.operatingRegions,
+            commercialPrefs: vendor.commercialPrefs,
+            normalizedProfile: vendor.normalizedProfile,
+            organization: vendor.organization,
+          }),
+          companyNorm: org.company!.normalizedProfile,
           vendorNorm: vendor.normalizedProfile,
-          equivalences,
-          tagLabels,
-          aiEnabled,
-          aiMode,
-          blend,
-          systemPrompt,
-          temperature,
-        });
+        })),
+        equivalences,
+        tagLabels,
+        aiEnabled,
+        aiMode,
+        blend,
+        systemPrompt,
+        temperature,
+        includeOnboarding,
+        llmCandidateLimit,
+        llmConcurrency,
+        skipEmbedding: true,
+      });
 
-        await this.upsertBothDirections({
-          companyOrgId: org.id,
-          vendorOrgId: vendor.organizationId,
-          companyProfileVersion: org.company.profileVersion,
-          vendorProfileVersion: vendor.profileVersion,
-          pair,
-        });
-        upserted += 2;
-      }
-
-      // Drop stale computed outbound rows (keep admin MANUAL pins)
-      const keepIds = vendors.map((v) => v.organizationId);
-      await this.prisma.orgPeerRecommendation.deleteMany({
-        where: {
-          fromOrgId: org.id,
-          source: 'COMPUTED',
-          ...(keepIds.length ? { toOrgId: { notIn: keepIds } } : {}),
-        },
+      upserted += await this.syncComputedRecommendations({
+        fromOrgId: org.id,
+        perspective: 'COMPANY',
+        scored,
       });
     }
 
@@ -574,48 +638,158 @@ export class PeerRecommendationsService {
         include: { organization: true },
         take: 200,
       });
-      const vendorFeatures = this.toVendorFeatures(org.vendor, org);
+      const vendorFeatures = vendorToProfileFeatures({
+        organizationId: org.vendor.organizationId,
+        capabilities: org.vendor.capabilities,
+        categories: org.vendor.categories,
+        operatingRegions: org.vendor.operatingRegions,
+        commercialPrefs: org.vendor.commercialPrefs,
+        normalizedProfile: org.vendor.normalizedProfile,
+        organization: org,
+      });
 
-      for (const company of companies) {
-        const companyFeatures = this.toCompanyFeatures(
-          company,
-          company.organization,
-        );
-        const pair = await this.scorePair({
-          companyFeatures,
+      const scored = await this.scoreCounterpartsForRecompute({
+        fromOrgId: org.id,
+        fromProfileVersion: org.vendor.profileVersion,
+        counterparts: companies.map((company) => ({
+          toOrgId: company.organizationId,
+          toProfileVersion: company.profileVersion,
+          companyFeatures: companyToProfileFeatures({
+            organizationId: company.organizationId,
+            preferredCategories: company.preferredCategories,
+            requiredCapabilities: company.requiredCapabilities,
+            commercialPrefs: company.commercialPrefs,
+            normalizedProfile: company.normalizedProfile,
+            organization: company.organization,
+          }),
           vendorFeatures,
           companyNorm: company.normalizedProfile,
-          vendorNorm: org.vendor.normalizedProfile,
-          equivalences,
-          tagLabels,
-          aiEnabled,
-          aiMode,
-          blend,
-          systemPrompt,
-          temperature,
-        });
+          vendorNorm: org.vendor!.normalizedProfile,
+        })),
+        equivalences,
+        tagLabels,
+        aiEnabled,
+        aiMode,
+        blend,
+        systemPrompt,
+        temperature,
+        includeOnboarding,
+        llmCandidateLimit,
+        llmConcurrency,
+        skipEmbedding: true,
+      });
 
-        await this.upsertBothDirections({
-          companyOrgId: company.organizationId,
-          vendorOrgId: org.id,
-          companyProfileVersion: company.profileVersion,
-          vendorProfileVersion: org.vendor.profileVersion,
-          pair,
-        });
-        upserted += 2;
-      }
-
-      const keepIds = companies.map((c) => c.organizationId);
-      await this.prisma.orgPeerRecommendation.deleteMany({
-        where: {
-          fromOrgId: org.id,
-          source: 'COMPUTED',
-          ...(keepIds.length ? { toOrgId: { notIn: keepIds } } : {}),
-        },
+      upserted += await this.syncComputedRecommendations({
+        fromOrgId: org.id,
+        perspective: 'VENDOR',
+        scored,
       });
     }
 
-    return { upserted };
+    const durationMs = Date.now() - started;
+    this.logger.log(
+      `Peer recompute for ${organizationId}: upserted ${upserted}, ${durationMs}ms (LLM on top ${llmCandidateLimit} at concurrency ${llmConcurrency})`,
+    );
+    return { upserted, durationMs, llmCandidateLimit, llmConcurrency };
+  }
+
+  /**
+   * Rule-score every counterpart (fast), then LLM-score only the top candidates
+   * (plus any admin MANUAL pins) in parallel — we only persist 5 recommendations.
+   */
+  private async scoreCounterpartsForRecompute(input: {
+    fromOrgId: string;
+    fromProfileVersion: number;
+    counterparts: Array<{
+      toOrgId: string;
+      toProfileVersion: number;
+      companyFeatures: ProfileFeatures;
+      vendorFeatures: ProfileFeatures;
+      companyNorm: unknown;
+      vendorNorm: unknown;
+    }>;
+    equivalences: Array<{ from: string; to: string; bidirectional: boolean }>;
+    tagLabels: Record<string, string>;
+    aiEnabled: boolean;
+    aiMode: string;
+    blend: number;
+    systemPrompt: string;
+    temperature: number;
+    includeOnboarding: boolean;
+    llmCandidateLimit: number;
+    llmConcurrency: number;
+    skipEmbedding?: boolean;
+  }) {
+    type ScoredRow = {
+      toOrgId: string;
+      fromProfileVersion: number;
+      toProfileVersion: number;
+      matchedChallengeTags: string[];
+      pair: {
+        ruleScore: number;
+        aiScore: number | null;
+        totalScore: number;
+        reasons: string[];
+        aiDescription: string | null;
+        scoreBreakdown: Record<string, number | string>;
+      };
+    };
+
+    if (input.counterparts.length === 0) return [] as ScoredRow[];
+
+    const ruleRanked = input.counterparts
+      .map((row) => {
+        const rule = calculateMatchScore(
+          row.companyFeatures,
+          row.vendorFeatures,
+          defaultMatchingWeights,
+          input.equivalences,
+          input.tagLabels,
+        );
+        return { ...row, ruleTotal: rule.totalScore };
+      })
+      .sort((a, b) => b.ruleTotal - a.ruleTotal);
+
+    const manualRows = await this.prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
+      select: { toOrgId: true },
+    });
+    const llmTargetIds = new Set(manualRows.map((row) => row.toOrgId));
+    for (const row of ruleRanked.slice(0, input.llmCandidateLimit)) {
+      llmTargetIds.add(row.toOrgId);
+    }
+
+    const useAiGlobally = input.aiEnabled && input.blend > 0;
+
+    return mapWithConcurrency(
+      ruleRanked,
+      input.llmConcurrency,
+      async (row): Promise<ScoredRow> => {
+        const runLlm = useAiGlobally && llmTargetIds.has(row.toOrgId);
+        const pair = await this.scorePair({
+          companyFeatures: row.companyFeatures,
+          vendorFeatures: row.vendorFeatures,
+          companyNorm: row.companyNorm,
+          vendorNorm: row.vendorNorm,
+          equivalences: input.equivalences,
+          tagLabels: input.tagLabels,
+          aiEnabled: runLlm,
+          aiMode: input.aiMode,
+          blend: input.blend,
+          systemPrompt: input.systemPrompt,
+          temperature: input.temperature,
+          includeOnboarding: input.includeOnboarding,
+          skipEmbedding: input.skipEmbedding,
+        });
+        return {
+          toOrgId: row.toOrgId,
+          fromProfileVersion: input.fromProfileVersion,
+          toProfileVersion: row.toProfileVersion,
+          matchedChallengeTags: pair.matchedChallengeTags,
+          pair,
+        };
+      },
+    );
   }
 
   private async scorePair(input: {
@@ -630,6 +804,9 @@ export class PeerRecommendationsService {
     blend: number;
     systemPrompt: string;
     temperature: number;
+    includeOnboarding: boolean;
+    /** Skip embedding calls during bulk recompute (LLM-only is much faster). */
+    skipEmbedding?: boolean;
   }) {
     const score = calculateMatchScore(
       input.companyFeatures,
@@ -639,24 +816,16 @@ export class PeerRecommendationsService {
       input.tagLabels,
     );
 
-    const companyNorm = (input.companyNorm ?? {}) as Record<string, unknown>;
-    const vendorNorm = (input.vendorNorm ?? {}) as Record<string, unknown>;
-    const left = profileNarrative(input.companyFeatures, {
-      about:
-        typeof companyNorm.about === 'string' ? companyNorm.about : undefined,
-      focusEvents:
-        typeof companyNorm.focusEvents === 'string'
-          ? companyNorm.focusEvents
-          : undefined,
+    void input.companyNorm;
+    void input.vendorNorm;
+    void input.includeOnboarding;
+    const cards = buildMatchmakingPairCards({
+      company: input.companyFeatures,
+      vendor: input.vendorFeatures,
+      tagLabels: input.tagLabels,
     });
-    const right = profileNarrative(input.vendorFeatures, {
-      about:
-        typeof vendorNorm.about === 'string' ? vendorNorm.about : undefined,
-      focusEvents:
-        typeof vendorNorm.focusEvents === 'string'
-          ? vendorNorm.focusEvents
-          : undefined,
-    });
+    const left = cards.investor;
+    const right = cards.innovator;
 
     let aiScore: number | null = null;
     let aiDescription: string | null =
@@ -665,9 +834,12 @@ export class PeerRecommendationsService {
       ...score.breakdown,
     };
 
+    let aiReasons: string[] | undefined;
+
     if (input.aiEnabled && input.blend > 0) {
       const wantsEmbedding =
-        input.aiMode === 'embedding' || input.aiMode === 'hybrid';
+        !input.skipEmbedding &&
+        (input.aiMode === 'embedding' || input.aiMode === 'hybrid');
       const wantsLlm = input.aiMode === 'llm' || input.aiMode === 'hybrid';
 
       let embedding01: number | null = null;
@@ -681,12 +853,13 @@ export class PeerRecommendationsService {
         const pair = await this.ai.pairMatchScore({
           left,
           right,
-          systemPrompt: input.systemPrompt || DEFAULT_MATCHMAKING_PROMPT,
+          systemPrompt: input.systemPrompt || undefined,
           temperature: input.temperature,
         });
         if (pair) {
           llm01 = pair.score;
           rationale = pair.rationale;
+          aiReasons = pair.reasons;
         }
       }
 
@@ -720,6 +893,13 @@ export class PeerRecommendationsService {
       }
     }
 
+    const storedReasons =
+      aiReasons?.length && aiReasons.length > 0
+        ? aiReasons
+        : aiDescription
+          ? [aiDescription]
+          : score.reasons;
+
     const totalScore =
       aiScore != null && input.blend > 0
         ? Math.round(
@@ -732,10 +912,110 @@ export class PeerRecommendationsService {
       ruleScore: score.totalScore,
       aiScore,
       totalScore,
-      reasons: score.reasons,
+      reasons: storedReasons,
       aiDescription,
       scoreBreakdown: breakdown,
+      matchedChallengeTags: score.matchedChallengeTags,
     };
+  }
+
+  private async enforceMaxPerOrg(fromOrgId: string) {
+    const rows = await this.prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId },
+      select: { id: true, source: true, totalScore: true },
+    });
+    rows.sort((a, b) => {
+      if (a.source !== b.source) {
+        return a.source === 'MANUAL' ? -1 : 1;
+      }
+      return b.totalScore - a.totalScore;
+    });
+    const excess = rows.slice(PEER_RECOMMENDATIONS_MAX_PER_ORG);
+    if (!excess.length) return;
+    await this.prisma.orgPeerRecommendation.deleteMany({
+      where: { id: { in: excess.map((row) => row.id) } },
+    });
+  }
+
+  private async syncComputedRecommendations(input: {
+    fromOrgId: string;
+    perspective: 'COMPANY' | 'VENDOR';
+    scored: Array<{
+      toOrgId: string;
+      fromProfileVersion: number;
+      toProfileVersion: number;
+      matchedChallengeTags?: string[];
+      pair: {
+        ruleScore: number;
+        aiScore: number | null;
+        totalScore: number;
+        reasons: string[];
+        aiDescription: string | null;
+        scoreBreakdown: Record<string, number | string>;
+      };
+    }>;
+  }) {
+    const manual = await this.prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
+      select: { toOrgId: true },
+    });
+    const manualToIds = new Set(manual.map((row) => row.toOrgId));
+    const computedSlots = Math.max(
+      0,
+      PEER_RECOMMENDATIONS_MAX_PER_ORG - manualToIds.size,
+    );
+
+    const rankedComputed = [...input.scored]
+      .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
+      .filter((row) => !manualToIds.has(row.toOrgId));
+    const topComputed = selectDiverseTop(
+      rankedComputed,
+      computedSlots,
+      (row) => row.matchedChallengeTags?.[0] ?? row.toOrgId,
+      2,
+    );
+    const keepToIds = new Set([
+      ...manualToIds,
+      ...topComputed.map((row) => row.toOrgId),
+    ]);
+
+    if (keepToIds.size === 0) {
+      await this.prisma.orgPeerRecommendation.deleteMany({
+        where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },
+      });
+    } else {
+      await this.prisma.orgPeerRecommendation.deleteMany({
+        where: {
+          fromOrgId: input.fromOrgId,
+          source: 'COMPUTED',
+          toOrgId: { notIn: [...keepToIds] },
+        },
+      });
+    }
+
+    const now = new Date();
+    for (const row of topComputed) {
+      await this.upsertComputedIfNotManual({
+        fromOrgId: input.fromOrgId,
+        toOrgId: row.toOrgId,
+        perspective: input.perspective,
+        fromProfileVersion: row.fromProfileVersion,
+        toProfileVersion: row.toProfileVersion,
+        dataBase: {
+          source: 'COMPUTED',
+          ruleScore: row.pair.ruleScore,
+          aiScore: row.pair.aiScore,
+          totalScore: row.pair.totalScore,
+          reasons: row.pair.reasons,
+          aiDescription: row.pair.aiDescription,
+          scoreBreakdown: row.pair.scoreBreakdown as Prisma.InputJsonValue,
+          computedAt: now,
+        },
+      });
+    }
+
+    await this.enforceMaxPerOrg(input.fromOrgId);
+    return topComputed.length;
   }
 
   private async upsertBothDirections(input: {
@@ -835,63 +1115,4 @@ export class PeerRecommendationsService {
     });
   }
 
-  private toCompanyFeatures(
-    company: {
-      organizationId: string;
-      preferredCategories: string[];
-      requiredCapabilities: string[];
-      commercialPrefs: unknown;
-      normalizedProfile?: unknown;
-    },
-    organization: { industry: string | null; region: string | null },
-  ): ProfileFeatures {
-    const prefs = (company.commercialPrefs ?? {}) as Record<string, unknown>;
-    const normalized = (company.normalizedProfile ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const regionTags = Array.isArray(normalized.regions)
-      ? (normalized.regions as string[]).filter((v) => typeof v === 'string')
-      : [];
-    return {
-      organizationId: company.organizationId,
-      industry: organization.industry,
-      capabilities: [],
-      categories: company.preferredCategories,
-      regions:
-        regionTags.length > 0
-          ? regionTags
-          : organization.region
-            ? [organization.region]
-            : [],
-      requirements: company.requiredCapabilities,
-      preferredCategories: company.preferredCategories,
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: [],
-    };
-  }
-
-  private toVendorFeatures(
-    vendor: {
-      organizationId: string;
-      capabilities: string[];
-      categories: string[];
-      operatingRegions: string[];
-      commercialPrefs: unknown;
-    },
-    organization: { industry: string | null },
-  ): ProfileFeatures {
-    const prefs = (vendor.commercialPrefs ?? {}) as Record<string, unknown>;
-    return {
-      organizationId: vendor.organizationId,
-      industry: organization.industry,
-      capabilities: vendor.capabilities,
-      categories: vendor.categories,
-      regions: vendor.operatingRegions,
-      requirements: [],
-      preferredCategories: [],
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: vendor.categories,
-    };
-  }
 }

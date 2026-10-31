@@ -8,13 +8,11 @@ import {
 import {
   calculateMatchScore,
   evaluateEligibility,
-  buildDailySlots,
-  scheduleGreedy,
-  type ProfileFeatures,
 } from '@em/domain';
 import {
   defaultMatchingWeights,
   matchingWeightsSchema,
+  resolveMatchingWeights,
   renderMeetingEmail,
   scheduleConfigSchema,
   type MatchingWeights,
@@ -28,6 +26,9 @@ import { EmailService } from '../integrations/email/email.service';
 import { EnvService } from '../config/env.service';
 import { FiltersService } from '../filters/filters.service';
 import { AiService } from '../integrations/ai/ai.service';
+import { buildMatchmakingPairCards } from '../integrations/ai/profile-narrative';
+import { companyToProfileFeatures, vendorToProfileFeatures } from '@em/domain';
+import { PlacesService } from '../places/places.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
 
@@ -58,25 +59,6 @@ function localTextSimilarity(left: string, right: string): number {
   return intersection / new Set([...a, ...b]).size;
 }
 
-function profileNarrative(
-  features: ProfileFeatures,
-  extras?: { about?: string; focusEvents?: string },
-): string {
-  return [
-    extras?.about,
-    extras?.focusEvents,
-    features.industry,
-    features.preferredCategories.join(' '),
-    features.categories.join(' '),
-    features.capabilities.join(' '),
-    features.requirements.join(' '),
-    features.regions.join(' '),
-    features.commercialTags.join(' '),
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
 @Injectable()
 export class MatchmakingService {
   private readonly logger = new Logger(MatchmakingService.name);
@@ -90,6 +72,7 @@ export class MatchmakingService {
     private readonly env: EnvService,
     private readonly filters: FiltersService,
     private readonly ai: AiService,
+    private readonly places: PlacesService,
   ) {}
 
   async ensureDefaultRule() {
@@ -164,6 +147,18 @@ export class MatchmakingService {
       );
     }
     const config = scheduleConfigSchema.parse(incoming);
+    const bookingWindow = await this.config.getMeetingBookingWindow();
+    this.config.assertDateInMeetingWindow(config.scheduleDate, bookingWindow);
+    if (config.startTime < bookingWindow.activeStart) {
+      throw new BadRequestException(
+        `Start time must be on or after ${bookingWindow.activeStart}`,
+      );
+    }
+    if (config.endTime > bookingWindow.activeEnd) {
+      throw new BadRequestException(
+        `End time must be on or before ${bookingWindow.activeEnd}`,
+      );
+    }
     const existingForDate = await this.countActiveMeetingsForDate(
       config.scheduleDate,
     );
@@ -253,7 +248,7 @@ export class MatchmakingService {
           version: run.matchingRuleVersion,
         },
       });
-      const weights = matchingWeightsSchema.parse(
+      const weights = resolveMatchingWeights(
         ruleVersion?.weights ?? defaultMatchingWeights,
       );
       const minScore = ruleVersion?.minScore ?? 40;
@@ -301,8 +296,11 @@ export class MatchmakingService {
       const useAi = Boolean(config.useAi);
       let aiPairsScored = 0;
       const aiModeSetting = useAi
-        ? await this.config.getString('ai.matchmakingMode', 'embedding')
+        ? await this.config.getString('ai.matchmakingMode', 'llm')
         : 'embedding';
+      const includeOnboarding = useAi
+        ? await this.config.getBoolean('ai.includeOnboardingInProfile', true)
+        : true;
       const aiBlendWeight = useAi
         ? Math.max(
             0,
@@ -341,8 +339,23 @@ export class MatchmakingService {
             policyViolation: false,
           });
 
-          const companyFeatures = this.toCompanyFeatures(company);
-          const vendorFeatures = this.toVendorFeatures(vendor);
+          const companyFeatures = companyToProfileFeatures({
+            organizationId: company.organizationId,
+            preferredCategories: company.preferredCategories,
+            requiredCapabilities: company.requiredCapabilities,
+            commercialPrefs: company.commercialPrefs,
+            normalizedProfile: company.normalizedProfile,
+            organization: company.organization,
+          });
+          const vendorFeatures = vendorToProfileFeatures({
+            organizationId: vendor.organizationId,
+            capabilities: vendor.capabilities,
+            categories: vendor.categories,
+            operatingRegions: vendor.operatingRegions,
+            commercialPrefs: vendor.commercialPrefs,
+            normalizedProfile: vendor.normalizedProfile,
+            organization: vendor.organization,
+          });
           const score = calculateMatchScore(
             companyFeatures,
             vendorFeatures,
@@ -358,38 +371,19 @@ export class MatchmakingService {
           };
 
           if (useAi) {
-            const companyNorm = (company.normalizedProfile ?? {}) as Record<
-              string,
-              unknown
-            >;
-            const vendorNorm = (vendor.normalizedProfile ?? {}) as Record<
-              string,
-              unknown
-            >;
-            const left = profileNarrative(companyFeatures, {
-              about:
-                typeof companyNorm.about === 'string'
-                  ? companyNorm.about
-                  : undefined,
-              focusEvents:
-                typeof companyNorm.focusEvents === 'string'
-                  ? companyNorm.focusEvents
-                  : undefined,
+            void includeOnboarding;
+            const cards = buildMatchmakingPairCards({
+              company: companyFeatures,
+              vendor: vendorFeatures,
+              tagLabels,
             });
-            const right = profileNarrative(vendorFeatures, {
-              about:
-                typeof vendorNorm.about === 'string'
-                  ? vendorNorm.about
-                  : undefined,
-              focusEvents:
-                typeof vendorNorm.focusEvents === 'string'
-                  ? vendorNorm.focusEvents
-                  : undefined,
-            });
+            const left = cards.investor;
+            const right = cards.innovator;
 
             let embedding01: number | null = null;
             let llm01: number | null = null;
             let llmRationale: string | undefined;
+            let llmReasons: string[] | undefined;
             let aiSource = 'local';
 
             const wantsEmbedding =
@@ -412,6 +406,7 @@ export class MatchmakingService {
               if (pair) {
                 llm01 = pair.score;
                 llmRationale = pair.rationale;
+                llmReasons = pair.reasons;
                 aiSource = pair.provider;
               }
             }
@@ -444,7 +439,15 @@ export class MatchmakingService {
               Math.round(
                 (score.totalScore * (1 - blend) + aiScore * blend) * 100,
               ) / 100;
-            explanation = `${score.explanation} AI boost (${aiSource}, blend ${blend}): ${aiScore.toFixed(0)}${llmRationale ? ` — ${llmRationale}` : ''} → blended ${totalScore}/100.`;
+            if (llmRationale?.trim()) {
+              const bullets =
+                llmReasons?.length && llmReasons.length > 0
+                  ? ` ${llmReasons.join(' · ')}`
+                  : '';
+              explanation = `${llmRationale.trim()}${bullets} (AI score ${aiScore.toFixed(0)}, blended ${totalScore}/100).`;
+            } else {
+              explanation = `${score.explanation} AI boost (${aiSource}, blend ${blend}): ${aiScore.toFixed(0)} → blended ${totalScore}/100.`;
+            }
             aiPairsScored += 1;
           }
 
@@ -476,151 +479,13 @@ export class MatchmakingService {
 
       await this.prisma.matchCandidate.createMany({ data: candidates });
 
-      const eligible = candidates
-        .filter((c) => c.eligible)
-        .map((c) => ({
-          companyOrgId: c.companyOrgId,
-          vendorOrgId: c.vendorOrgId,
-          score: c.totalScore,
-        }));
-
-      const slots = buildDailySlots({
-        date: config.scheduleDate,
-        startTime: config.startTime,
-        endTime: config.endTime,
-        meetingDurationMinutes: config.meetingDurationMinutes,
-        bufferMinutes: config.bufferMinutes,
-        excludeIntervals: config.excludeIntervals,
-      });
-      const usableSlotCount = slots.filter((s) => !s.isBreak).length;
-
-      const dayStart = slots[0]?.startsAt;
-      const dayEnd = slots[slots.length - 1]?.endsAt;
-      const existingOccupancy =
-        dayStart && dayEnd
-          ? await this.prisma.meetingOccupancy.findMany({
-              where: {
-                startsAt: { lt: dayEnd },
-                endsAt: { gt: dayStart },
-              },
-            })
-          : [];
-
-      const scheduled = scheduleGreedy(
-        eligible,
-        slots,
-        {
-          maxMeetingsPerParticipant: Math.max(
-            config.maxMeetingsPerParticipant,
-            usableSlotCount,
-          ),
-          // Prefer one free slot between a vendor's meetings when the day allows it.
-          vendorGapSlots: 1,
+      // Score-only run: participants choose who to meet, then self-schedule via meeting requests.
+      await this.prisma.matchmakingRun.update({
+        where: { id: runId },
+        data: {
+          status: 'PREVIEW_READY',
+          completedAt: new Date(),
         },
-        existingOccupancy.map((row) => ({
-          participantId: row.participantKey.replace(/^org:/, ''),
-          startsAt: row.startsAt,
-          endsAt: row.endsAt,
-        })),
-      );
-
-      await this.prisma.$transaction(async (tx) => {
-        const schedule = await tx.scheduleVersion.create({
-          data: {
-            runId,
-            version: 1,
-            status: 'PREVIEW_READY',
-            config: config as unknown as Prisma.InputJsonValue,
-          },
-        });
-
-        for (const slot of slots) {
-          await tx.meetingSlot.create({
-            data: {
-              scheduleVersionId: schedule.id,
-              slotIndex: slot.slotIndex,
-              startsAt: slot.startsAt,
-              endsAt: slot.endsAt,
-              timeZone: config.timeZone,
-              isBreak: slot.isBreak,
-            },
-          });
-        }
-
-        const persistedSlots = await tx.meetingSlot.findMany({
-          where: { scheduleVersionId: schedule.id },
-        });
-
-        for (const assignment of scheduled.assignments) {
-          const match = await tx.match.create({
-            data: {
-              runId,
-              companyOrgId: assignment.companyOrgId,
-              vendorOrgId: assignment.vendorOrgId,
-              totalScore: assignment.score,
-              scoreBreakdown:
-                candidates.find(
-                  (c) =>
-                    c.companyOrgId === assignment.companyOrgId &&
-                    c.vendorOrgId === assignment.vendorOrgId,
-                )?.scoreBreakdown ?? {},
-              explanation:
-                candidates.find(
-                  (c) =>
-                    c.companyOrgId === assignment.companyOrgId &&
-                    c.vendorOrgId === assignment.vendorOrgId,
-                )?.explanation ?? '',
-            },
-          });
-
-          const slot = persistedSlots.find(
-            (s) => s.slotIndex === assignment.slotIndex,
-          );
-          if (!slot) continue;
-
-          const meeting = await tx.meeting.create({
-            data: {
-              scheduleVersionId: schedule.id,
-              slotId: slot.id,
-              matchId: match.id,
-              companyOrgId: assignment.companyOrgId,
-              vendorOrgId: assignment.vendorOrgId,
-              startsAt: assignment.startsAt,
-              endsAt: assignment.endsAt,
-              timeZone: config.timeZone,
-              durationMinutes: config.meetingDurationMinutes,
-              mode: config.mode,
-              matchScore: assignment.score,
-              status: 'PROPOSED',
-              idempotencyKey: `meeting:${schedule.id}:${assignment.companyOrgId}:${assignment.vendorOrgId}`,
-            },
-          });
-
-          await tx.meetingOccupancy.createMany({
-            data: [
-              {
-                meetingId: meeting.id,
-                participantKey: `org:${assignment.companyOrgId}`,
-                startsAt: assignment.startsAt,
-                endsAt: assignment.endsAt,
-              },
-              {
-                meetingId: meeting.id,
-                participantKey: `org:${assignment.vendorOrgId}`,
-                startsAt: assignment.startsAt,
-                endsAt: assignment.endsAt,
-              },
-            ],
-          });
-        }
-
-        await tx.matchmakingRun.update({
-          where: { id: runId },
-          data: {
-            status: 'PREVIEW_READY',
-            completedAt: new Date(),
-          },
-        });
       });
     } catch (err) {
       await this.prisma.matchmakingRun.update({
@@ -665,67 +530,10 @@ export class MatchmakingService {
     return run;
   }
 
-  async publishSchedule(actor: AuthUser, scheduleVersionId: string) {
-    const schedule = await this.prisma.scheduleVersion.findUnique({
-      where: { id: scheduleVersionId },
-      include: { meetings: true, run: true },
-    });
-    if (!schedule) {
-      throw new NotFoundException('Schedule not found');
-    }
-    if (schedule.status === 'PUBLISHED') {
-      throw new BadRequestException('Schedule already published');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.scheduleVersion.update({
-        where: { id: scheduleVersionId },
-        data: {
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          publishedById: actor.id,
-        },
-      });
-      await tx.meeting.updateMany({
-        where: { scheduleVersionId, status: { not: 'CANCELLED' } },
-        data: { status: 'CONFIRMED' },
-      });
-      await tx.matchmakingRun.update({
-        where: { id: schedule.runId },
-        data: { status: 'PUBLISHED' },
-      });
-
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'ScheduleVersion',
-        aggregateId: scheduleVersionId,
-        eventType: 'notification.schedule_published',
-        idempotencyKey: `schedule.publish:${scheduleVersionId}`,
-        payload: {
-          scheduleVersionId,
-          meetingIds: schedule.meetings.map((m) => m.id),
-        },
-      });
-    });
-
-    await this.audit.record({
-      actorId: actor.id,
-      action: 'schedule.publish',
-      entityType: 'ScheduleVersion',
-      entityId: scheduleVersionId,
-      outcome: 'SUCCESS',
-    });
-
-    // Notify company + vendor for every meeting (paced ~15/min via EmailService).
-    void this.notifySchedulePublished(scheduleVersionId).catch((err) => {
-      this.logger.warn(
-        `Schedule publish emails failed: ${(err as Error).message}`,
-      );
-    });
-
-    return this.prisma.scheduleVersion.findUnique({
-      where: { id: scheduleVersionId },
-      include: { meetings: true },
-    });
+  async publishSchedule(_actor: AuthUser, _scheduleVersionId: string) {
+    throw new BadRequestException(
+      'Automatic schedule publish is disabled. Matchmaking runs score pairs only; participants express interest from recommendations and pick time and place under Requests.',
+    );
   }
 
   async manualAssign(
@@ -833,6 +641,18 @@ export class MatchmakingService {
         ],
       });
 
+      await this.places.applyAssignedPlaces(
+        [
+          {
+            id: created.id,
+            companyOrgId: created.companyOrgId,
+            startsAt: created.startsAt,
+            endsAt: created.endsAt,
+          },
+        ],
+        tx,
+      );
+
       return created;
     });
 
@@ -899,7 +719,11 @@ export class MatchmakingService {
     }
     if (input.startsAt) {
       const bookingWindow = await this.config.getMeetingBookingWindow();
-      this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
+      this.config.assertInstantInMeetingWindow(
+        startsAt,
+        bookingWindow,
+        meeting.durationMinutes,
+      );
     }
     const endsAt = new Date(
       startsAt.getTime() + meeting.durationMinutes * 60_000,
@@ -1017,6 +841,18 @@ export class MatchmakingService {
           },
         ],
       });
+
+      await this.places.applyAssignedPlaces(
+        [
+          {
+            id: meeting.id,
+            companyOrgId,
+            startsAt,
+            endsAt,
+          },
+        ],
+        tx,
+      );
 
       await tx.meetingStatusHistory.create({
         data: {
@@ -1142,13 +978,16 @@ export class MatchmakingService {
     if (Number.isNaN(startsAt.getTime())) {
       throw new BadRequestException('Invalid start time');
     }
-    const bookingWindow = await this.config.getMeetingBookingWindow();
-    this.config.assertInstantInMeetingWindow(startsAt, bookingWindow);
-
     const durationMinutes =
       input.durationMinutes && input.durationMinutes > 0
         ? Math.round(input.durationMinutes)
         : await this.config.getNumber('ops.meetingDurationMinutes', 15);
+    const bookingWindow = await this.config.getMeetingBookingWindow();
+    this.config.assertInstantInMeetingWindow(
+      startsAt,
+      bookingWindow,
+      durationMinutes,
+    );
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
     const reason = input.reason?.trim() || 'Manual meeting created by admin';
     const scheduleDate = startsAt.toISOString().slice(0, 10);
@@ -1248,6 +1087,18 @@ export class MatchmakingService {
           },
         ],
       });
+
+      await this.places.applyAssignedPlaces(
+        [
+          {
+            id: created.id,
+            companyOrgId: created.companyOrgId,
+            startsAt: created.startsAt,
+            endsAt: created.endsAt,
+          },
+        ],
+        tx,
+      );
 
       await tx.meetingStatusHistory.create({
         data: {
@@ -1545,60 +1396,4 @@ export class MatchmakingService {
     return email || null;
   }
 
-  private toCompanyFeatures(company: {
-    organizationId: string;
-    organization: { industry: string | null; region: string | null };
-    requiredCapabilities: string[];
-    preferredCategories: string[];
-    commercialPrefs: unknown;
-    normalizedProfile: unknown;
-  }): ProfileFeatures {
-    const prefs = (company.commercialPrefs ?? {}) as Record<string, unknown>;
-    const normalized = (company.normalizedProfile ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const regionTags = Array.isArray(normalized.regions)
-      ? (normalized.regions as string[]).filter((v) => typeof v === 'string')
-      : [];
-    return {
-      organizationId: company.organizationId,
-      industry: company.organization.industry,
-      capabilities: [],
-      categories: company.preferredCategories,
-      regions:
-        regionTags.length > 0
-          ? regionTags
-          : company.organization.region
-            ? [company.organization.region]
-            : [],
-      requirements: company.requiredCapabilities,
-      preferredCategories: company.preferredCategories,
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: [],
-    };
-  }
-
-  private toVendorFeatures(vendor: {
-    organizationId: string;
-    organization: { industry: string | null };
-    capabilities: string[];
-    categories: string[];
-    operatingRegions: string[];
-    commercialPrefs: unknown;
-    normalizedProfile?: unknown;
-  }): ProfileFeatures {
-    const prefs = (vendor.commercialPrefs ?? {}) as Record<string, unknown>;
-    return {
-      organizationId: vendor.organizationId,
-      industry: vendor.organization.industry,
-      capabilities: vendor.capabilities,
-      categories: vendor.categories,
-      regions: vendor.operatingRegions,
-      requirements: [],
-      preferredCategories: [],
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: vendor.categories,
-    };
-  }
 }

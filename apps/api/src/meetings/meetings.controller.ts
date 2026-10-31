@@ -49,6 +49,18 @@ export class MeetingsController {
     return this.meetings.confirm(user, id, body.note);
   }
 
+  @Post(':id/start')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.meetings.startMeeting(user, id);
+  }
+
+  @Post(':id/complete')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.meetings.completeMeeting(user, id);
+  }
+
   @Post(':id/reschedule-request')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   reschedule(

@@ -85,8 +85,8 @@ export default function InvitationsPage() {
           value={form.roleCode}
           onChange={(e) => setForm({ ...form, roleCode: e.target.value })}
         >
-          <option value="COMPANY_USER">Client user</option>
-          <option value="VENDOR_USER">Guest user</option>
+          <option value="COMPANY_USER">Investor user</option>
+          <option value="VENDOR_USER">Innovator user</option>
           <option value="ADMIN">Administrator</option>
           <option value="OPERATIONS_MANAGER">Operations manager</option>
         </select>

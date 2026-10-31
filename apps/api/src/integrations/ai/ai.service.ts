@@ -16,6 +16,12 @@ import { NullAiProvider } from './null-ai.provider';
 import { OpenAiProvider } from './openai.provider';
 import { AnthropicProvider } from './anthropic.provider';
 import { JavAiProvider } from './jav.provider';
+import {
+  applyMatchmakingUserTemplate,
+  DEFAULT_MATCHMAKING_CHAT_MODEL,
+  DEFAULT_MATCHMAKING_PROMPT,
+} from './matchmaking-prompt';
+import type { PairScoringMethod } from './ai.provider';
 
 @Injectable()
 export class AiService implements OnModuleInit {
@@ -61,7 +67,8 @@ export class AiService implements OnModuleInit {
         key === 'ai.javChatModel' &&
         (current === 'gpt-4o-mini' ||
           current === 'openai/gpt-4o-mini' ||
-          current === 'jav-match-v1');
+          current === 'jav-match-v1' ||
+          current === '~typesafe/jev-latest');
       const legacyMode =
         key === 'ai.matchmakingMode' && current === 'embedding';
       const shouldUpgrade =
@@ -85,9 +92,11 @@ export class AiService implements OnModuleInit {
     await ensure('ai.primaryProvider', 'jav');
     await ensure('ai.secondaryProvider', 'none');
     await ensure('ai.javBaseUrl', 'https://openrouter.ai/api/v1');
-    await ensure('ai.javChatModel', '~typesafe/jev-latest');
+    await ensure('ai.javChatModel', DEFAULT_MATCHMAKING_CHAT_MODEL);
     await ensure('ai.matchmakingMode', 'llm');
     await ensure('ai.matchmakingBlendWeight', 0.3);
+    await ensure('ai.pairScoringMethod', 'structured_json');
+    await ensure('ai.includeOnboardingInProfile', true);
 
     await this.prisma.featureFlag.upsert({
       where: { key: 'ai_enabled' },
@@ -187,6 +196,7 @@ export class AiService implements OnModuleInit {
     input: PairMatchScoreInput,
   ): Promise<(PairMatchScoreResult & { provider: string }) | null> {
     if (!(await this.isEnabled())) return null;
+    const enriched = await this.enrichPairMatchInput(input);
     const providers = await this.buildProviders();
     const maxRetries = await this.config.getNumber(
       'ai.maxRetries',
@@ -197,7 +207,7 @@ export class AiService implements OnModuleInit {
       if (this.isCircuitOpen(provider.name)) continue;
       try {
         const result = await this.withRetries(
-          () => provider.pairMatchScore!(input),
+          () => provider.pairMatchScore!(enriched),
           maxRetries,
         );
         return { ...result, provider: provider.name };
@@ -209,6 +219,32 @@ export class AiService implements OnModuleInit {
       }
     }
     return null;
+  }
+
+  private async enrichPairMatchInput(
+    input: PairMatchScoreInput,
+  ): Promise<PairMatchScoreInput> {
+    const configuredSystem = await this.config.getString(
+      'ai.matchmakingPrompt',
+      this.env.raw.AI_MATCHMAKING_PROMPT ?? '',
+    );
+    const systemPrompt =
+      input.systemPrompt?.trim() ||
+      configuredSystem.trim() ||
+      DEFAULT_MATCHMAKING_PROMPT;
+    const userTemplate = await this.config.getString(
+      'ai.matchmakingUserTemplate',
+      this.env.raw.AI_MATCHMAKING_USER_TEMPLATE ?? '',
+    );
+    const userMessage = applyMatchmakingUserTemplate(userTemplate, {
+      investorProfile: input.left,
+      innovatorProfile: input.right,
+    });
+    return {
+      ...input,
+      systemPrompt,
+      userMessage: input.userMessage?.trim() || userMessage,
+    };
   }
 
   /** Accept pasted `export OPENROUTER_API_KEY=sk-or-v1-…` shell lines. */
@@ -264,7 +300,8 @@ export class AiService implements OnModuleInit {
       'https://openrouter.ai/api/v1';
     const javChatModel = await this.config.getString(
       'ai.javChatModel',
-      '~typesafe/jev-latest',
+      this.env.raw.JAV_AI_CHAT_MODEL?.trim() ||
+        DEFAULT_MATCHMAKING_CHAT_MODEL,
     );
     const javEmbeddingModel = await this.config.getString(
       'ai.javEmbeddingModel',
@@ -278,6 +315,14 @@ export class AiService implements OnModuleInit {
       'ai.javTemperature',
       0.2,
     );
+    const pairScoringRaw = await this.config.getString(
+      'ai.pairScoringMethod',
+      this.env.raw.AI_PAIR_SCORING_METHOD ?? 'structured_json',
+    );
+    const pairScoringMethod: PairScoringMethod =
+      pairScoringRaw === 'jev_decisions'
+        ? 'jev_decisions'
+        : 'structured_json';
     const isOpenRouter = /openrouter\.ai/i.test(javBaseUrl);
 
     const byName = (name: string): AiProvider | null => {
@@ -296,6 +341,7 @@ export class AiService implements OnModuleInit {
           chatModel: javFineTunedModel.trim() || javChatModel,
           embeddingModel: javEmbeddingModel || 'openai/text-embedding-3-small',
           temperature: javTemperature,
+          pairScoringMethod,
           extraHeaders: isOpenRouter
             ? {
                 'HTTP-Referer': this.env.appUrl || 'https://ethara.com',

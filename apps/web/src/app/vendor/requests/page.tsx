@@ -29,7 +29,7 @@ export default function VendorRequestsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Guest workspace"
+        eyebrow="Innovator workspace"
         title="Meeting requests"
         description="Accept or decline requests sent to you. Confirming locks the meeting place and time."
       />

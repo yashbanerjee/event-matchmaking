@@ -180,6 +180,13 @@ export class EnvService {
       AI_MATCHMAKING_PROMPT: this.config.get('AI_MATCHMAKING_PROMPT', {
         infer: true,
       }),
+      AI_MATCHMAKING_USER_TEMPLATE: this.config.get(
+        'AI_MATCHMAKING_USER_TEMPLATE',
+        { infer: true },
+      ),
+      AI_PAIR_SCORING_METHOD: this.config.get('AI_PAIR_SCORING_METHOD', {
+        infer: true,
+      }),
       AI_REQUEST_TIMEOUT_MS: this.config.get('AI_REQUEST_TIMEOUT_MS', {
         infer: true,
       }),
@@ -194,6 +201,15 @@ export class EnvService {
         infer: true,
       }),
       MEETING_WINDOW_END: this.config.get('MEETING_WINDOW_END', {
+        infer: true,
+      }),
+      MEETING_EVENT_DATES: this.config.get('MEETING_EVENT_DATES', {
+        infer: true,
+      }),
+      MEETING_ACTIVE_START: this.config.get('MEETING_ACTIVE_START', {
+        infer: true,
+      }),
+      MEETING_ACTIVE_END: this.config.get('MEETING_ACTIVE_END', {
         infer: true,
       }),
       BACKUP_RETENTION_DAYS: this.config.get('BACKUP_RETENTION_DAYS', {

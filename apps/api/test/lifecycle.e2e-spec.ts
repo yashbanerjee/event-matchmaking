@@ -119,7 +119,7 @@ describe('Lifecycle e2e', () => {
       .send({
         token: invitationToken,
         password: 'VendorPass123!',
-        firstName: 'Vendor',
+        firstName: 'Innovator',
         lastName: 'User',
       })
       .expect(201);
@@ -127,8 +127,7 @@ describe('Lifecycle e2e', () => {
   });
 
   it('run matchmaking, publish, confirm, feedback', async () => {
-    const day = String((Date.now() % 27) + 1).padStart(2, '0');
-    const scheduleDate = `2027-06-${day}`;
+    const scheduleDate = '2026-12-07';
     const run = await request(app.getHttpServer())
       .post('/api/v1/matchmaking/runs')
       .set('Authorization', `Bearer ${adminToken}`)

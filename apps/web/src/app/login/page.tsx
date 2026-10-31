@@ -72,8 +72,8 @@ function LoginForm() {
             Welcome back to {brandLabel}.
           </h1>
           <p className="max-w-md text-[var(--muted)]">
-            {BRAND.tagline}. Admins manage matching and schedules. Guests and
-            clients use the portal for confirmations and feedback.
+            {BRAND.tagline}. Admins manage matching and schedules. Innovators and
+            investors use the portal for confirmations and feedback.
           </p>
         </div>
 

@@ -45,7 +45,7 @@ class HomeScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'GUEST & CLIENT',
+                        'INNOVATOR & INVESTOR',
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                               color: AppColors.muted,
                               letterSpacing: 1.4,

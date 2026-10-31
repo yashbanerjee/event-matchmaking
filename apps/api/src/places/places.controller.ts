@@ -41,10 +41,51 @@ export class PlacesController {
     @Query('startsAt') startsAt: string,
     @Query('endsAt') endsAt: string,
     @Query('excludeRequestId') excludeRequestId?: string,
+    @Query('fromOrgId') fromOrgId?: string,
+    @Query('toOrgId') toOrgId?: string,
   ) {
     return this.places.available(new Date(startsAt), new Date(endsAt), {
       excludeRequestId: excludeRequestId || undefined,
+      fromOrgId: fromOrgId || undefined,
+      toOrgId: toOrgId || undefined,
     });
+  }
+
+  @Get('assignments')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  listAssignments(
+    @Query('organizationId') organizationId?: string,
+    @Query('placeId') placeId?: string,
+  ) {
+    return this.places.listAssignments({
+      organizationId: organizationId || undefined,
+      placeId: placeId || undefined,
+    });
+  }
+
+  @Post('assignments')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  createAssignments(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      organizationId: string;
+      placeId: string;
+      dates?: string[];
+      date?: string;
+      startTime?: string;
+      endTime?: string;
+      allDay?: boolean;
+      note?: string;
+    },
+  ) {
+    return this.places.createAssignments(user, body);
+  }
+
+  @Delete('assignments/:id')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  removeAssignment(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.places.removeAssignment(user, id);
   }
 
   @Get('map-search')

@@ -3,11 +3,20 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { CalendarDays, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/empty-state';
+import { apiFetch } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth-store';
+import {
+  formatEventDate,
+  normalizeEventSchedule,
+  parseYmdLocal,
+  type EventSchedule,
+} from '@/lib/event-schedule';
 import { cn } from '@/lib/utils';
 import { statusTone } from '@/lib/status';
 
@@ -75,12 +84,6 @@ function SectionHeader({
 function startOfDay(date: Date) {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
   return next;
 }
 
@@ -153,23 +156,25 @@ export function OverviewWeekCalendar({
   myOrgIds?: string[];
 }) {
   const today = startOfDay(new Date());
-  const [weekStart, setWeekStart] = useState(() => {
-    const start = new Date(today);
-    start.setDate(today.getDate() - today.getDay());
-    return start;
-  });
   const [selectedDay, setSelectedDay] = useState(() => today);
 
+  const scheduleQuery = useQuery({
+    queryKey: ['meeting-booking-window'],
+    queryFn: () =>
+      apiFetch<EventSchedule>('/meeting-requests/booking-window', {
+        token: getAccessToken(),
+      }),
+  });
+  const schedule = normalizeEventSchedule(scheduleQuery.data);
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart],
+    () => schedule.dates.map(parseYmdLocal),
+    [schedule.dates],
   );
 
-  // Keep selection inside the visible week (prefer today when jumping weeks).
   const activeDay = useMemo(() => {
     if (days.some((d) => sameDay(d, selectedDay))) return selectedDay;
-    const todayInWeek = days.find((d) => sameDay(d, today));
-    return todayInWeek ?? days[0]!;
+    const todayInEvent = days.find((d) => sameDay(d, today));
+    return todayInEvent ?? days[0] ?? today;
   }, [days, selectedDay, today]);
 
   const eventsByDay = useMemo(() => {
@@ -232,13 +237,9 @@ export function OverviewWeekCalendar({
   const meetingCount = dayEvents.filter((e) => e.tone === 'meeting').length;
   const requestCount = dayEvents.filter((e) => e.tone === 'request').length;
 
-  const rangeLabel = `${weekStart.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })}`;
+  const rangeLabel = schedule.dates
+    .map((ymd) => formatEventDate(ymd, 'short'))
+    .join(' · ');
 
   const dayHeading = sameDay(activeDay, today)
     ? 'Today'
@@ -247,14 +248,6 @@ export function OverviewWeekCalendar({
         month: 'short',
         day: 'numeric',
       });
-
-  function jumpToToday() {
-    const t = startOfDay(new Date());
-    const s = new Date(t);
-    s.setDate(t.getDate() - t.getDay());
-    setWeekStart(s);
-    setSelectedDay(t);
-  }
 
   return (
     <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
@@ -265,7 +258,7 @@ export function OverviewWeekCalendar({
           </span>
           <div className="min-w-0">
             <h2 className="h-display text-base font-semibold tracking-tight sm:text-lg">
-              This week
+              Event days
             </h2>
             <p className="mt-0.5 text-xs text-[var(--muted)]">
               {rangeLabel}
@@ -278,41 +271,15 @@ export function OverviewWeekCalendar({
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            aria-label="Previous week"
-            className="rounded-full p-2 text-[var(--muted)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
-            onClick={() => setWeekStart((d) => addDays(d, -7))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 rounded-full px-3 text-xs"
-            onClick={jumpToToday}
-          >
-            Today
+        <Link href={meetingsHref}>
+          <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-xs">
+            All meetings
           </Button>
-          <button
-            type="button"
-            aria-label="Next week"
-            className="rounded-full p-2 text-[var(--muted)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
-            onClick={() => setWeekStart((d) => addDays(d, 7))}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <Link href={meetingsHref} className="ml-1">
-            <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-xs">
-              Full calendar
-            </Button>
-          </Link>
-        </div>
+        </Link>
       </div>
 
       {/* Day selector — counts stay readable; agenda below has full titles */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-7 sm:overflow-visible sm:pb-0">
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:grid sm:overflow-visible sm:pb-0" style={{ gridTemplateColumns: `repeat(${Math.max(days.length, 1)}, minmax(0, 1fr))` }}>
         {days.map((day) => {
           const isToday = sameDay(day, today);
           const isActive = sameDay(day, activeDay);

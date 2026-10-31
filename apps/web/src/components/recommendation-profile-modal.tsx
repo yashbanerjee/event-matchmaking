@@ -58,12 +58,14 @@ export function RecommendationProfileModal({
   open,
   onClose,
   onRequestMeeting,
+  requestMeetingLabel = 'Request meeting',
   reasons,
 }: {
   organizationId: string | null;
   open: boolean;
   onClose: () => void;
   onRequestMeeting?: () => void;
+  requestMeetingLabel?: string;
   /** Match reasons from the recommendations list for this org */
   reasons?: string[];
 }) {
@@ -113,7 +115,7 @@ export function RecommendationProfileModal({
               Close
             </Button>
             {onRequestMeeting ? (
-              <Button onClick={onRequestMeeting}>Request meeting</Button>
+              <Button onClick={onRequestMeeting}>{requestMeetingLabel}</Button>
             ) : null}
           </div>
         </div>

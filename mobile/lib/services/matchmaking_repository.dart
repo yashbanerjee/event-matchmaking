@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/network/api_client.dart';
+import '../core/network/api_investor.dart';
 
 class PlaceBrief {
   const PlaceBrief({
@@ -331,7 +331,7 @@ class MatchmakingRepository {
       parse: (d) => d as Map<String, dynamic>,
     );
     final perspective = data['perspective'] as String?;
-    // Client → guests; guest → clients (same as the matching engine)
+    // Investor → innovators; innovator → investors (same as the matching engine)
     final allowedPeerType = perspective == 'COMPANY'
         ? 'VENDOR'
         : perspective == 'VENDOR'
@@ -469,5 +469,5 @@ class MatchmakingRepository {
 }
 
 final matchmakingRepositoryProvider = Provider<MatchmakingRepository>((ref) {
-  return MatchmakingRepository(ref.watch(apiClientProvider));
+  return MatchmakingRepository(ref.watch(apiInvestorProvider));
 });

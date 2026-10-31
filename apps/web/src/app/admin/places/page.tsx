@@ -14,6 +14,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { EmptyState } from '@/components/empty-state';
 import { LocationMapPicker } from '@/components/location-map-picker';
 import { MeetingPlaceLink } from '@/components/meeting-place-link';
+import { InvestorTablePanel } from '@/components/investor-table-panel';
 
 type Place = {
   id: string;
@@ -240,9 +241,11 @@ export default function AdminPlacesPage() {
       <PageHeader
         eyebrow="Match & meet"
         title="Places"
-        description="Meeting tables and rooms. Pin each place on the map so guests can navigate there."
+        description="Meeting tables and rooms. Allot a table to an investor for a day or a time window so all of their meetings sit there."
         actions={<Button onClick={openCreate}>Add place</Button>}
       />
+
+      <InvestorTablePanel />
 
       <Card>
         {error && !creating && !edit ? (

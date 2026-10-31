@@ -2,6 +2,13 @@ import {
   defaultMatchingWeights,
   type MatchingWeights,
 } from '@em/shared';
+import {
+  geographyMatchScore,
+  mandateCoverageScore,
+  orgTypeBonusPoints,
+  stageFitScore,
+  ticketFitScore,
+} from './water-match.js';
 
 export interface ProfileFeatures {
   organizationId: string;
@@ -13,15 +20,22 @@ export interface ProfileFeatures {
   preferredCategories: string[];
   commercialTags: string[];
   mutualPreferenceTags: string[];
+  investmentStages: string[];
+  ticketSize: string | null;
+  partnershipGoal?: string | null;
+  impactMetrics?: string | null;
+  about?: string | null;
+  focusEvents?: string | null;
 }
 
 export interface ScoreBreakdown {
-  capability: number;
-  industry: number;
-  requirements: number;
+  challenge: number;
+  solution: number;
   geography: number;
   commercial: number;
-  mutualPreferences: number;
+  stage: number;
+  ticket: number;
+  orgTypeBonus: number;
 }
 
 export interface MatchScoreResult {
@@ -31,6 +45,8 @@ export interface MatchScoreResult {
   reasons: string[];
   explanation: string;
   missingDimensions: string[];
+  /** Overlapping challenge tags (for diversity when picking top recs). */
+  matchedChallengeTags: string[];
 }
 
 export type TagEquivalence = {
@@ -209,9 +225,22 @@ function formatTagList(tags: string[]): string {
   return `${tags.slice(0, -1).join(', ')}, and ${tags[tags.length - 1]}`;
 }
 
+function matchedChallengeSlugs(
+  company: ProfileFeatures,
+  vendor: ProfileFeatures,
+  equivalences: TagEquivalence[],
+): string[] {
+  const investor = expandWithMappings(company.preferredCategories, equivalences);
+  const innovator = expandWithMappings(
+    vendor.categories.length ? vendor.categories : vendor.mutualPreferenceTags,
+    equivalences,
+  );
+  const innovatorSet = new Set(innovator.map((t) => t.toLowerCase()));
+  return investor.filter((t) => innovatorSet.has(t.toLowerCase()));
+}
+
 /**
  * Build short, user-facing reasons from overlapping profile dimensions.
- * Uses Ethara filter labels when provided so reasons match what users see.
  */
 export function buildMatchReasons(
   company: ProfileFeatures,
@@ -222,59 +251,35 @@ export function buildMatchReasons(
 ): string[] {
   const reasons: string[] = [];
   const threshold = 25;
-  const resolve = (raw: string) => labelLookup(tagLabels, raw);
 
-  if (breakdown.industry >= threshold) {
-    const industry = resolve(
-      company.industry?.trim() ||
-        vendor.industry?.trim() ||
-        'your industry',
+  const challengeTags = intersectDisplayTags(
+    company.preferredCategories,
+    vendor.categories.length ? vendor.categories : vendor.mutualPreferenceTags,
+    equivalences,
+    4,
+    tagLabels,
+  );
+  if (breakdown.challenge >= threshold || challengeTags.length > 0) {
+    reasons.push(
+      challengeTags.length
+        ? `Water challenges in common: ${formatTagList(challengeTags)}`
+        : 'Strong alignment on water challenges you fund',
     );
-    reasons.push(`Same industry focus (${industry})`);
   }
 
-  const needTags = intersectDisplayTags(
+  const solutionTags = intersectDisplayTags(
     company.requirements,
     vendor.capabilities,
     equivalences,
     4,
     tagLabels,
   );
-  const categoryNeedTags = intersectDisplayTags(
-    company.requirements,
-    vendor.categories,
-    equivalences,
-    4,
-    tagLabels,
-  );
-
-  if (breakdown.capability >= threshold || needTags.length > 0) {
-    if (needTags.length) {
-      reasons.push(`Matches your needs: ${formatTagList(needTags)}`);
-    } else if (breakdown.capability >= threshold) {
-      reasons.push('Strong overlap with the capabilities you need');
-    }
-  }
-
-  if (
-    (breakdown.requirements >= threshold || categoryNeedTags.length > 0) &&
-    categoryNeedTags.length > 0 &&
-    !(
-      needTags.length &&
-      categoryNeedTags.every((t) =>
-        needTags.some((n) => n.toLowerCase() === t.toLowerCase()),
-      )
-    )
-  ) {
+  if (breakdown.solution >= threshold || solutionTags.length > 0) {
     reasons.push(
-      `Offers categories that fit your requirements: ${formatTagList(categoryNeedTags)}`,
+      solutionTags.length
+        ? `Solution fit: ${formatTagList(solutionTags)}`
+        : 'Innovator capabilities match solutions you seek',
     );
-  } else if (
-    breakdown.requirements >= threshold &&
-    !needTags.length &&
-    !categoryNeedTags.length
-  ) {
-    reasons.push('Categories and services fit what you are looking for');
   }
 
   if (breakdown.geography >= threshold) {
@@ -287,23 +292,8 @@ export function buildMatchReasons(
     );
     reasons.push(
       tags.length
-        ? `Shared regions: ${formatTagList(tags)}`
-        : 'Overlapping geographic coverage',
-    );
-  }
-
-  const preferenceTags = intersectDisplayTags(
-    company.preferredCategories,
-    vendor.categories.length ? vendor.categories : vendor.mutualPreferenceTags,
-    equivalences,
-    4,
-    tagLabels,
-  );
-  if (breakdown.mutualPreferences >= threshold || preferenceTags.length > 0) {
-    reasons.push(
-      preferenceTags.length
-        ? `Linked to your preferences: ${formatTagList(preferenceTags)}`
-        : 'Matches categories you prefer to meet',
+        ? `Shared geographies: ${formatTagList(tags)}`
+        : 'Compatible geographic focus',
     );
   }
 
@@ -317,38 +307,28 @@ export function buildMatchReasons(
     );
     reasons.push(
       tags.length
-        ? `Similar commercial profile: ${formatTagList(tags)}`
-        : 'Compatible commercial profile',
+        ? `Capital / partnership overlap: ${formatTagList(tags)}`
+        : 'Compatible capital or partnership instruments',
     );
+  }
+
+  if (breakdown.stage >= threshold) {
+    reasons.push('Stage maturity fits your preferred investment stages');
+  }
+
+  if (breakdown.ticket >= threshold) {
+    reasons.push('Ticket size bands are compatible');
+  }
+
+  if (breakdown.orgTypeBonus >= 3) {
+    reasons.push('Complementary investor and innovator profiles');
   }
 
   return reasons.slice(0, 4);
 }
 
-export function industryScore(
-  companyIndustry?: string | null,
-  vendorIndustry?: string | null,
-  equivalences: TagEquivalence[] = [],
-): number {
-  if (!companyIndustry || !vendorIndustry) {
-    return 0;
-  }
-  if (!equivalences.length) {
-    return companyIndustry.trim().toLowerCase() ===
-      vendorIndustry.trim().toLowerCase()
-      ? 100
-      : 0;
-  }
-  return overlapScore(
-    expandWithMappings([companyIndustry], equivalences),
-    expandWithMappings([vendorIndustry], equivalences),
-  );
-}
-
 /**
- * Deterministic weighted score on a 0–100 scale.
- * Missing dimensions contribute 0 and are listed for explainability.
- * Optional tag equivalences expand categories/industry before overlap.
+ * Deterministic weighted score on a 0–100 scale (plus up to +5 org-type bonus).
  */
 export function calculateMatchScore(
   company: ProfileFeatures,
@@ -360,57 +340,68 @@ export function calculateMatchScore(
   const expand = (values: string[]) =>
     expandWithMappings(values, equivalences);
 
+  const innovatorCategories =
+    vendor.categories.length > 0
+      ? vendor.categories
+      : vendor.mutualPreferenceTags;
+
   const breakdown: ScoreBreakdown = {
-    capability: overlapScore(
-      expand(company.requirements),
-      expand(vendor.capabilities),
+    challenge: mandateCoverageScore(
+      company.preferredCategories,
+      innovatorCategories,
+      expand,
     ),
-    industry: industryScore(
-      company.industry,
-      vendor.industry,
-      equivalences,
+    solution: mandateCoverageScore(
+      company.requirements,
+      vendor.capabilities,
+      expand,
     ),
-    // Ethara-aligned: client needs vs guest event categories / services
-    requirements: Math.max(
-      overlapScore(expand(company.requirements), expand(vendor.categories)),
-      overlapScore(expand(company.requirements), expand(vendor.capabilities)),
-    ),
-    geography: overlapScore(expand(company.regions), expand(vendor.regions)),
+    geography: geographyMatchScore(company.regions, vendor.regions, expand),
     commercial: overlapScore(
       expand(company.commercialTags),
       expand(vendor.commercialTags),
     ),
-    // Client preferred Ethara categories ↔ guest event categories
-    mutualPreferences: overlapScore(
-      expand(company.preferredCategories),
-      expand(
-        vendor.categories.length
-          ? vendor.categories
-          : vendor.mutualPreferenceTags,
-      ),
+    stage: stageFitScore(
+      company.investmentStages,
+      vendor.investmentStages,
     ),
+    ticket: ticketFitScore(company.ticketSize, vendor.ticketSize),
+    orgTypeBonus: orgTypeBonusPoints(company.industry, vendor.industry),
   };
 
   const missingDimensions: string[] = [];
-  if (company.requirements.length === 0 || vendor.capabilities.length === 0) {
-    missingDimensions.push('capability');
+  if (
+    company.preferredCategories.length === 0 ||
+    innovatorCategories.length === 0
+  ) {
+    missingDimensions.push('challenge');
   }
-  if (!company.industry || !vendor.industry) {
-    missingDimensions.push('industry');
+  if (company.requirements.length === 0 || vendor.capabilities.length === 0) {
+    missingDimensions.push('solution');
   }
   if (company.regions.length === 0 || vendor.regions.length === 0) {
     missingDimensions.push('geography');
   }
+  if (company.investmentStages.length === 0 || vendor.investmentStages.length === 0) {
+    missingDimensions.push('stage');
+  }
+  if (!company.ticketSize || !vendor.ticketSize) {
+    missingDimensions.push('ticket');
+  }
 
-  const totalScore =
-    breakdown.capability * weights.capability +
-    breakdown.industry * weights.industry +
-    breakdown.requirements * weights.requirements +
+  const weighted =
+    breakdown.challenge * weights.challenge +
+    breakdown.solution * weights.solution +
     breakdown.geography * weights.geography +
     breakdown.commercial * weights.commercial +
-    breakdown.mutualPreferences * weights.mutualPreferences;
+    breakdown.stage * weights.stage +
+    breakdown.ticket * weights.ticket;
 
-  const rounded = Math.round(totalScore * 100) / 100;
+  const totalScore = Math.min(
+    100,
+    Math.round((weighted + breakdown.orgTypeBonus) * 100) / 100,
+  );
+
   const reasons = buildMatchReasons(
     company,
     vendor,
@@ -420,15 +411,16 @@ export function calculateMatchScore(
   );
 
   const parts = [
-    `capability ${breakdown.capability.toFixed(0)}`,
-    `industry ${breakdown.industry.toFixed(0)}`,
-    `requirements ${breakdown.requirements.toFixed(0)}`,
+    `challenge ${breakdown.challenge.toFixed(0)}`,
+    `solution ${breakdown.solution.toFixed(0)}`,
     `geography ${breakdown.geography.toFixed(0)}`,
     `commercial ${breakdown.commercial.toFixed(0)}`,
-    `preferences ${breakdown.mutualPreferences.toFixed(0)}`,
+    `stage ${breakdown.stage.toFixed(0)}`,
+    `ticket ${breakdown.ticket.toFixed(0)}`,
+    `orgType +${breakdown.orgTypeBonus.toFixed(0)}`,
   ];
 
-  const technical = `Score ${rounded}/100 from weighted dimensions (${parts.join(', ')}).${
+  const technical = `Score ${totalScore}/100 from weighted dimensions (${parts.join(', ')}).${
     missingDimensions.length
       ? ` Incomplete data for: ${missingDimensions.join(', ')} (scored as 0).`
       : ''
@@ -439,10 +431,11 @@ export function calculateMatchScore(
     : technical;
 
   return {
-    totalScore: rounded,
+    totalScore,
     breakdown,
     reasons,
     explanation,
     missingDimensions,
+    matchedChallengeTags: matchedChallengeSlugs(company, vendor, equivalences),
   };
 }

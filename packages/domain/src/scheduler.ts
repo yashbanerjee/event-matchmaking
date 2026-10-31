@@ -53,6 +53,27 @@ function parseHm(value: string): number {
   return h * 60 + m;
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function zonedUtcMs(
+  year: number,
+  month: number,
+  day: number,
+  minutes: number,
+  timeZone?: string,
+): number {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  if (timeZone === 'Asia/Dubai') {
+    return new Date(
+      `${year}-${pad2(month)}-${pad2(day)}T${pad2(hour)}:${pad2(minute)}:00+04:00`,
+    ).getTime();
+  }
+  return Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+}
+
 /**
  * Weighted greedy scheduler with conflict resolution.
  * - Never double-books a company or vendor in the same slot
@@ -189,44 +210,26 @@ export function buildDailySlots(params: {
     number,
   ];
 
-  const dayStartMs = Date.UTC(year, month - 1, day, startH, startM, 0, 0);
+  const dayStartMs = zonedUtcMs(
+    year,
+    month,
+    day,
+    startH * 60 + startM,
+    params.timeZone,
+  );
   const endMinutes = params.endTime
     ? parseHm(params.endTime)
     : parseHm(params.startTime) +
       (params.slotCount ?? 6) *
         (params.meetingDurationMinutes + params.bufferMinutes);
-  const dayEndMs = Date.UTC(
-    year,
-    month - 1,
-    day,
-    Math.floor(endMinutes / 60),
-    endMinutes % 60,
-    0,
-    0,
-  );
+  const dayEndMs = zonedUtcMs(year, month, day, endMinutes, params.timeZone);
 
   const excludes = (params.excludeIntervals ?? []).map((interval) => {
     const startMin = parseHm(interval.startTime);
     const endMin = parseHm(interval.endTime);
     return {
-      start: Date.UTC(
-        year,
-        month - 1,
-        day,
-        Math.floor(startMin / 60),
-        startMin % 60,
-        0,
-        0,
-      ),
-      end: Date.UTC(
-        year,
-        month - 1,
-        day,
-        Math.floor(endMin / 60),
-        endMin % 60,
-        0,
-        0,
-      ),
+      start: zonedUtcMs(year, month, day, startMin, params.timeZone),
+      end: zonedUtcMs(year, month, day, endMin, params.timeZone),
     };
   });
 

@@ -5,7 +5,7 @@ Production-oriented company & vendor matchmaking, configurable onboarding, meeti
 ## Stack
 
 - **Frontend:** Next.js App Router, React, TypeScript, Tailwind CSS
-- **Mobile:** Flutter (`mobile/`) — Ethara client/guest app with Firebase push + analytics
+- **Mobile:** Flutter (`mobile/`) — Ethara investor/innovator app with Firebase push + analytics
 - **API:** NestJS, Prisma, PostgreSQL, RabbitMQ, Redis
 - **Workers:** Node RabbitMQ consumer
 - **Domain:** Pure TypeScript scoring & scheduling (`packages/domain`)

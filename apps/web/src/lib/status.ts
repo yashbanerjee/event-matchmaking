@@ -5,6 +5,7 @@ type BadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>;
 
 export function statusTone(status: string): BadgeVariant {
   const s = status.toUpperCase();
+  if (s === 'IN_PROGRESS') return 'accent';
   if (
     [
       'ACTIVE',

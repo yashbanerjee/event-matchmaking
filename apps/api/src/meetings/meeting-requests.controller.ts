@@ -74,7 +74,7 @@ export class MeetingRequestsController {
   ) {
     return this.recommendationsService.forActor(
       user,
-      limit ? Number(limit) : 10,
+      limit ? Number(limit) : undefined,
     );
   }
 
@@ -98,7 +98,7 @@ export class MeetingRequestsController {
       message?: string;
       startsAt?: string;
       placeId?: string;
-      mode?: 'SCHEDULED' | 'NOW';
+      mode?: 'SCHEDULED' | 'NOW' | 'INTEREST';
     },
   ) {
     return this.requests.create(user, body);
@@ -125,7 +125,7 @@ export class MeetingRequestsController {
   propose(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { startsAt: string; placeId: string },
+    @Body() body: { startsAt: string; placeId?: string },
   ) {
     return this.requests.proposeSchedule(user, id, body);
   }

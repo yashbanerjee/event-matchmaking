@@ -21,6 +21,10 @@ import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import {
+  formatNextMeeting,
+  type MeetingStats,
+} from '@/lib/org-directory';
 
 type OrgList = {
   items: Array<{
@@ -49,6 +53,7 @@ type OrgList = {
       status: string;
       submittedAt?: string | null;
     } | null;
+    meetingStats?: MeetingStats;
   }>;
   total: number;
   page: number;
@@ -258,8 +263,8 @@ export default function VendorsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Organizations"
-        title="Guests"
-        description="Invite guests by email with an optional onboarding form link."
+        title="Innovators"
+        description="Invite innovators by email with an optional onboarding form link."
         actions={
           <>
             <Button variant="outline" onClick={() => setCsvOpen(true)}>
@@ -308,11 +313,11 @@ export default function VendorsPage() {
 
         {!isLoading && !error && items.length === 0 ? (
           <EmptyState
-            title={debouncedSearch ? 'No matching guests' : 'No guests yet'}
+            title={debouncedSearch ? 'No matching innovators' : 'No innovators yet'}
             description={
               debouncedSearch
                 ? 'Try another name or email.'
-                : 'Use Add to invite a guest by email, or import a CSV.'
+                : 'Use Add to invite an innovator by email, or import a CSV.'
             }
           />
         ) : null}
@@ -326,12 +331,12 @@ export default function VendorsPage() {
             >
               <THead>
                 <TR>
-                  <TH>Code</TH>
                   <TH>Name</TH>
-                  <TH>Email</TH>
                   <TH>Status</TH>
-                  <TH>Eligible</TH>
-                  <TH className="text-right">Actions</TH>
+                  <TH>Upcoming</TH>
+                  <TH>Confirmed</TH>
+                  <TH>Next meeting</TH>
+                  <TH className="w-12 text-right"> </TH>
                 </TR>
               </THead>
               <TBody>
@@ -340,76 +345,63 @@ export default function VendorsPage() {
                     org.workflowStatus ??
                     org.vendor?.approvalStatus ??
                     org.status;
-                  const canReview = Boolean(org.latestSubmission?.id);
-                  const verified =
-                    status === 'VERIFIED' || status === 'APPROVED';
+                  const stats = org.meetingStats;
                   return (
                   <TR key={org.id}>
-                    <TD className="font-mono text-xs">{org.code}</TD>
-                    <TD className="font-medium">
-                      <span className="inline-flex items-center gap-2">
+                    <TD className="whitespace-normal">
+                      <div className="flex min-w-[16rem] items-start gap-2.5">
                         {org.logoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={org.logoUrl}
                             alt=""
-                            className="h-7 w-7 rounded-md object-cover"
+                            className="mt-0.5 h-8 w-8 rounded-md object-cover"
                           />
                         ) : null}
-                        {org.name}
-                        {org.vendor?.featured ? (
-                          <Badge variant="accent">Featured</Badge>
-                        ) : null}
-                      </span>
-                    </TD>
-                    <TD className="text-[var(--muted)]">
-                      {org.contactEmail ?? '—'}
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/admin/vendors/${org.id}`}
+                              className="font-semibold text-[#172B4D] hover:text-[var(--accent)] hover:underline"
+                            >
+                              {org.name}
+                            </Link>
+                            {org.vendor?.featured ? (
+                              <Badge variant="accent">Featured</Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-xs text-[#626F86]">
+                            {org.contactEmail ?? 'No email'} · {org.code}
+                          </p>
+                          <p className="text-xs text-[#626F86]">
+                            Matching:{' '}
+                            {org.vendor?.matchingEligible
+                              ? 'Eligible'
+                              : 'Not eligible'}
+                          </p>
+                        </div>
+                      </div>
                     </TD>
                     <TD>
                       <Badge variant={statusTone(status)}>
                         {formatVendorStatus(status)}
                       </Badge>
                     </TD>
-                    <TD>
-                      <Badge
-                        variant={
-                          org.vendor?.matchingEligible ? 'success' : 'secondary'
-                        }
-                      >
-                        {org.vendor?.matchingEligible ? 'Yes' : 'No'}
-                      </Badge>
+                    <TD>{stats?.upcoming ?? 0}</TD>
+                    <TD>{stats?.confirmed ?? 0}</TD>
+                    <TD className="text-[#626F86]">
+                      {formatNextMeeting(stats?.nextStartsAt)}
                     </TD>
                     <TD className="text-right">
-                      <div className="inline-flex flex-nowrap items-center justify-end gap-1">
-                        <Link
-                          href={
-                            org.latestSubmission?.id
-                              ? `/admin/vendors/${org.id}/form?submissionId=${org.latestSubmission.id}`
-                              : `/admin/vendors/${org.id}/form`
-                          }
-                        >
-                          <Button size="sm" variant="outline">
-                            {canReview ? 'View form' : 'Form status'}
-                          </Button>
-                        </Link>
-                        {!verified && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            loading={
-                              approve.isPending && approve.variables === org.id
-                            }
-                            onClick={() => approve.mutate(org.id)}
-                          >
-                            Verify
-                          </Button>
-                        )}
-                        <OrgRowActions
-                          org={org}
-                          kind="vendor"
-                          queryKey={[...queryKey]}
-                        />
-                      </div>
+                      <OrgRowActions
+                        org={org}
+                        kind="vendor"
+                        queryKey={[...queryKey]}
+                        verifying={
+                          approve.isPending && approve.variables === org.id
+                        }
+                        onVerify={() => approve.mutate(org.id)}
+                      />
                     </TD>
                   </TR>
                   );
@@ -428,7 +420,7 @@ export default function VendorsPage() {
 
       <Modal
         open={addOpen}
-        title="Invite guest"
+        title="Invite innovator"
         description="Send an email with a registration link. Optionally attach a form for profile details."
         onClose={() => setAddOpen(false)}
         wide
@@ -486,9 +478,9 @@ export default function VendorsPage() {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Guest name</label>
+            <label className="mb-1.5 block text-sm font-medium">Innovator name</label>
             <Input
-              placeholder="Guest organization name"
+              placeholder="Innovator organization name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />

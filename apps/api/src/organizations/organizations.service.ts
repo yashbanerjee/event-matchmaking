@@ -107,12 +107,11 @@ export class OrganizationsService {
       industry?: string;
     },
   ) {
-    // Company invite emails go to the contact only — no form-link selection.
-    // Forms are assigned via published form sync / onboarding, same as vendors after invite.
+    const defaults = await this.resolveOnboardingForm('COMPANY');
     return this.inviteOrganization(actor, {
       ...input,
-      formId: undefined,
-      formVersionId: undefined,
+      formId: input.formId ?? defaults?.formId,
+      formVersionId: input.formVersionId ?? defaults?.formVersionId,
       type: OrganizationType.COMPANY,
       roleCode: 'COMPANY_USER',
       industry: input.industry,
@@ -131,8 +130,13 @@ export class OrganizationsService {
       code?: string;
     },
   ) {
+    const defaults = input.formId
+      ? null
+      : await this.resolveOnboardingForm('VENDOR');
     return this.inviteOrganization(actor, {
       ...input,
+      formId: input.formId ?? defaults?.formId,
+      formVersionId: input.formVersionId ?? defaults?.formVersionId,
       type: OrganizationType.VENDOR,
       roleCode: 'VENDOR_USER',
     });
@@ -155,7 +159,7 @@ export class OrganizationsService {
   ) {
     const email = input.email.trim().toLowerCase();
     const name = input.name.trim();
-    const kind = input.type === 'COMPANY' ? 'Company' : 'Vendor';
+    const kind = input.type === 'COMPANY' ? 'Investor' : 'Innovator';
     if (!name || !email) {
       throw new BadRequestException(`${kind} name and email are required`);
     }
@@ -279,7 +283,9 @@ export class OrganizationsService {
         input.formId && input.formVersionId
           ? `&formId=${input.formId}&formVersionId=${input.formVersionId}`
           : '';
-      const registrationUrl = `${this.env.appUrl}/register?token=${token}${formQuery}`;
+      const registrationUrl = `${this.env.appUrl}${
+        input.type === 'COMPANY' ? '/register/investor' : '/register/innovator'
+      }?token=${token}${formQuery}`;
 
       await this.outbox.enqueue(tx, {
         aggregateType: 'Invitation',
@@ -367,7 +373,7 @@ export class OrganizationsService {
     const email = input.email.trim().toLowerCase();
     const name = input.name.trim();
     if (!name || !email) {
-      throw new BadRequestException('Company name and email are required');
+      throw new BadRequestException('Investor name and email are required');
     }
     if (!input.formId || !input.formVersionId) {
       throw new BadRequestException(
@@ -492,7 +498,7 @@ export class OrganizationsService {
       include: { company: true },
     });
     if (!org?.company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException('Investor not found');
     }
 
     const version = await this.prisma.formVersion.findUnique({
@@ -694,6 +700,7 @@ export class OrganizationsService {
         : {}),
     };
 
+    const now = new Date();
     const [items, total] = await Promise.all([
       this.prisma.organization.findMany({
         where,
@@ -731,6 +738,46 @@ export class OrganizationsService {
       this.prisma.organization.count({ where }),
     ]);
 
+    const orgIds = items.map((item) => item.id);
+    const [assignments, meetings] = orgIds.length
+      ? await Promise.all([
+          this.prisma.investorPlaceAssignment.findMany({
+            where: {
+              organizationId: { in: orgIds },
+              endsAt: { gt: now },
+            },
+            include: {
+              place: {
+                select: { id: true, name: true, location: true, code: true },
+              },
+            },
+            orderBy: { startsAt: 'asc' },
+          }),
+          this.prisma.meeting.findMany({
+            where: {
+              OR: [
+                { companyOrgId: { in: orgIds } },
+                { vendorOrgId: { in: orgIds } },
+              ],
+              status: { not: 'CANCELLED' },
+            },
+            select: {
+              companyOrgId: true,
+              vendorOrgId: true,
+              status: true,
+              startsAt: true,
+            },
+          }),
+        ])
+      : [[], []];
+
+    const assignmentByOrg = new Map<string, (typeof assignments)[number]>();
+    for (const row of assignments) {
+      if (!assignmentByOrg.has(row.organizationId)) {
+        assignmentByOrg.set(row.organizationId, row);
+      }
+    }
+
     return {
       items: items.map((item) => {
         const attrs =
@@ -741,6 +788,32 @@ export class OrganizationsService {
           typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null;
         const logoUrl =
           typeof attrs.logoUrl === 'string' ? attrs.logoUrl : null;
+        const mine = meetings.filter(
+          (meeting) =>
+            meeting.companyOrgId === item.id || meeting.vendorOrgId === item.id,
+        );
+        const upcoming = mine.filter(
+          (meeting) =>
+            meeting.startsAt >= now &&
+            !['COMPLETED', 'NO_SHOW'].includes(meeting.status),
+        );
+        const confirmed = mine.filter((meeting) =>
+          [
+            'CONFIRMED',
+            'IN_PROGRESS',
+            'PUBLISHED',
+            'AWAITING_CONFIRMATION',
+            'RESCHEDULED',
+            'RESCHEDULE_REQUESTED',
+          ].includes(meeting.status),
+        );
+        const completed = mine.filter(
+          (meeting) => meeting.status === 'COMPLETED',
+        );
+        const nextMeeting = [...upcoming].sort(
+          (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+        )[0];
+        const assignment = assignmentByOrg.get(item.id);
         return {
           ...item,
           contactEmail:
@@ -754,11 +827,424 @@ export class OrganizationsService {
             item.vendor?.approvalStatus ??
             item.company?.approvalStatus ??
             item.status,
+          tableAssignment: assignment
+            ? {
+                placeName: assignment.place.name,
+                location: assignment.place.location,
+                startsAt: assignment.startsAt,
+                endsAt: assignment.endsAt,
+                allDay: assignment.allDay,
+              }
+            : null,
+          meetingStats: {
+            upcoming: upcoming.length,
+            confirmed: confirmed.length,
+            completed: completed.length,
+            nextStartsAt: nextMeeting?.startsAt ?? null,
+          },
         };
       }),
       page,
       pageSize,
       total,
+    };
+  }
+
+  private async resolveOnboardingForm(type: 'COMPANY' | 'VENDOR') {
+    const codes =
+      type === 'COMPANY'
+        ? ['WATER_INVESTOR_ONBOARDING', 'ETHARA_ONBOARDING']
+        : ['WATER_INNOVATOR_ONBOARDING'];
+    for (const code of codes) {
+      const form = await this.prisma.form.findUnique({
+        where: { code },
+        include: {
+          versions: {
+            where: { status: 'PUBLISHED' },
+            orderBy: { version: 'desc' },
+            take: 1,
+          },
+        },
+      });
+      if (form?.versions[0]) {
+        return { formId: form.id, formVersionId: form.versions[0].id };
+      }
+    }
+    const fallback = await this.prisma.form.findFirst({
+      where: {
+        OR: [{ targetType: type }, { targetType: null }],
+        versions: { some: { status: 'PUBLISHED' } },
+      },
+      include: {
+        versions: {
+          where: { status: 'PUBLISHED' },
+          orderBy: { version: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (fallback?.versions[0]) {
+      return { formId: fallback.id, formVersionId: fallback.versions[0].id };
+    }
+    return null;
+  }
+
+  async getProfile(id: string) {
+    const org = await this.get(id);
+    const [submission, invitations, meetings, auditLogs] = await Promise.all([
+      this.prisma.formSubmission.findFirst({
+        where: { organizationId: id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          formVersion: {
+            include: {
+              form: { select: { id: true, name: true, code: true } },
+              fields: { orderBy: { displayOrder: 'asc' } },
+            },
+          },
+        },
+      }),
+      this.prisma.invitation.findMany({
+        where: { organizationId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.meeting.findMany({
+        where: { OR: [{ companyOrgId: id }, { vendorOrgId: id }] },
+        orderBy: { startsAt: 'desc' },
+        take: 20,
+        include: {
+          companyOrg: { select: { name: true } },
+          vendorOrg: { select: { name: true } },
+          place: { select: { name: true } },
+        },
+      }),
+      this.prisma.auditLog.findMany({
+        where: { entityId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+        include: {
+          actor: {
+            select: { email: true, firstName: true, lastName: true },
+          },
+        },
+      }),
+    ]);
+
+    const responses = (submission?.responses ?? {}) as Record<string, unknown>;
+    const schema = (submission?.formVersion.schemaJson ?? {}) as {
+      fields?: Array<{
+        id?: string;
+        key?: string;
+        label?: string;
+        type?: string;
+      }>;
+    };
+    const answers = (schema.fields ?? [])
+      .filter((field) => field.type !== 'heading' && field.type !== 'info')
+      .map((field) => {
+        const value =
+          (field.key ? responses[field.key] : undefined) ??
+          (field.id ? responses[field.id] : undefined);
+        return {
+          key: field.key ?? field.id ?? '',
+          label: field.label ?? field.key ?? 'Field',
+          value,
+        };
+      })
+      .filter((row) => row.value !== undefined && row.value !== '');
+
+    const activity = [
+      ...auditLogs.map((log) => ({
+        id: `audit:${log.id}`,
+        at: log.createdAt,
+        kind: 'audit',
+        title: log.action.replaceAll('.', ' '),
+        detail: log.actor
+          ? [log.actor.firstName, log.actor.lastName].filter(Boolean).join(' ') ||
+            log.actor.email
+          : log.outcome,
+      })),
+      ...invitations.map((inv) => ({
+        id: `invite:${inv.id}`,
+        at: inv.createdAt,
+        kind: 'invitation',
+        title: `Invitation ${inv.status.toLowerCase()}`,
+        detail: inv.email,
+      })),
+      ...(submission
+        ? [
+            {
+              id: `submission:${submission.id}`,
+              at: submission.submittedAt ?? submission.createdAt,
+              kind: 'form',
+              title: `Onboarding ${submission.status.toLowerCase()}`,
+              detail: submission.formVersion.form.name,
+            },
+          ]
+        : []),
+      ...meetings.map((meeting) => ({
+        id: `meeting:${meeting.id}`,
+        at: meeting.startsAt,
+        kind: 'meeting',
+        title: `Meeting ${meeting.status.replaceAll('_', ' ').toLowerCase()}`,
+        detail: `${meeting.companyOrg.name} × ${meeting.vendorOrg.name}${
+          meeting.place ? ` · ${meeting.place.name}` : ''
+        }`,
+      })),
+    ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    const latestInvitation = invitations[0] ?? null;
+    const invitationLink = this.describeInvitationLinkForOrg(
+      org,
+      latestInvitation,
+    );
+
+    return {
+      organization: org,
+      submission: submission
+        ? {
+            id: submission.id,
+            status: submission.status,
+            submittedAt: submission.submittedAt,
+            formName: submission.formVersion.form.name,
+          }
+        : null,
+      answers,
+      activity,
+      invitationLink,
+    };
+  }
+
+  private resolveOrgContactEmail(
+    org: {
+      members?: Array<{ isPrimary?: boolean; user: { email: string } }>;
+      customAttrs?: unknown;
+    },
+    invitation: { email: string } | null,
+  ): string | null {
+    if (invitation?.email) {
+      return invitation.email;
+    }
+    const attrs = org.customAttrs as { contactEmail?: string } | null;
+    if (attrs?.contactEmail?.trim()) {
+      return attrs.contactEmail.trim().toLowerCase();
+    }
+    const primary =
+      org.members?.find((member) => member.isPrimary) ?? org.members?.[0];
+    return primary?.user.email?.toLowerCase() ?? null;
+  }
+
+  private isOrgRegistered(org: {
+    company?: { approvalStatus?: string } | null;
+    vendor?: { approvalStatus?: string } | null;
+    members?: Array<{ user: { status: string } }>;
+  }): boolean {
+    const approval =
+      org.vendor?.approvalStatus ?? org.company?.approvalStatus ?? '';
+    if (approval === 'VERIFIED' || approval === 'APPROVED') {
+      return true;
+    }
+    return (
+      org.members?.some((member) => member.user.status === 'ACTIVE') ?? false
+    );
+  }
+
+  private describeInvitationLinkForOrg(
+    org: {
+      company?: { approvalStatus?: string } | null;
+      vendor?: { approvalStatus?: string } | null;
+      members?: Array<{ isPrimary?: boolean; user: { email: string; status: string } }>;
+      customAttrs?: unknown;
+    },
+    invitation: {
+      email: string;
+      status: string;
+      expiresAt: Date;
+    } | null,
+  ) {
+    const email = this.resolveOrgContactEmail(org, invitation);
+    const registered = this.isOrgRegistered(org);
+
+    if (invitation?.status === 'ACCEPTED' || registered) {
+      return {
+        show: true as const,
+        canCopy: false as const,
+        reason: 'registered' as const,
+        email: email ?? invitation?.email,
+        status: invitation?.status,
+      };
+    }
+    if (invitation?.status === 'REVOKED') {
+      return {
+        show: true as const,
+        canCopy: false as const,
+        reason: 'revoked' as const,
+        email: invitation.email,
+        status: invitation.status,
+      };
+    }
+    const copyableInvite =
+      invitation &&
+      ['PENDING', 'SENT', 'DELIVERED', 'EXPIRED', 'FAILED'].includes(
+        invitation.status,
+      );
+    if (copyableInvite) {
+      return {
+        show: true as const,
+        canCopy: true as const,
+        reason: 'ready' as const,
+        email: invitation.email,
+        status: invitation.status,
+        expiresAt: invitation.expiresAt,
+      };
+    }
+    if (email) {
+      return {
+        show: true as const,
+        canCopy: true as const,
+        reason: 'create_on_issue' as const,
+        email,
+      };
+    }
+    return {
+      show: true as const,
+      canCopy: false as const,
+      reason: 'no_email' as const,
+    };
+  }
+
+  private buildRegistrationUrl(
+    type: OrganizationType,
+    token: string,
+    formId?: string | null,
+    formVersionId?: string | null,
+  ) {
+    const formQuery =
+      formId && formVersionId
+        ? `&formId=${formId}&formVersionId=${formVersionId}`
+        : '';
+    const path =
+      type === OrganizationType.COMPANY
+        ? '/register/investor'
+        : '/register/innovator';
+    return `${this.env.appUrl}${path}?token=${token}${formQuery}`;
+  }
+
+  async issueInvitationLink(actor: AuthUser, organizationId: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: {
+        company: true,
+        vendor: true,
+        members: {
+          include: {
+            user: { select: { email: true, status: true } },
+          },
+        },
+        formAssignments: { orderBy: { assignedAt: 'desc' }, take: 1 },
+      },
+    });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    if (this.isOrgRegistered(org)) {
+      throw new BadRequestException(
+        'This profile is already registered. Invitation links are only for pending sign-ups.',
+      );
+    }
+
+    let invitation = await this.prisma.invitation.findFirst({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (invitation?.status === 'REVOKED') {
+      throw new BadRequestException('The invitation was revoked.');
+    }
+
+    const contactEmail = this.resolveOrgContactEmail(org, invitation);
+    if (!contactEmail) {
+      throw new BadRequestException(
+        'No invite email on this profile. Add an email when inviting from the directory.',
+      );
+    }
+
+    let assignment = org.formAssignments[0];
+    if (!assignment) {
+      const defaults = await this.resolveOnboardingForm(
+        org.type === OrganizationType.COMPANY ? 'COMPANY' : 'VENDOR',
+      );
+      if (defaults) {
+        assignment = await this.prisma.formAssignment.create({
+          data: {
+            formId: defaults.formId,
+            formVersionId: defaults.formVersionId,
+            organizationId: org.id,
+          },
+        });
+      }
+    }
+
+    const token = generateSecureToken(32);
+    const tokenHash = hashToken(token);
+    const expiresAt = new Date(
+      Date.now() + this.env.invitationTtlDays * 86_400_000,
+    );
+    const inviteUrl = this.buildRegistrationUrl(
+      org.type,
+      token,
+      assignment?.formId,
+      assignment?.formVersionId,
+    );
+
+    const roleCode =
+      org.type === OrganizationType.COMPANY ? 'COMPANY_USER' : 'VENDOR_USER';
+    const role = await this.prisma.role.findUnique({ where: { code: roleCode } });
+    if (!role) {
+      throw new BadRequestException('Role configuration missing');
+    }
+
+    if (!invitation) {
+      invitation = await this.prisma.invitation.create({
+        data: {
+          email: contactEmail,
+          organizationId: org.id,
+          roleId: role.id,
+          tokenHash,
+          status: 'PENDING',
+          expiresAt,
+          createdById: actor.id,
+          idempotencyKey: `invite-link:${organizationId}:${contactEmail}:${Date.now()}`,
+        },
+      });
+    } else {
+      invitation = await this.prisma.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          email: contactEmail,
+          tokenHash,
+          status: 'PENDING',
+          expiresAt,
+        },
+      });
+    }
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'invitation.link_issue',
+      entityType: 'Invitation',
+      entityId: invitation.id,
+      outcome: 'SUCCESS',
+      after: { organizationId, email: invitation.email, expiresAt },
+    });
+
+    return {
+      inviteUrl,
+      email: invitation.email,
+      expiresAt: invitation.expiresAt,
+      status: invitation.status,
     };
   }
 
@@ -1069,7 +1555,7 @@ export class OrganizationsService {
       },
     });
     if (!org?.vendor) {
-      throw new NotFoundException('Vendor not found');
+      throw new NotFoundException('Innovator not found');
     }
 
     const latestSubmission = await this.prisma.formSubmission.findFirst({
@@ -1153,7 +1639,7 @@ export class OrganizationsService {
         emailSent = true;
       } catch (err) {
         this.logger.warn(
-          `Vendor verified email failed for ${contactEmail}: ${(err as Error).message}`,
+          `Innovator verified email failed for ${contactEmail}: ${(err as Error).message}`,
         );
       }
     }
@@ -1161,7 +1647,7 @@ export class OrganizationsService {
     await this.audit.record({
       actorId: actor.id,
       action: 'vendor.approve',
-      entityType: 'Vendor',
+      entityType: 'Innovator',
       entityId: id,
       outcome: 'SUCCESS',
       after: { emailSent, email: contactEmail },

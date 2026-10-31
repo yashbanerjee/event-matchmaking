@@ -8,7 +8,7 @@ import type {
   ProfileExtractionResult,
   SemanticSimilarityInput,
 } from './ai.provider';
-import { DEFAULT_MATCHMAKING_PROMPT } from './matchmaking-prompt';
+import { pairMatchScoreViaChat } from './pair-score-chat';
 
 const extractionSchema = z.object({
   capabilities: z.array(z.string()).default([]),
@@ -112,45 +112,16 @@ export class OpenAiProvider implements AiProvider {
   async pairMatchScore(
     input: PairMatchScoreInput,
   ): Promise<PairMatchScoreResult> {
-    const system = input.systemPrompt?.trim() || DEFAULT_MATCHMAKING_PROMPT;
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(this.timeoutMs),
-      body: JSON.stringify({
-        model: this.chatModel,
+    return pairMatchScoreViaChat(
+      {
+        apiKey: this.apiKey,
+        baseUrl: 'https://api.openai.com/v1',
+        chatModel: this.chatModel,
         temperature: input.temperature ?? 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: system },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              clientProfile: input.left.slice(0, 6000),
-              guestProfile: input.right.slice(0, 6000),
-            }),
-          },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI pair score failed: ${res.status}`);
-    const json = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = json.choices?.[0]?.message?.content ?? '{}';
-    const parsed = z
-      .object({
-        score: z.number().min(0).max(100),
-        rationale: z.string().optional(),
-      })
-      .parse(JSON.parse(content));
-    return {
-      score: Math.max(0, Math.min(1, parsed.score / 100)),
-      rationale: parsed.rationale,
-    };
+        timeoutMs: this.timeoutMs,
+      },
+      input,
+    );
   }
 }
 

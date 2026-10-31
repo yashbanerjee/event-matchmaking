@@ -16,9 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/empty-state';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import { cn } from '@/lib/utils';
+import { PEER_RECOMMENDATIONS_MAX_PER_ORG } from '@em/shared';
+import { MatchReasonDisplay } from '@/components/match-reason-display';
 
 type OverviewItem = {
   organizationId: string;
@@ -32,6 +34,7 @@ type OverviewItem = {
     source?: 'COMPUTED' | 'MANUAL';
     totalScore: number;
     aiDescription: string | null;
+    reasons?: string[];
   }>;
 };
 
@@ -52,11 +55,12 @@ type OrgDetailResponse = {
     totalScore: number;
     aiScore: number | null;
     aiDescription: string | null;
+    reasons?: string[];
   }>;
 };
 
 type CandidatesResponse = {
-  counterpartLabel: 'clients' | 'guests';
+  counterpartLabel: 'investors' | 'innovators';
   items: Array<{ id: string; name: string; industry: string | null }>;
 };
 
@@ -78,7 +82,7 @@ function AdminRecommendationsPageInner() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
-  const [type, setType] = useState<'ALL' | 'COMPANY' | 'VENDOR'>('ALL');
+  const [roleTab, setRoleTab] = useState<'COMPANY' | 'VENDOR'>('COMPANY');
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [detailOrgId, setDetailOrgId] = useState<string | null>(null);
@@ -93,14 +97,14 @@ function AdminRecommendationsPageInner() {
   }, [searchParams]);
 
   const overview = useQuery({
-    queryKey: ['admin-peer-recommendations', page, type, search],
+    queryKey: ['admin-peer-recommendations', page, roleTab, search],
     placeholderData: keepPreviousData,
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(PAGE_SIZE),
+        type: roleTab,
       });
-      if (type !== 'ALL') params.set('type', type);
       if (search.trim()) params.set('q', search.trim());
       return apiFetch<OverviewResponse>(
         `/peer-recommendations?${params.toString()}`,
@@ -114,7 +118,7 @@ function AdminRecommendationsPageInner() {
     enabled: Boolean(detailOrgId),
     queryFn: () =>
       apiFetch<OrgDetailResponse>(
-        `/peer-recommendations/org/${detailOrgId}?limit=50`,
+        `/peer-recommendations/org/${detailOrgId}`,
         { token: getAccessToken() },
       ),
   });
@@ -196,9 +200,9 @@ function AdminRecommendationsPageInner() {
   const counterpartWord =
     detail.data?.counterpartLabel ||
     candidates.data?.counterpartLabel ||
-    (viewerType === 'COMPANY' ? 'guests' : 'clients');
+    (viewerType === 'COMPANY' ? 'innovators' : 'investors');
   const counterpartSingular =
-    counterpartWord === 'guests' ? 'guest' : 'client';
+    counterpartWord === 'innovators' ? 'innovator' : 'investor';
 
   function closeDetail() {
     setDetailOrgId(null);
@@ -213,15 +217,45 @@ function AdminRecommendationsPageInner() {
       <PageHeader
         eyebrow="Match & meet"
         title="Recommendations"
-        description="Clients see guests; guests see clients. Manage opens that org’s list."
+        description="Qwen 2.5 (OpenRouter) scores each pair and writes match reasons. Up to 5 picks per org — recompute to refresh."
       />
 
       <Card className="space-y-4 p-4">
+        <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
+          {(
+            [
+              ['COMPANY', 'Investors'],
+              ['VENDOR', 'Innovators'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setRoleTab(value);
+                setPage(1);
+              }}
+              className={cn(
+                'rounded-lg px-4 py-2 text-sm font-semibold transition-colors',
+                roleTab === value
+                  ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                  : 'text-[var(--muted)] hover:text-[var(--foreground)]',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
             <Input
               value={q}
-              placeholder="Search organization"
+              placeholder={
+                roleTab === 'COMPANY'
+                  ? 'Search investors'
+                  : 'Search innovators'
+              }
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -231,18 +265,6 @@ function AdminRecommendationsPageInner() {
               }}
             />
           </div>
-          <select
-            className="h-10 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
-            value={type}
-            onChange={(e) => {
-              setPage(1);
-              setType(e.target.value as 'ALL' | 'COMPANY' | 'VENDOR');
-            }}
-          >
-            <option value="ALL">All</option>
-            <option value="COMPANY">Clients</option>
-            <option value="VENDOR">Guests</option>
-          </select>
           <Button
             onClick={() => {
               setPage(1);
@@ -258,42 +280,75 @@ function AdminRecommendationsPageInner() {
         ) : items.length === 0 ? (
           <EmptyState
             title="No recommendations yet"
-            description="Approve a client or guest, then recompute or add manually."
+            description="Approve an investor or innovator, then recompute or add manually."
           />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Organization</TH>
-                <TH>Type</TH>
-                <TH>Matches</TH>
-                <TH>Top matches</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
-              {items.map((org) => (
-                <TR key={org.organizationId}>
-                  <TD>
-                    <div className="font-medium">{org.name}</div>
-                    <div className="text-xs text-[var(--muted)]">
-                      {org.industry || '—'}
+          <ul className="divide-y divide-[#DFE1E6] rounded-lg border border-[#DFE1E6] bg-white">
+            {items.map((org) => {
+              const matchCount = Math.min(
+                org.recommendationCount,
+                PEER_RECOMMENDATIONS_MAX_PER_ORG,
+              );
+              const top = org.topRecommendations.slice(0, 5);
+              const isRecomputing =
+                recompute.isPending &&
+                recompute.variables === org.organizationId;
+
+              return (
+                <li
+                  key={org.organizationId}
+                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                      <h3 className="min-w-0 text-sm font-semibold text-[#172B4D]">
+                        {org.name}
+                      </h3>
+                      <Badge variant="secondary" className="normal-case">
+                        {org.type === 'COMPANY' ? 'Investor' : 'Innovator'}
+                      </Badge>
+                      <span className="text-xs tabular-nums text-[var(--muted)]">
+                        {matchCount} match{matchCount === 1 ? '' : 'es'}
+                      </span>
+                      {org.recommendationCount >
+                      PEER_RECOMMENDATIONS_MAX_PER_ORG ? (
+                        <span className="text-[10px] font-medium text-amber-700">
+                          Recompute to trim extras
+                        </span>
+                      ) : null}
                     </div>
-                  </TD>
-                  <TD>{org.type === 'COMPANY' ? 'Client' : 'Guest'}</TD>
-                  <TD>{org.recommendationCount}</TD>
-                  <TD className="max-w-sm text-sm text-[var(--muted)]">
-                    {org.topRecommendations.length === 0
-                      ? '—'
-                      : org.topRecommendations
-                          .slice(0, 3)
-                          .map(
-                            (rec) =>
-                              `${rec.toOrg.name} (${Math.round(rec.totalScore)})`,
-                          )
-                          .join(', ')}
-                  </TD>
-                  <TD className="space-x-2 whitespace-nowrap text-right">
+                    {org.industry ? (
+                      <p className="truncate text-xs text-[var(--muted)]">
+                        {org.industry}
+                      </p>
+                    ) : null}
+
+                    {top.length === 0 ? (
+                      <p className="text-xs text-[var(--muted)]">
+                        No matches yet — recompute or add in Manage.
+                      </p>
+                    ) : (
+                      <div className="flex min-w-0 flex-wrap gap-1.5">
+                        {top.map((rec) => (
+                          <span
+                            key={rec.toOrg.id}
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-2)]/40 px-2 py-1 text-xs"
+                            title={rec.toOrg.name}
+                          >
+                            <span className="truncate">{rec.toOrg.name}</span>
+                            <span className="shrink-0 font-semibold tabular-nums text-[var(--foreground)]">
+                              {Math.round(rec.totalScore)}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[11px] text-[var(--muted)]">
+                      Open Manage for full match reasons and AI rationale.
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-row flex-wrap gap-2 sm:flex-col sm:items-stretch">
                     <Button
                       size="sm"
                       variant="outline"
@@ -307,13 +362,13 @@ function AdminRecommendationsPageInner() {
                       disabled={recompute.isPending}
                       onClick={() => recompute.mutate(org.organizationId)}
                     >
-                      Recompute
+                      {isRecomputing ? 'Scoring…' : 'Recompute'}
                     </Button>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
 
         <Pagination
@@ -329,9 +384,9 @@ function AdminRecommendationsPageInner() {
         title={detail.data?.organization.name ?? 'Recommendations'}
         description={
           viewerType === 'COMPANY'
-            ? 'Recommended guests for this client'
+            ? 'Recommended innovators for this investor'
             : viewerType === 'VENDOR'
-              ? 'Recommended clients for this guest'
+              ? 'Recommended investors for this innovator'
               : undefined
         }
         onClose={closeDetail}
@@ -383,11 +438,12 @@ function AdminRecommendationsPageInner() {
                 size="sm"
                 variant="outline"
                 disabled={!detailOrgId || recompute.isPending}
+                loading={recompute.isPending}
                 onClick={() =>
                   detailOrgId ? recompute.mutate(detailOrgId) : undefined
                 }
               >
-                Recompute
+                Recompute top 5
               </Button>
             </div>
 
@@ -395,63 +451,65 @@ function AdminRecommendationsPageInner() {
               <p className="text-sm text-rose-700">{actionError}</p>
             ) : null}
 
+            <p className="text-xs text-[var(--muted)]">
+              Maximum {PEER_RECOMMENDATIONS_MAX_PER_ORG} recommendations per
+              organization (admin pins kept first, then top AI scores).
+            </p>
+
             {(detail.data?.items.length ?? 0) === 0 ? (
               <EmptyState
                 title="No recommendations"
                 description={`Add a ${counterpartSingular} or run Recompute.`}
               />
             ) : (
-              <Table>
-                <THead>
-                  <TR>
-                    <TH>Peer</TH>
-                    <TH>Source</TH>
-                    <TH>Score</TH>
-                    <TH>Note</TH>
-                    <TH />
-                  </TR>
-                </THead>
-                <TBody>
-                  {(detail.data?.items ?? []).map((row) => (
-                    <TR key={row.id}>
-                      <TD className="font-medium">{row.toOrg.name}</TD>
-                      <TD>
+              <ul className="max-h-[min(70vh,32rem)] divide-y divide-[var(--border)] overflow-y-auto rounded-lg border border-[var(--border)]">
+                {(detail.data?.items ?? []).map((row) => (
+                  <li
+                    key={row.id}
+                    className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:gap-4"
+                  >
+                    <div className="min-w-0 shrink-0 sm:w-44">
+                      <p className="font-medium leading-snug">{row.toOrg.name}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
                         {row.source === 'MANUAL' ? (
                           <Badge variant="warning">Admin</Badge>
                         ) : (
-                          <span className="text-sm text-[var(--muted)]">AI</span>
+                          <Badge variant="secondary">AI</Badge>
                         )}
-                      </TD>
-                      <TD>{Math.round(row.totalScore)}</TD>
-                      <TD className="max-w-xs truncate text-sm text-[var(--muted)]">
-                        {row.aiDescription || '—'}
-                      </TD>
-                      <TD className="text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          loading={
-                            removeRec.isPending &&
-                            removeRec.variables === row.toOrg.id
+                        <span className="text-sm font-semibold tabular-nums">
+                          {Math.round(row.totalScore)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <MatchReasonDisplay
+                        aiDescription={row.aiDescription}
+                        reasons={row.reasons}
+                        maxBullets={8}
+                        lineClamp={0}
+                      />
+                    </div>
+                    <div className="shrink-0 sm:pt-0.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        loading={
+                          removeRec.isPending &&
+                          removeRec.variables === row.toOrg.id
+                        }
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${row.toOrg.name}?`)) {
+                            return;
                           }
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                `Remove ${row.toOrg.name}?`,
-                              )
-                            ) {
-                              return;
-                            }
-                            removeRec.mutate(row.toOrg.id);
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
+                          removeRec.mutate(row.toOrg.id);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}

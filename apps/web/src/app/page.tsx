@@ -9,7 +9,7 @@ const JOURNEY = [
   },
   {
     title: 'Match',
-    body: 'See recommended counterparties with clear explanations built for client ↔ guest fit.',
+    body: 'See recommended counterparties with clear explanations built for investor ↔ innovator fit.',
   },
   {
     title: 'Connect',
@@ -70,7 +70,7 @@ export default function HomePage() {
           </h1>
           <p className="max-w-lg text-sm leading-relaxed text-[var(--muted)] sm:text-base md:text-lg">
             {brandLabel} helps Ethara event teams discover, match, connect, and
-            confirm on-site meetings for clients and guests.
+            confirm on-site meetings for investors and innovators.
           </p>
           <div className="flex flex-wrap gap-3 pt-1 sm:pt-2">
             <Link href="/register/event">

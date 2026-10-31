@@ -155,9 +155,9 @@ export default function PortalPage() {
     >
       <div className="space-y-4">
         <PageHeader
-          eyebrow="Client"
+          eyebrow="Investor"
           title="Home"
-          description="Requests, meetings, and recommended guests — at a glance."
+          description="Requests, meetings, and recommended innovators — at a glance."
         />
 
         <OverviewStatStrip
@@ -199,8 +199,8 @@ export default function PortalPage() {
 
         <RecommendationsPanel
           fromOrgId={me.data?.organizationIds?.[0]}
-          title="Recommended guests"
-          description="Admin suggestions plus guests matched to your categories and capabilities."
+          title="Recommended innovators"
+          description="Admin suggestions plus innovators matched to your categories and capabilities."
         />
       </div>
     </PortalShell>

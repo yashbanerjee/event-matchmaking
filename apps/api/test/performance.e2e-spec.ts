@@ -48,6 +48,8 @@ describe('Performance probes', () => {
       preferredCategories: ['manufacturing'],
       commercialTags: ['net30'],
       mutualPreferenceTags: [],
+      investmentStages: ['growth'],
+      ticketSize: '1m-5m',
     };
     const vendor = {
       organizationId: 'v',
@@ -59,6 +61,8 @@ describe('Performance probes', () => {
       preferredCategories: [],
       commercialTags: ['net30'],
       mutualPreferenceTags: [],
+      investmentStages: ['early-revenue'],
+      ticketSize: '250k-1m',
     };
 
     const started = performance.now();

@@ -144,6 +144,53 @@ export class SettingsService {
     values: Array<{ key: string; value: unknown }>,
   ) {
     const byKey = new Map(values.map((item) => [item.key, item.value]));
+    const dates = String(byKey.get('ops.eventDates') ?? '')
+      .split(/[,\n]/)
+      .map((part) => part.trim())
+      .filter((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+    if (byKey.has('ops.eventDates') && dates.length === 0) {
+      throw new BadRequestException('Add at least one event date');
+    }
+    const uniqueDates = [...new Set(dates)].sort();
+    if (uniqueDates.length > 0) {
+      byKey.set('ops.eventDates', uniqueDates.join(','));
+      byKey.set('ops.meetingWindowStart', uniqueDates[0]);
+      byKey.set('ops.meetingWindowEnd', uniqueDates[uniqueDates.length - 1]);
+    }
+    const normalizeHm = (value: string) => {
+      const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+      if (!match) return value.trim();
+      return `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`;
+    };
+    if (byKey.has('ops.eventActiveStart')) {
+      byKey.set(
+        'ops.eventActiveStart',
+        normalizeHm(String(byKey.get('ops.eventActiveStart') ?? '')),
+      );
+    }
+    if (byKey.has('ops.eventActiveEnd')) {
+      byKey.set(
+        'ops.eventActiveEnd',
+        normalizeHm(String(byKey.get('ops.eventActiveEnd') ?? '')),
+      );
+    }
+    const activeStart = String(byKey.get('ops.eventActiveStart') ?? '').trim();
+    const activeEnd = String(byKey.get('ops.eventActiveEnd') ?? '').trim();
+    if (byKey.has('ops.eventActiveStart') && !/^\d{2}:\d{2}$/.test(activeStart)) {
+      throw new BadRequestException('Active start must be HH:MM');
+    }
+    if (byKey.has('ops.eventActiveEnd') && !/^\d{2}:\d{2}$/.test(activeEnd)) {
+      throw new BadRequestException('Active end must be HH:MM');
+    }
+    if (
+      /^\d{2}:\d{2}$/.test(activeStart) &&
+      /^\d{2}:\d{2}$/.test(activeEnd) &&
+      activeStart >= activeEnd
+    ) {
+      throw new BadRequestException(
+        'Active start must be earlier than active end',
+      );
+    }
     const start = String(byKey.get('ops.meetingWindowStart') ?? '').trim();
     const end = String(byKey.get('ops.meetingWindowEnd') ?? '').trim();
     if (
@@ -155,6 +202,7 @@ export class SettingsService {
         'Meeting period start must be on or before the end date',
       );
     }
+    values = [...byKey.entries()].map(([key, value]) => ({ key, value }));
 
     const results = [];
     for (const item of values) {

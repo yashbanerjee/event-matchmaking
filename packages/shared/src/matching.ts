@@ -3,32 +3,45 @@ import { DEFAULT_MATCHING_WEIGHTS } from './enums.js';
 
 export const matchingWeightsSchema = z
   .object({
-    capability: z.number().min(0).max(1),
-    industry: z.number().min(0).max(1),
-    requirements: z.number().min(0).max(1),
+    challenge: z.number().min(0).max(1),
+    solution: z.number().min(0).max(1),
     geography: z.number().min(0).max(1),
     commercial: z.number().min(0).max(1),
-    mutualPreferences: z.number().min(0).max(1),
+    stage: z.number().min(0).max(1),
+    ticket: z.number().min(0).max(1),
   })
   .refine(
     (w) =>
       Math.abs(
-        w.capability +
-          w.industry +
-          w.requirements +
+        w.challenge +
+          w.solution +
           w.geography +
           w.commercial +
-          w.mutualPreferences -
+          w.stage +
+          w.ticket -
           1,
       ) < 0.001,
     { message: 'Matching weights must sum to 1.0' },
   );
+
+/** Accept stored rule versions that still use legacy dimension keys. */
+export function resolveMatchingWeights(raw: unknown): MatchingWeights {
+  const parsed = matchingWeightsSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  if (raw && typeof raw === 'object' && 'capability' in raw) {
+    return { ...defaultMatchingWeights };
+  }
+  return { ...defaultMatchingWeights };
+}
 
 export type MatchingWeights = z.infer<typeof matchingWeightsSchema>;
 
 export const defaultMatchingWeights: MatchingWeights = {
   ...DEFAULT_MATCHING_WEIGHTS,
 };
+
+/** Max peer recommendations stored and shown per investor/innovator org. */
+export const PEER_RECOMMENDATIONS_MAX_PER_ORG = 5;
 
 export const scheduleConfigSchema = z.object({
   scheduleDate: z.string().date(),

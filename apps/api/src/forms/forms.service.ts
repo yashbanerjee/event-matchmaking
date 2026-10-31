@@ -1641,6 +1641,15 @@ export class FormsService {
     const regionTags = asStringArray(
       responses.regions ?? responses.operatingRegions ?? responses.area,
     );
+    const investmentStages = asStringArray(responses.investment_stages);
+    const ticketSize = firstString(responses.ticket_size);
+    const partnershipGoal = firstString(responses.partnership_goal);
+    const impactMetrics = firstString(responses.impact_metrics);
+    const commercialPrefs = {
+      tags: asStringArray(responses.commercialTags),
+      investmentStages,
+      ticketSize,
+    };
 
     if (org.company) {
       await this.prisma.company.update({
@@ -1652,14 +1661,15 @@ export class FormsService {
           preferredCategories: asStringArray(
             responses.preferredCategories ?? responses.categories,
           ),
-          commercialPrefs: {
-            tags: asStringArray(responses.commercialTags),
-          } as unknown as Prisma.InputJsonValue,
+          commercialPrefs: commercialPrefs as unknown as Prisma.InputJsonValue,
           normalizedProfile: {
             sourceSubmissionId: submission.id,
             about,
             focusEvents,
             regions: regionTags,
+            ticketSize,
+            investmentStages,
+            partnershipGoal,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },
@@ -1683,13 +1693,15 @@ export class FormsService {
           operatingRegions: asStringArray(
             responses.operatingRegions ?? responses.regions ?? responses.area,
           ),
-          commercialPrefs: {
-            tags: asStringArray(responses.commercialTags),
-          } as unknown as Prisma.InputJsonValue,
+          commercialPrefs: commercialPrefs as unknown as Prisma.InputJsonValue,
           normalizedProfile: {
             sourceSubmissionId: submission.id,
             about,
             focusEvents,
+            ticketSize,
+            investmentStages,
+            partnershipGoal,
+            impactMetrics,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },

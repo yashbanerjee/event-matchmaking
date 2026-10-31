@@ -146,9 +146,9 @@ export function escapeHtml(value: string) {
 function audienceLabel(audience: EmailAudience) {
   switch (audience) {
     case 'vendor':
-      return 'a guest contact';
+      return 'an innovator contact';
     case 'company':
-      return 'a client contact';
+      return 'an investor contact';
     case 'admin':
       return 'an administrator';
     default:
@@ -157,7 +157,7 @@ function audienceLabel(audience: EmailAudience) {
 }
 
 function roleDisplayLabel(kind: 'vendor' | 'company') {
-  return kind === 'company' ? 'Client' : 'Guest';
+  return kind === 'company' ? 'Investor' : 'Innovator';
 }
 
 export function renderBrandedEmail(input: {
@@ -438,7 +438,7 @@ export function renderCorrectionEmail(input: {
 }): { subject: string; html: string; text: string } {
   const count = input.fields.length;
   const roleWord =
-    input.audience === 'company' ? 'client' : input.audience === 'vendor' ? 'guest' : 'profile';
+    input.audience === 'company' ? 'investor' : input.audience === 'vendor' ? 'innovator' : 'profile';
   const hello = input.recipientName?.trim()
     ? `Hello ${input.recipientName.trim()},`
     : 'Hello,';
@@ -657,8 +657,8 @@ export function renderMeetingEmail(input: {
     actionUrl: input.portalUrl,
     actionLabel: 'View meetings',
     details: [
-      { label: 'Client', value: input.companyName },
-      { label: 'Guest', value: input.vendorName },
+      { label: 'Investor', value: input.companyName },
+      { label: 'Innovator', value: input.vendorName },
       { label: 'Starts', value: formatMeetingWhen(input.startsAt) },
       { label: 'Ends', value: formatMeetingWhen(input.endsAt) },
       { label: 'Duration', value: `${input.durationMinutes} minutes` },
@@ -715,8 +715,8 @@ export function renderMeetingReminderEmail(input: {
     actionUrl: input.portalUrl,
     actionLabel: 'Open meetings',
     details: [
-      { label: 'Client', value: input.companyName },
-      { label: 'Guest', value: input.vendorName },
+      { label: 'Investor', value: input.companyName },
+      { label: 'Innovator', value: input.vendorName },
       { label: 'Starts', value: formatMeetingWhen(input.startsAt) },
       ...(input.endsAt
         ? [{ label: 'Ends', value: formatMeetingWhen(input.endsAt) }]

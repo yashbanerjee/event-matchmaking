@@ -136,9 +136,9 @@ export default function VendorOverviewPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Guest"
+        eyebrow="Innovator"
         title="Home"
-        description="Requests, meetings, and recommended clients — at a glance."
+        description="Requests, meetings, and recommended investors — at a glance."
       />
 
       <OverviewStatStrip
@@ -177,8 +177,8 @@ export default function VendorOverviewPage() {
 
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
-        title="Recommended clients"
-        description="Admin suggestions plus clients matched to your categories and capabilities."
+        title="Recommended investors"
+        description="Admin suggestions plus investors matched to your categories and capabilities."
       />
     </div>
   );

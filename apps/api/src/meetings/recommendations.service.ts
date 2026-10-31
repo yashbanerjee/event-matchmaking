@@ -4,10 +4,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { calculateMatchScore, type ProfileFeatures } from '@em/domain';
+import {
+  calculateMatchScore,
+  companyToProfileFeatures,
+  vendorToProfileFeatures,
+} from '@em/domain';
 import {
   collectPublicProfileFields,
   defaultMatchingWeights,
+  PEER_RECOMMENDATIONS_MAX_PER_ORG,
   formSchemaDefinition,
   type FormSchemaDefinition,
   type PublicProfileField,
@@ -40,8 +45,11 @@ export class RecommendationsService {
     private readonly filters: FiltersService,
   ) {}
 
-  async forActor(actor: AuthUser, limit = 10) {
-    const max = Math.min(Math.max(Number(limit) || 10, 1), 10);
+  async forActor(actor: AuthUser, limit = PEER_RECOMMENDATIONS_MAX_PER_ORG) {
+    const max = Math.min(
+      Math.max(Number(limit) || PEER_RECOMMENDATIONS_MAX_PER_ORG, 1),
+      PEER_RECOMMENDATIONS_MAX_PER_ORG,
+    );
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) return { items: [], featured: [], perspective: null };
 
@@ -58,7 +66,7 @@ export class RecommendationsService {
     const companyOrg = myOrgs.find((o) => o.type === 'COMPANY' && o.company);
     const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR' && o.vendor);
 
-    // Hard rule: clients only see guests; guests only see clients.
+    // Hard rule: investors only see innovators; innovators only see investors.
     // Prefer the actor's primary org type (company first only if they have one).
     const perspectiveOrg = companyOrg ?? vendorOrg;
     if (!perspectiveOrg) {
@@ -66,7 +74,7 @@ export class RecommendationsService {
     }
 
     const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
-    // COMPANY (client) → VENDOR (guest); VENDOR (guest) → COMPANY (client)
+    // COMPANY (investor) → VENDOR (innovator); VENDOR (innovator) → COMPANY (investor)
     const peerType = perspective === 'COMPANY' ? 'VENDOR' : 'COMPANY';
 
     const stored = await this.fromStored({
@@ -97,16 +105,28 @@ export class RecommendationsService {
         include: { organization: true },
         take: 200,
       });
-      const companyFeatures = this.toCompanyFeatures(
-        companyOrg.company,
-        companyOrg,
-      );
+      const companyFeatures = companyToProfileFeatures({
+        organizationId: companyOrg.company.organizationId,
+        preferredCategories: companyOrg.company.preferredCategories,
+        requiredCapabilities: companyOrg.company.requiredCapabilities,
+        commercialPrefs: companyOrg.company.commercialPrefs,
+        normalizedProfile: companyOrg.company.normalizedProfile,
+        organization: companyOrg,
+      });
       const scored: RecommendationItem[] = vendors
         .filter((vendor) => vendor.organization.type === 'VENDOR')
         .map((vendor) => {
           const score = calculateMatchScore(
             companyFeatures,
-            this.toVendorFeatures(vendor, vendor.organization),
+            vendorToProfileFeatures({
+              organizationId: vendor.organizationId,
+              capabilities: vendor.capabilities,
+              categories: vendor.categories,
+              operatingRegions: vendor.operatingRegions,
+              commercialPrefs: vendor.commercialPrefs,
+              normalizedProfile: vendor.normalizedProfile,
+              organization: vendor.organization,
+            }),
             defaultMatchingWeights,
             equivalences,
             tagLabels,
@@ -154,15 +174,27 @@ export class RecommendationsService {
         include: { organization: true },
         take: 200,
       });
-      const vendorFeatures = this.toVendorFeatures(
-        vendorOrg.vendor,
-        vendorOrg,
-      );
+      const vendorFeatures = vendorToProfileFeatures({
+        organizationId: vendorOrg.vendor.organizationId,
+        capabilities: vendorOrg.vendor.capabilities,
+        categories: vendorOrg.vendor.categories,
+        operatingRegions: vendorOrg.vendor.operatingRegions,
+        commercialPrefs: vendorOrg.vendor.commercialPrefs,
+        normalizedProfile: vendorOrg.vendor.normalizedProfile,
+        organization: vendorOrg,
+      });
       const scored: RecommendationItem[] = companies
         .filter((company) => company.organization.type === 'COMPANY')
         .map((company) => {
           const score = calculateMatchScore(
-            this.toCompanyFeatures(company, company.organization),
+            companyToProfileFeatures({
+              organizationId: company.organizationId,
+              preferredCategories: company.preferredCategories,
+              requiredCapabilities: company.requiredCapabilities,
+              commercialPrefs: company.commercialPrefs,
+              normalizedProfile: company.normalizedProfile,
+              organization: company.organization,
+            }),
             vendorFeatures,
             defaultMatchingWeights,
             equivalences,
@@ -228,21 +260,21 @@ export class RecommendationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Same direction as the feed: clients view guests, guests view clients
+    // Same direction as the feed: investors view innovators, innovators view investors
     const viewerOrgs = await this.prisma.organization.findMany({
       where: { id: { in: orgIds } },
       select: { type: true },
     });
-    const viewerIsClient = viewerOrgs.some((o) => o.type === 'COMPANY');
-    const viewerIsGuest = viewerOrgs.some((o) => o.type === 'VENDOR');
-    if (viewerIsClient && !viewerIsGuest && organization.type !== 'VENDOR') {
-      throw new ForbiddenException('Clients can only view guest profiles');
+    const viewerIsInvestor = viewerOrgs.some((o) => o.type === 'COMPANY');
+    const viewerIsInnovator = viewerOrgs.some((o) => o.type === 'VENDOR');
+    if (viewerIsInvestor && !viewerIsInnovator && organization.type !== 'VENDOR') {
+      throw new ForbiddenException('Investors can only view innovator profiles');
     }
-    if (viewerIsGuest && !viewerIsClient && organization.type !== 'COMPANY') {
-      throw new ForbiddenException('Guests can only view client profiles');
+    if (viewerIsInnovator && !viewerIsInvestor && organization.type !== 'COMPANY') {
+      throw new ForbiddenException('Innovators can only view investor profiles');
     }
-    if (viewerIsClient && viewerIsGuest) {
-      // Prefer client perspective when both memberships exist
+    if (viewerIsInvestor && viewerIsInnovator) {
+      // Prefer investor perspective when both memberships exist
       if (organization.type !== 'VENDOR' && organization.type !== 'COMPANY') {
         throw new ForbiddenException('Unsupported organization type');
       }
@@ -308,7 +340,7 @@ export class RecommendationsService {
     return parsed.success ? parsed.data : null;
   }
 
-  /** Featured first, then category matches — hard cap of `max` total (default 10). */
+  /** Featured first, then category matches — hard cap of `max` total (max 5). */
   private splitRecommendations(scored: RecommendationItem[], max: number) {
     const featured = scored.filter((item) => item.featured).slice(0, max);
     const remaining = Math.max(0, max - featured.length);
@@ -419,63 +451,4 @@ export class RecommendationsService {
     return values.map((value) => this.labelOf(value, tagLabels) ?? value);
   }
 
-  private toCompanyFeatures(
-    company: {
-      organizationId: string;
-      preferredCategories: string[];
-      requiredCapabilities: string[];
-      commercialPrefs: unknown;
-      normalizedProfile?: unknown;
-    },
-    organization: { industry: string | null; region: string | null },
-  ): ProfileFeatures {
-    const prefs = (company.commercialPrefs ?? {}) as Record<string, unknown>;
-    const normalized = (company.normalizedProfile ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const regionTags = Array.isArray(normalized.regions)
-      ? (normalized.regions as string[]).filter((v) => typeof v === 'string')
-      : [];
-    return {
-      organizationId: company.organizationId,
-      industry: organization.industry,
-      capabilities: [],
-      categories: company.preferredCategories,
-      regions:
-        regionTags.length > 0
-          ? regionTags
-          : organization.region
-            ? [organization.region]
-            : [],
-      requirements: company.requiredCapabilities,
-      preferredCategories: company.preferredCategories,
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: [],
-    };
-  }
-
-  private toVendorFeatures(
-    vendor: {
-      organizationId: string;
-      capabilities: string[];
-      categories: string[];
-      operatingRegions: string[];
-      commercialPrefs: unknown;
-    },
-    organization: { industry: string | null },
-  ): ProfileFeatures {
-    const prefs = (vendor.commercialPrefs ?? {}) as Record<string, unknown>;
-    return {
-      organizationId: vendor.organizationId,
-      industry: organization.industry,
-      capabilities: vendor.capabilities,
-      categories: vendor.categories,
-      regions: vendor.operatingRegions,
-      requirements: [],
-      preferredCategories: [],
-      commercialTags: (prefs.tags as string[]) ?? [],
-      mutualPreferenceTags: vendor.categories,
-    };
-  }
 }

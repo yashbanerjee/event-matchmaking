@@ -100,13 +100,13 @@ function RolePicker({
         [
           {
             id: 'CLIENT' as const,
-            title: 'Client',
-            body: 'Meet and match with guests at the event.',
+            title: 'Investor',
+            body: 'Share your water mandate and meet innovators looking for capital.',
           },
           {
             id: 'GUEST' as const,
-            title: 'Guest',
-            body: 'Showcase capabilities and connect with clients.',
+            title: 'Innovator',
+            body: 'Share your water solution and meet investors at the event.',
           },
         ] as const
       ).map((option) => {
@@ -305,7 +305,7 @@ function EventRegisterForm() {
         </p>
         <ul className="relative mt-8 space-y-3 text-sm">
           {[
-            'Choose Client or Guest',
+            'Choose Investor or Innovator',
             'Verify with a one-time email code',
             'Open your panel right after setup',
           ].map((item) => (

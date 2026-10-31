@@ -2,18 +2,18 @@
 
 export const ORG_LABEL = {
   company: {
-    singular: 'Client',
-    plural: 'Clients',
-    workspace: 'Client workspace',
-    panel: 'Client panel',
-    user: 'Client user',
+    singular: 'Investor',
+    plural: 'Investors',
+    workspace: 'Investor workspace',
+    panel: 'Investor panel',
+    user: 'Investor user',
   },
   vendor: {
-    singular: 'Guest',
-    plural: 'Guests',
-    workspace: 'Guest workspace',
-    panel: 'Guest panel',
-    user: 'Guest user',
+    singular: 'Innovator',
+    plural: 'Innovators',
+    workspace: 'Innovator workspace',
+    panel: 'Innovator panel',
+    user: 'Innovator user',
   },
 } as const;
 

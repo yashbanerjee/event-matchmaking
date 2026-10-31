@@ -37,7 +37,7 @@ function arrayMove<T>(items: T[], from: number, to: number): T[] {
 
 export default function FormBuilderPage() {
   const params = useParams<{ id: string }>();
-  const client = useQueryClient();
+  const investor = useQueryClient();
   const query = useQuery({
     queryKey: ['form', params.id],
     queryFn: () =>
@@ -99,7 +99,7 @@ export default function FormBuilderPage() {
     onSuccess: async () => {
       setMessage('Draft saved.');
       setError('');
-      await client.invalidateQueries({ queryKey: ['form', params.id] });
+      await investor.invalidateQueries({ queryKey: ['form', params.id] });
     },
     onError: (caught) =>
       setError(caught instanceof ApiError ? caught.message : 'Save failed.'),
@@ -123,8 +123,8 @@ export default function FormBuilderPage() {
     onSuccess: async () => {
       setMessage('Published a new immutable version.');
       setError('');
-      await client.invalidateQueries({ queryKey: ['form', params.id] });
-      await client.invalidateQueries({ queryKey: ['forms'] });
+      await investor.invalidateQueries({ queryKey: ['form', params.id] });
+      await investor.invalidateQueries({ queryKey: ['forms'] });
     },
     onError: (caught) =>
       setError(caught instanceof ApiError ? caught.message : 'Publish failed.'),
@@ -474,7 +474,7 @@ export default function FormBuilderPage() {
                           ))}
                         </ul>
                         <p className="mt-2 text-xs text-[var(--muted)]">
-                          Guests/clients pick one value from this dropdown.
+                          Innovators/investors pick one value from this dropdown.
                           Save or publish to refresh tags from Filters.
                         </p>
                       </div>

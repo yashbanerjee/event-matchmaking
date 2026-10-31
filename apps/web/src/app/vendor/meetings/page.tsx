@@ -128,7 +128,7 @@ export default function VendorMeetingsPage() {
       <PageHeader
         eyebrow="Meetings"
         title="Your meetings"
-        description="Confirm sessions. After a meeting ends, submit feedback and review the client."
+        description="Confirm sessions. After a meeting ends, submit feedback and review the investor."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
@@ -142,7 +142,7 @@ export default function VendorMeetingsPage() {
                     : 'text-[var(--muted)]',
                 )}
               >
-                Calendar
+                Event days
               </button>
               <button
                 type="button"
@@ -159,7 +159,7 @@ export default function VendorMeetingsPage() {
             </div>
             <Input
               className="max-w-xs"
-              placeholder="Search client, guest, status…"
+              placeholder="Search investor, innovator, status…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -173,29 +173,22 @@ export default function VendorMeetingsPage() {
         ) : null}
 
         {viewMode === 'calendar' && !meetings.isLoading ? (
-          calendarEvents.length === 0 ? (
-            <EmptyState
-              title="No meetings yet"
-              description="When meetings are scheduled or a time is proposed, they appear on this calendar."
-            />
-          ) : (
-            <MeetingsCalendar
-              events={calendarEvents}
-              onSelectEvent={(event) => {
-                if (event.kind !== 'meeting') return;
-                const meetingId = event.id.replace(/^meeting:/, '');
-                const meeting = filtered.find((row) => row.id === meetingId);
-                if (!meeting) return;
-                if (
-                  meetingHasEnded(meeting) &&
-                  orgId &&
-                  !meeting.hasSubmittedFeedback
-                ) {
-                  setFeedbackFor(meeting);
-                }
-              }}
-            />
-          )
+          <MeetingsCalendar
+            events={calendarEvents}
+            onSelectEvent={(event) => {
+              if (event.kind !== 'meeting') return;
+              const meetingId = event.id.replace(/^meeting:/, '');
+              const meeting = filtered.find((row) => row.id === meetingId);
+              if (!meeting) return;
+              if (
+                meetingHasEnded(meeting) &&
+                orgId &&
+                !meeting.hasSubmittedFeedback
+              ) {
+                setFeedbackFor(meeting);
+              }
+            }}
+          />
         ) : null}
 
         {viewMode === 'list' && !meetings.isLoading && filtered.length === 0 ? (
@@ -209,7 +202,7 @@ export default function VendorMeetingsPage() {
           <Table>
             <THead>
               <TR>
-                <TH>Client</TH>
+                <TH>Investor</TH>
                 <TH>Starts</TH>
                 <TH>Ends</TH>
                 <TH>Duration</TH>

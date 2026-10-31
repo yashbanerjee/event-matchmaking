@@ -84,7 +84,7 @@ export class QrService {
     });
     if (!org) {
       throw new NotFoundException(
-        'No client or guest organization found for this account. QR codes are only available for meeting profiles.',
+        'No investor or innovator organization found for this account. QR codes are only available for meeting profiles.',
       );
     }
     if (!org.code?.trim()) {
@@ -97,7 +97,7 @@ export class QrService {
     const mobileLink = this.mobileLinkForCode(org.code);
 
     // Generate PNG on the server so the portal does not depend on browser
-    // bundling of the `qrcode` package (a common Next.js client failure mode).
+    // bundling of the `qrcode` package (a common Next.js investor failure mode).
     let pngDataUrl: string | null = null;
     try {
       const QRCode = await import('qrcode');
@@ -196,7 +196,7 @@ export class QrService {
         meeting: null,
         canBook: false,
         message:
-          'Meetings are between a client and a guest. This QR belongs to the same side as you.',
+          'Meetings are between an investor and an innovator. This QR belongs to the same side as you.',
         deepLink: this.deepLinkForCode(target.code),
       };
     }

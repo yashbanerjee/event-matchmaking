@@ -203,7 +203,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_ENABLED',
     label: 'AI enabled',
     description:
-      'Jev (TypeSafe) via OpenRouter powers matchmaking and peer recommendations.',
+      'OpenRouter or self-hosted OpenAI-compatible API for matchmaking scores and meeting reasons.',
     group: 'ai',
     type: 'boolean',
   },
@@ -211,7 +211,8 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     key: 'ai.primaryProvider',
     envKey: 'AI_PRIMARY_PROVIDER',
     label: 'Primary AI provider',
-    description: 'Use jav (OpenRouter / Jev). Configure key and model below.',
+    description:
+      'Use jav for OpenRouter / self-hosted base URL. openai/anthropic are optional fallbacks.',
     group: 'ai',
     type: 'select',
     options: ['jav', 'openai', 'anthropic', 'none'],
@@ -227,8 +228,9 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.javBaseUrl',
     envKey: 'JAV_AI_BASE_URL',
-    label: 'OpenRouter base URL',
-    description: 'https://openrouter.ai/api/v1',
+    label: 'API base URL',
+    description:
+      'OpenRouter: https://openrouter.ai/api/v1 — Self-hosted (vLLM, LiteLLM, etc.): your /v1 endpoint.',
     group: 'ai',
     type: 'string',
   },
@@ -245,9 +247,9 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.javChatModel',
     envKey: 'JAV_AI_CHAT_MODEL',
-    label: 'Jev model id',
+    label: 'Matchmaking model id',
     description:
-      'OpenRouter slug, default ~typesafe/jev-latest (always tracks latest Jev).',
+      'Default: qwen/qwen-2.5-72b-instruct on OpenRouter. Or any OpenAI-compatible chat model id for structured JSON scores + match reasons.',
     group: 'ai',
     type: 'string',
   },
@@ -256,24 +258,34 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'JAV_AI_FINE_TUNED_MODEL',
     label: 'Override model id',
     description:
-      'Optional pin to a specific Jev version (e.g. typesafe/jev-1.14). Empty = use Jev model id above.',
+      'If set, replaces Matchmaking model id (pin a specific version or internal fine-tune).',
     group: 'ai',
     type: 'string',
   },
   {
     key: 'ai.javTemperature',
     envKey: 'JAV_AI_TEMPERATURE',
-    label: 'Jev temperature',
-    description: '0–1 (lower = more deterministic pair scores)',
+    label: 'Model temperature',
+    description: '0–1 (lower = more deterministic pair scores and reasons)',
     group: 'ai',
     type: 'number',
+  },
+  {
+    key: 'ai.pairScoringMethod',
+    envKey: 'AI_PAIR_SCORING_METHOD',
+    label: 'Pair scoring method',
+    description:
+      'structured_json = chat JSON score + custom rationale (open models on OpenRouter or self-hosted). jev_decisions = legacy Jev tier labels only.',
+    group: 'ai',
+    type: 'select',
+    options: ['structured_json', 'jev_decisions'],
   },
   {
     key: 'ai.matchmakingMode',
     envKey: 'AI_MATCHMAKING_MODE',
     label: 'Matchmaking AI mode',
     description:
-      'llm = Jev structured pair scores (recommended). hybrid also tries embeddings if configured.',
+      'llm = model scores each pair (recommended). hybrid also blends embeddings if configured.',
     group: 'ai',
     type: 'select',
     options: ['llm', 'hybrid', 'embedding'],
@@ -288,13 +300,49 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'number',
   },
   {
+    key: 'ai.peerRecomputeLlmCandidates',
+    envKey: 'AI_PEER_RECOMPUTE_LLM_CANDIDATES',
+    label: 'Peer recompute LLM candidates',
+    description:
+      'How many top rule-based matches get a full Qwen reason per org (default 12). Lower = faster recompute; we only store 5 recommendations.',
+    group: 'ai',
+    type: 'number',
+  },
+  {
+    key: 'ai.peerRecomputeConcurrency',
+    envKey: 'AI_PEER_RECOMPUTE_CONCURRENCY',
+    label: 'Peer recompute parallel LLM calls',
+    description:
+      'Concurrent OpenRouter requests while recomputing one profile (default 5). Raise for speed if your quota allows.',
+    group: 'ai',
+    type: 'number',
+  },
+  {
     key: 'ai.matchmakingPrompt',
     envKey: 'AI_MATCHMAKING_PROMPT',
     label: 'Matchmaking system prompt',
     description:
-      'Tune Jev scoring behaviour. Must return JSON {"score":0-100,"rationale":"…"}.',
+      'Instructions for the model. With structured_json scoring, the model must return JSON {"score":0-100,"rationale":"…"}.',
     group: 'ai',
     type: 'textarea',
+  },
+  {
+    key: 'ai.matchmakingUserTemplate',
+    envKey: 'AI_MATCHMAKING_USER_TEMPLATE',
+    label: 'Matchmaking user message template',
+    description:
+      'Placeholders: {{investorProfile}}, {{innovatorProfile}} (aliases {{left}}, {{right}}). Sent as the user message to the model.',
+    group: 'ai',
+    type: 'textarea',
+  },
+  {
+    key: 'ai.includeOnboardingInProfile',
+    envKey: 'AI_INCLUDE_ONBOARDING_IN_PROFILE',
+    label: 'Include onboarding answers in AI profile text',
+    description:
+      'When on, form responses are appended to the text sent to the model (recommended for water onboarding variables).',
+    group: 'ai',
+    type: 'boolean',
   },
   {
     key: 'ai.javEmbeddingModel',
@@ -347,11 +395,36 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'number',
   },
   {
+    key: 'ops.eventDates',
+    envKey: 'MEETING_EVENT_DATES',
+    label: 'Event dates',
+    description:
+      'Comma-separated event days (YYYY-MM-DD). Meetings can only be booked on these dates.',
+    group: 'ops',
+    type: 'string',
+  },
+  {
+    key: 'ops.eventActiveStart',
+    envKey: 'MEETING_ACTIVE_START',
+    label: 'Active hours start',
+    description: 'Earliest meeting start time on each event day (HH:MM, Dubai time).',
+    group: 'ops',
+    type: 'string',
+  },
+  {
+    key: 'ops.eventActiveEnd',
+    envKey: 'MEETING_ACTIVE_END',
+    label: 'Active hours end',
+    description: 'Latest meeting end time on each event day (HH:MM, Dubai time).',
+    group: 'ops',
+    type: 'string',
+  },
+  {
     key: 'ops.meetingWindowStart',
     envKey: 'MEETING_WINDOW_START',
     label: 'Meeting period start',
     description:
-      'First date clients and guests can book meetings (YYYY-MM-DD). Leave empty for no start limit.',
+      'Derived from the first event date. Kept for compatibility.',
     group: 'ops',
     type: 'date',
   },
@@ -360,7 +433,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'MEETING_WINDOW_END',
     label: 'Meeting period end',
     description:
-      'Last date clients and guests can book meetings (YYYY-MM-DD). Leave empty for no end limit.',
+      'Derived from the last event date. Kept for compatibility.',
     group: 'ops',
     type: 'date',
   },

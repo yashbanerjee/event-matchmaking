@@ -176,6 +176,18 @@ export class OrganizationsController {
     });
   }
 
+  @Get(':id/profile')
+  @RequirePermissions(PERMISSIONS.ORGS_READ)
+  profile(@Param('id') id: string) {
+    return this.orgs.getProfile(id);
+  }
+
+  @Post(':id/invitation-link')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  issueInvitationLink(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.orgs.issueInvitationLink(user, id);
+  }
+
   @Get(':id')
   @RequirePermissions(PERMISSIONS.ORGS_READ)
   get(@Param('id') id: string) {

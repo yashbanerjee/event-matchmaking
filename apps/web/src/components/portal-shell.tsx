@@ -31,7 +31,7 @@ function SidebarNav({
   openRequests: number;
 }) {
   return (
-    <nav className="flex flex-1 flex-col gap-1 pb-4">
+    <nav className="sidebar-nav flex flex-col gap-1 pb-4">
       <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-muted)]">
         Workspace
       </p>
@@ -103,7 +103,7 @@ export function PortalShell({
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-              Client panel
+              Investor panel
             </p>
             <div className="h-display truncate text-base font-bold tracking-tight">
               {BRAND.name}
@@ -130,11 +130,11 @@ export function PortalShell({
 
       <aside
         id="portal-sidebar"
-        className="admin-sidebar sidebar-pad-bottom hidden flex-col gap-6 overflow-y-auto overflow-x-hidden bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] sm:sticky sm:top-0 sm:flex sm:h-screen"
+        className="admin-sidebar hidden flex-col gap-6 bg-[var(--sidebar)] px-4 pt-5 text-[var(--sidebar-fg)] sm:flex"
       >
-        <div className="min-w-0 px-2">
+        <div className="min-w-0 shrink-0 px-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--highlight)]">
-            Client panel
+            Investor panel
           </p>
           <div className="mt-1 h-display text-xl font-bold tracking-tight">
             {BRAND.name}
@@ -155,7 +155,7 @@ export function PortalShell({
           openRequests={openRequests}
         />
 
-        <div className="mt-auto space-y-3 border-t border-white/10 pt-4">
+        <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">
           <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Button
             variant="outline"
@@ -170,7 +170,7 @@ export function PortalShell({
         </div>
       </aside>
 
-      <main className="page-pad workspace-main min-h-screen min-w-0 overflow-x-hidden">
+      <main className="page-pad workspace-main min-h-dvh min-w-0 overflow-x-hidden">
         <div className="page-shell w-full max-w-full min-w-0 space-y-5 sm:space-y-6">
           {children}
         </div>

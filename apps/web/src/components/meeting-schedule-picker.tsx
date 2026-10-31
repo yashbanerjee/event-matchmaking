@@ -1,13 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { EventDateChips } from '@/components/event-date-chips';
 import { Modal } from '@/components/ui/modal';
+import {
+  normalizeEventSchedule,
+  type EventSchedule,
+} from '@/lib/event-schedule';
 import { cn } from '@/lib/utils';
 
 export type ScheduleSlot = { startsAt: string; endsAt: string };
@@ -58,25 +62,25 @@ export function MeetingSchedulePicker({
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [step, setStep] = useState<'slot' | 'place'>('slot');
 
-  const today = new Date().toISOString().slice(0, 10);
   const canQuerySlots = Boolean(requestId || (fromOrgId && toOrgId));
 
   const bookingWindow = useQuery({
     queryKey: ['meeting-booking-window'],
     enabled: open,
     queryFn: () =>
-      apiFetch<{
-        start: string | null;
-        end: string | null;
-        durationMinutes: number;
-      }>('/meeting-requests/booking-window', { token: getAccessToken() }),
+      apiFetch<EventSchedule>('/meeting-requests/booking-window', {
+        token: getAccessToken(),
+      }),
   });
+  const schedule = normalizeEventSchedule(bookingWindow.data);
 
-  const minDate =
-    bookingWindow.data?.start && bookingWindow.data.start > today
-      ? bookingWindow.data.start
-      : today;
-  const maxDate = bookingWindow.data?.end ?? undefined;
+  useEffect(() => {
+    if (!open || date) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setDate(
+      schedule.dates.includes(today) ? today : (schedule.dates[0] ?? ''),
+    );
+  }, [open, date, schedule.dates]);
 
   const slots = useQuery({
     queryKey: ['meeting-slots', requestId, fromOrgId, toOrgId, date],
@@ -103,6 +107,8 @@ export function MeetingSchedulePicker({
       selectedSlot?.startsAt,
       selectedSlot?.endsAt,
       requestId,
+      fromOrgId,
+      toOrgId,
     ],
     enabled: open && Boolean(selectedSlot) && step === 'place',
     queryFn: () => {
@@ -111,12 +117,21 @@ export function MeetingSchedulePicker({
         endsAt: selectedSlot!.endsAt,
       });
       if (requestId) params.set('excludeRequestId', requestId);
-      return apiFetch<SchedulePlace[]>(
+      if (fromOrgId) params.set('fromOrgId', fromOrgId);
+      if (toOrgId) params.set('toOrgId', toOrgId);
+      return apiFetch<Array<SchedulePlace & { assignedToInvestor?: boolean }>>(
         `/places/available?${params.toString()}`,
         { token: getAccessToken() },
       );
     },
   });
+
+  useEffect(() => {
+    if (!places.data?.length || selectedPlaceId) return;
+    const assigned = places.data.find((place) => place.assignedToInvestor);
+    if (assigned) setSelectedPlaceId(assigned.id);
+    else if (places.data.length === 1) setSelectedPlaceId(places.data[0]!.id);
+  }, [places.data, selectedPlaceId]);
 
   const reset = () => {
     setDate('');
@@ -178,25 +193,17 @@ export function MeetingSchedulePicker({
     >
       {step === 'slot' ? (
         <div className="space-y-4">
-          {bookingWindow.data?.start || bookingWindow.data?.end ? (
-            <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-xs text-[var(--muted)]">
-              Booking period
-              {bookingWindow.data.start
-                ? ` from ${bookingWindow.data.start}`
-                : ''}
-              {bookingWindow.data.end ? ` through ${bookingWindow.data.end}` : ''}
-              .
-            </p>
-          ) : null}
+          <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-xs text-[var(--muted)]">
+            Meetings can only be booked on event days, {schedule.activeStart}–
+            {schedule.activeEnd}.
+          </p>
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Date</label>
-            <Input
-              type="date"
+            <label className="mb-1.5 block text-sm font-medium">Event date</label>
+            <EventDateChips
+              dates={schedule.dates}
               value={date}
-              min={minDate}
-              max={maxDate}
-              onChange={(e) => {
-                setDate(e.target.value);
+              onChange={(next) => {
+                setDate(next);
                 setSelectedSlot(null);
               }}
             />
@@ -274,10 +281,17 @@ export function MeetingSchedulePicker({
                 : '—'}
             </p>
           </div>
-          <p className="text-sm text-[var(--muted)]">
-            Places already booked or held by another open request are hidden.
-            Declined requests free the place again.
-          </p>
+          {places.data?.some((place) => place.assignedToInvestor) ? (
+            <p className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-sm">
+              This investor has a reserved table for this time. The meeting will
+              be marked there.
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--muted)]">
+              Places already booked, held, or reserved for another investor are
+              hidden.
+            </p>
+          )}
           {places.isLoading ? (
             <p className="text-sm text-[var(--muted)]">Loading free places…</p>
           ) : (

@@ -25,6 +25,7 @@ import {
   MeetingFeedbackModal,
   meetingHasEnded,
 } from '@/components/meeting-feedback-modal';
+import { canEndMeeting, canStartMeeting } from '@/lib/event-pulse';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 
 type Meeting = {
@@ -146,6 +147,38 @@ export default function PortalMeetingsPage() {
       void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
   });
 
+  const startMeeting = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/meetings/${id}/start`, {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
+  });
+
+  const endMeeting = useMutation({
+    mutationFn: async (meeting: Meeting) => {
+      await apiFetch(`/meetings/${meeting.id}/complete`, {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({}),
+      });
+      return meeting;
+    },
+    onSuccess: (meeting) => {
+      void qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+      if (!meeting.hasSubmittedFeedback) {
+        setFeedbackFor({ ...meeting, status: 'COMPLETED' });
+      }
+    },
+  });
+
+  const liveMeeting = (meetings.data?.items ?? []).find((m) =>
+    canEndMeeting(m.status),
+  );
+
   if (!ready) return null;
 
   const orgId = me.data?.organizationIds[0] ?? '';
@@ -158,7 +191,7 @@ export default function PortalMeetingsPage() {
       <PageHeader
         eyebrow="Your workspace"
         title="Meetings"
-        description="Confirm sessions. After a meeting ends, submit feedback and review the guest."
+        description="Start and end each meeting on the floor, then send feedback so the event pulse stays accurate."
         actions={
           <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
             <button
@@ -171,7 +204,7 @@ export default function PortalMeetingsPage() {
                   : 'text-[var(--muted)]',
               )}
             >
-              Calendar
+              Event days
             </button>
             <button
               type="button"
@@ -189,14 +222,41 @@ export default function PortalMeetingsPage() {
         }
       />
 
+      {liveMeeting ? (
+        <Card className="mb-5 border-[var(--accent)] bg-[var(--highlight-soft)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
+                Meeting in progress
+              </p>
+              <p className="mt-1 text-lg font-semibold tracking-tight">
+                {liveMeeting.vendorOrg.name}
+              </p>
+              <p className="text-sm text-[var(--muted)]">
+                End the session when you wrap, then leave feedback.
+              </p>
+            </div>
+            <Button
+              onClick={() => endMeeting.mutate(liveMeeting)}
+              loading={
+                endMeeting.isPending &&
+                endMeeting.variables?.id === liveMeeting.id
+              }
+            >
+              End meeting & feedback
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="overflow-hidden">
         <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="h-display text-lg font-semibold tracking-tight">
-            {viewMode === 'calendar' ? 'Calendar' : 'Schedule'}
+            {viewMode === 'calendar' ? 'Event days' : 'Schedule'}
           </h2>
           <Input
             className="w-full max-w-xs shrink-0"
-            placeholder="Search client, guest, status…"
+            placeholder="Search investor, innovator, status…"
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
@@ -209,31 +269,38 @@ export default function PortalMeetingsPage() {
         {meetings.error && (
           <p className="text-rose-700">{(meetings.error as Error).message}</p>
         )}
+        {startMeeting.error || endMeeting.error ? (
+          <p className="text-rose-700">
+            {(startMeeting.error as Error | undefined)?.message ||
+              (endMeeting.error as Error | undefined)?.message}
+          </p>
+        ) : null}
 
         {viewMode === 'calendar' && !meetings.isLoading ? (
-          calendarEvents.length === 0 ? (
-            <EmptyState
-              title="No meetings yet"
-              description="Scheduled peer meetings and proposed request times appear here."
-            />
-          ) : (
-            <MeetingsCalendar
-              events={calendarEvents}
-              onSelectEvent={(event) => {
-                if (event.kind !== 'meeting') return;
-                const meetingId = event.id.replace(/^meeting:/, '');
-                const meeting = filtered.find((row) => row.id === meetingId);
-                if (!meeting) return;
-                if (
-                  meetingHasEnded(meeting) &&
-                  orgId &&
-                  !meeting.hasSubmittedFeedback
-                ) {
-                  setFeedbackFor(meeting);
-                }
-              }}
-            />
-          )
+          <MeetingsCalendar
+            events={calendarEvents}
+            onSelectEvent={(event) => {
+              if (event.kind !== 'meeting') return;
+              const meetingId = event.id.replace(/^meeting:/, '');
+              const meeting = filtered.find((row) => row.id === meetingId);
+              if (!meeting) return;
+              if (canEndMeeting(meeting.status)) {
+                endMeeting.mutate(meeting);
+                return;
+              }
+              if (canStartMeeting(meeting.status)) {
+                startMeeting.mutate(meeting.id);
+                return;
+              }
+              if (
+                meetingHasEnded(meeting) &&
+                orgId &&
+                !meeting.hasSubmittedFeedback
+              ) {
+                setFeedbackFor(meeting);
+              }
+            }}
+          />
         ) : null}
 
         {viewMode === 'list' && !meetings.isLoading && pageItems.length === 0 ? (
@@ -248,7 +315,7 @@ export default function PortalMeetingsPage() {
             <Table>
               <THead>
                 <TR>
-                  <TH>Guest</TH>
+                  <TH>Innovator</TH>
                   <TH>Starts</TH>
                   <TH>Meeting place</TH>
                   <TH>Status</TH>
@@ -279,6 +346,7 @@ export default function PortalMeetingsPage() {
                         {m.status === 'AWAITING_CONFIRMATION' ? (
                           <Button
                             size="sm"
+                            variant="outline"
                             loading={
                               confirm.isPending && confirm.variables === m.id
                             }
@@ -287,7 +355,35 @@ export default function PortalMeetingsPage() {
                             Confirm
                           </Button>
                         ) : null}
-                        {ended && orgId && !submitted ? (
+                        {canStartMeeting(m.status) ? (
+                          <Button
+                            size="sm"
+                            loading={
+                              startMeeting.isPending &&
+                              startMeeting.variables === m.id
+                            }
+                            onClick={() => startMeeting.mutate(m.id)}
+                          >
+                            Start meeting
+                          </Button>
+                        ) : null}
+                        {canEndMeeting(m.status) ? (
+                          <Button
+                            size="sm"
+                            loading={
+                              endMeeting.isPending &&
+                              endMeeting.variables?.id === m.id
+                            }
+                            onClick={() => endMeeting.mutate(m)}
+                          >
+                            End meeting
+                          </Button>
+                        ) : null}
+                        {ended &&
+                        orgId &&
+                        !submitted &&
+                        !canStartMeeting(m.status) &&
+                        !canEndMeeting(m.status) ? (
                           <Button
                             size="sm"
                             variant="outline"

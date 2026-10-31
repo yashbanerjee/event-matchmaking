@@ -23,6 +23,12 @@ import { OrgRowActions } from '@/components/org-actions';
 import { FormRenderer } from '@/components/form-renderer';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import {
+  formatNextMeeting,
+  formatTableWindow,
+  type MeetingStats,
+  type TableAssignment,
+} from '@/lib/org-directory';
 
 type OrgList = {
   items: Array<{
@@ -44,6 +50,8 @@ type OrgList = {
       status: string;
       submittedAt?: string | null;
     } | null;
+    tableAssignment?: TableAssignment | null;
+    meetingStats?: MeetingStats;
   }>;
   total: number;
   page: number;
@@ -362,8 +370,8 @@ export default function CompaniesPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Organizations"
-        title="Client"
-        description="Invite clients by email or fill their profile yourself and mark them verified."
+        title="Investor"
+        description="Invite investors by email or fill their profile yourself and mark them verified."
         actions={
           <>
             <Button variant="outline" onClick={exportCsv}>
@@ -409,12 +417,12 @@ export default function CompaniesPage() {
         {!isLoading && items.length === 0 ? (
           <EmptyState
             title={
-              debouncedSearch ? 'No matching clients' : 'No clients yet'
+              debouncedSearch ? 'No matching investors' : 'No investors yet'
             }
             description={
               debouncedSearch
                 ? 'Try another name or email.'
-                : 'Use Add to invite a client by email, or fill the form as admin.'
+                : 'Use Add to invite an investor by email, or fill the form as admin.'
             }
           />
         ) : (
@@ -426,12 +434,13 @@ export default function CompaniesPage() {
             >
               <THead>
                 <TR>
-                  <TH>Code</TH>
                   <TH>Name</TH>
-                  <TH>Email</TH>
-                  <TH>Industry</TH>
                   <TH>Status</TH>
-                  <TH className="text-right">Actions</TH>
+                  <TH>Table allotted</TH>
+                  <TH>Upcoming</TH>
+                  <TH>Confirmed</TH>
+                  <TH>Next meeting</TH>
+                  <TH className="w-12 text-right"> </TH>
                 </TR>
               </THead>
               <TBody>
@@ -440,55 +449,66 @@ export default function CompaniesPage() {
                     org.workflowStatus ??
                     org.company?.approvalStatus ??
                     org.status;
+                  const stats = org.meetingStats;
+                  const table = org.tableAssignment;
                   return (
                     <TR key={org.id}>
-                      <TD className="font-mono text-xs">{org.code}</TD>
-                      <TD className="font-medium">
-                        <span className="inline-flex items-center gap-2">
+                      <TD className="whitespace-normal">
+                        <div className="flex min-w-[16rem] items-start gap-2.5">
                           {org.logoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={org.logoUrl}
                               alt=""
-                              className="h-7 w-7 rounded-md object-cover"
+                              className="mt-0.5 h-8 w-8 rounded-md object-cover"
                             />
                           ) : null}
-                          {org.name}
-                          {org.company?.featured ? (
-                            <Badge variant="accent">Featured</Badge>
-                          ) : null}
-                        </span>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/admin/companies/${org.id}`}
+                                className="font-semibold text-[#172B4D] hover:text-[var(--accent)] hover:underline"
+                              >
+                                {org.name}
+                              </Link>
+                              {org.company?.featured ? (
+                                <Badge variant="accent">Featured</Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-[#626F86]">
+                              {org.contactEmail ?? 'No email'} · {org.code}
+                            </p>
+                          </div>
+                        </div>
                       </TD>
-                      <TD className="text-[#626F86]">
-                        {org.contactEmail ?? '—'}
-                      </TD>
-                      <TD>{org.industry ?? '—'}</TD>
                       <TD>
                         <Badge variant={statusTone(status)}>
                           {formatVendorStatus(status)}
                         </Badge>
                       </TD>
+                      <TD className="whitespace-normal">
+                        {table ? (
+                          <div>
+                            <p className="font-medium">{table.placeName}</p>
+                            <p className="text-xs text-[#626F86]">
+                              {formatTableWindow(table)}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-[#626F86]">Unassigned</span>
+                        )}
+                      </TD>
+                      <TD>{stats?.upcoming ?? 0}</TD>
+                      <TD>{stats?.confirmed ?? 0}</TD>
+                      <TD className="text-[#626F86]">
+                        {formatNextMeeting(stats?.nextStartsAt)}
+                      </TD>
                       <TD className="text-right">
-                        <div className="inline-flex flex-nowrap items-center justify-end gap-1">
-                          <Link
-                            href={
-                              org.latestSubmission?.id
-                                ? `/admin/companies/${org.id}/form?submissionId=${org.latestSubmission.id}`
-                                : `/admin/companies/${org.id}/form`
-                            }
-                          >
-                            <Button size="sm" variant="outline">
-                              {org.latestSubmission
-                                ? 'View form'
-                                : 'Form status'}
-                            </Button>
-                          </Link>
-                          <OrgRowActions
-                            org={org}
-                            kind="company"
-                            queryKey={[...queryKey]}
-                          />
-                        </div>
+                        <OrgRowActions
+                          org={org}
+                          kind="company"
+                          queryKey={[...queryKey]}
+                        />
                       </TD>
                     </TR>
                   );
@@ -507,8 +527,8 @@ export default function CompaniesPage() {
 
       <Modal
         open={addOpen}
-        title="Add client"
-        description="Send an invitation link, or fill the client form yourself and verify immediately."
+        title="Add investor"
+        description="Send an invitation link, or fill the investor form yourself and verify immediately."
         onClose={() => setAddOpen(false)}
         wide
         footer={
@@ -547,7 +567,7 @@ export default function CompaniesPage() {
                   checked={form.sendInvitation}
                   onChange={() => setForm({ ...form, sendInvitation: true })}
                 />
-                Yes — email invitation (same as guest)
+                Yes — email invitation (same as innovator)
               </label>
               <label className="inline-flex items-center gap-2">
                 <input
@@ -594,19 +614,20 @@ export default function CompaniesPage() {
             </div>
           ) : (
             <p className="text-sm text-[var(--muted)]">
-              Invitation email goes to the client contact. They complete
-              registration and any assigned onboarding forms from their portal.
+              Invitation email uses a distinct investor link. They create an
+              account, then complete the investor onboarding form. You can edit
+              that form in Admin → Forms.
             </p>
           )}
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Client name
+              Investor name
             </label>
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Client name"
+              placeholder="Investor name"
             />
           </div>
 
@@ -667,7 +688,7 @@ export default function CompaniesPage() {
       <Modal
         open={Boolean(adminFill)}
         title={adminFill ? `Fill ${adminFill.formName}` : 'Fill form'}
-        description="Complete the client profile. On submit it is marked verified immediately."
+        description="Complete the investor profile. On submit it is marked verified immediately."
         onClose={() => setAdminFill(null)}
         size="xl"
         footer={
@@ -735,7 +756,7 @@ export default function CompaniesPage() {
         <div className="space-y-4">
           <p className="text-sm text-[var(--muted)]">
             Each row receives an invitation email. Onboarding forms are assigned
-            automatically from published client forms.
+            automatically from published investor forms.
           </p>
           <textarea
             className="min-h-48 w-full rounded-xl border border-[var(--border)] bg-white p-3 font-mono text-xs"

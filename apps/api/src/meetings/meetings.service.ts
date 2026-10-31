@@ -11,6 +11,9 @@ import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
 import type { AuthUser } from '../common/decorators';
 
+/** Admin roster views may load full event schedules (5k+ rows). */
+const MEETINGS_ADMIN_MAX_PAGE_SIZE = 50_000;
+
 @Injectable()
 export class MeetingsService {
   constructor(
@@ -21,15 +24,21 @@ export class MeetingsService {
 
   async listForUser(user: AuthUser, params: { page?: number; pageSize?: number }) {
     const page = params.page ?? 1;
-    const pageSize = Math.min(params.pageSize ?? 20, 100);
     const isPrivileged =
       user.permissions.includes('meetings:manage') ||
       user.permissions.includes('meetings:read');
+    const isAdminList =
+      isPrivileged &&
+      user.roles.some((r) =>
+        ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(r),
+      );
+    const maxPageSize = isAdminList ? MEETINGS_ADMIN_MAX_PAGE_SIZE : 100;
+    const pageSize = Math.min(
+      Math.max(params.pageSize ?? 20, 1),
+      maxPageSize,
+    );
 
-    const where: Prisma.MeetingWhereInput = isPrivileged &&
-    user.roles.some((r) =>
-      ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(r),
-    )
+    const where: Prisma.MeetingWhereInput = isAdminList
       ? {}
       : {
           OR: [
@@ -38,6 +47,7 @@ export class MeetingsService {
           ],
           status: {
             in: [
+              'PROPOSED',
               'PUBLISHED',
               'AWAITING_CONFIRMATION',
               'CONFIRMED',
@@ -235,6 +245,102 @@ export class MeetingsService {
     });
   }
 
+  async startMeeting(user: AuthUser, meetingId: string) {
+    const meeting = await this.requireMeetingAccess(user, meetingId);
+    this.assertInvestorOrAdmin(user, meeting);
+
+    if (meeting.status === 'IN_PROGRESS') {
+      return { id: meeting.id, status: 'IN_PROGRESS' as const };
+    }
+
+    try {
+      assertTransition(meeting.status as MeetingStatus, 'IN_PROGRESS');
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.meeting.update({
+        where: { id: meetingId },
+        data: { status: 'IN_PROGRESS', version: { increment: 1 } },
+      });
+      await tx.meetingStatusHistory.create({
+        data: {
+          meetingId,
+          fromStatus: meeting.status,
+          toStatus: 'IN_PROGRESS',
+          reason: 'Investor started meeting',
+          actorId: user.id,
+        },
+      });
+      await tx.meetingConfirmation.upsert({
+        where: {
+          meetingId_userId: { meetingId, userId: user.id },
+        },
+        create: {
+          meetingId,
+          userId: user.id,
+          status: 'CONFIRMED',
+          note: 'Started on site',
+          respondedAt: new Date(),
+        },
+        update: {
+          status: 'CONFIRMED',
+          respondedAt: new Date(),
+        },
+      });
+      return next;
+    });
+    await this.audit.record({
+      actorId: user.id,
+      action: 'meeting.start',
+      entityType: 'Meeting',
+      entityId: meetingId,
+      outcome: 'SUCCESS',
+    });
+    return updated;
+  }
+
+  async completeMeeting(user: AuthUser, meetingId: string) {
+    const meeting = await this.requireMeetingAccess(user, meetingId);
+    this.assertInvestorOrAdmin(user, meeting);
+
+    if (meeting.status === 'COMPLETED') {
+      return { id: meeting.id, status: 'COMPLETED' as const };
+    }
+
+    try {
+      assertTransition(meeting.status as MeetingStatus, 'COMPLETED');
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.meeting.update({
+        where: { id: meetingId },
+        data: { status: 'COMPLETED', version: { increment: 1 } },
+      });
+      await tx.meetingStatusHistory.create({
+        data: {
+          meetingId,
+          fromStatus: meeting.status,
+          toStatus: 'COMPLETED',
+          reason: 'Investor ended meeting',
+          actorId: user.id,
+        },
+      });
+      return next;
+    });
+    await this.audit.record({
+      actorId: user.id,
+      action: 'meeting.complete',
+      entityType: 'Meeting',
+      entityId: meetingId,
+      outcome: 'SUCCESS',
+    });
+    return updated;
+  }
+
   async requestReschedule(
     user: AuthUser,
     meetingId: string,
@@ -367,6 +473,20 @@ export class MeetingsService {
     });
 
     return feedback;
+  }
+
+  private assertInvestorOrAdmin(
+    user: AuthUser,
+    meeting: { companyOrgId: string },
+  ) {
+    const privileged = user.roles.some((r) =>
+      ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(r),
+    );
+    if (!privileged && !user.organizationIds.includes(meeting.companyOrgId)) {
+      throw new ForbiddenException(
+        'Only the investor or an event admin can start or end this meeting',
+      );
+    }
   }
 
   private async requireMeetingAccess(user: AuthUser, meetingId: string) {

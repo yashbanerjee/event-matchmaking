@@ -51,11 +51,11 @@ export class PeerRecommendationsController {
   ) {
     return this.peers.listForOrganization(
       organizationId,
-      limit ? Number(limit) : 50,
+      limit ? Number(limit) : undefined,
     );
   }
 
-  /** Opposite-type candidates for admin add (client→guests / guest→clients) */
+  /** Opposite-type candidates for admin add (investor→innovators / innovator→investors) */
   @Get('org/:organizationId/candidates')
   @RequirePermissions(PERMISSIONS.ORGS_READ)
   candidates(

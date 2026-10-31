@@ -10,6 +10,22 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useAdminQuery } from '@/lib/admin-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import {
+  DEFAULT_EVENT_ACTIVE_END,
+  DEFAULT_EVENT_ACTIVE_START,
+  DEFAULT_EVENT_DATES,
+  formatEventDate,
+  parseEventDates,
+} from '@/lib/event-schedule';
+
+const EVENT_SETTING_KEYS = new Set([
+  'ops.eventDates',
+  'ops.eventActiveStart',
+  'ops.eventActiveEnd',
+  'ops.meetingDurationMinutes',
+  'ops.meetingWindowStart',
+  'ops.meetingWindowEnd',
+]);
 
 type Field = {
   key: string;
@@ -88,6 +104,13 @@ export default function SettingsPage() {
     formId: '',
     notifyEmails: '',
   });
+  const [eventDates, setEventDates] = useState<string[]>(DEFAULT_EVENT_DATES);
+  const [newEventDate, setNewEventDate] = useState('');
+  const [eventHours, setEventHours] = useState({
+    activeStart: DEFAULT_EVENT_ACTIVE_START,
+    activeEnd: DEFAULT_EVENT_ACTIVE_END,
+    durationMinutes: '15',
+  });
   const [testTo, setTestTo] = useState('');
   const [testNote, setTestNote] = useState('');
   const [testError, setTestError] = useState('');
@@ -116,6 +139,30 @@ export default function SettingsPage() {
       formId: String(settingValue(data.settings, 'registration.formId') ?? ''),
       notifyEmails: String(
         settingValue(data.settings, 'registration.notifyEmails') ?? '',
+      ),
+    });
+
+    const dates = parseEventDates(
+      settingValue(data.settings, 'ops.eventDates') ??
+        next['ops.eventDates'] ??
+        DEFAULT_EVENT_DATES.join(','),
+    );
+    setEventDates(dates.length > 0 ? dates : DEFAULT_EVENT_DATES);
+    setEventHours({
+      activeStart: String(
+        settingValue(data.settings, 'ops.eventActiveStart') ??
+          next['ops.eventActiveStart'] ??
+          DEFAULT_EVENT_ACTIVE_START,
+      ),
+      activeEnd: String(
+        settingValue(data.settings, 'ops.eventActiveEnd') ??
+          next['ops.eventActiveEnd'] ??
+          DEFAULT_EVENT_ACTIVE_END,
+      ),
+      durationMinutes: String(
+        settingValue(data.settings, 'ops.meetingDurationMinutes') ??
+          next['ops.meetingDurationMinutes'] ??
+          15,
       ),
     });
   }, [data]);
@@ -189,6 +236,29 @@ export default function SettingsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 
+  const saveEventSchedule = useMutation({
+    mutationFn: () =>
+      apiFetch('/settings/integrations', {
+        method: 'PUT',
+        token: getAccessToken(),
+        body: JSON.stringify({
+          values: [
+            { key: 'ops.eventDates', value: eventDates.join(',') },
+            { key: 'ops.eventActiveStart', value: eventHours.activeStart },
+            { key: 'ops.eventActiveEnd', value: eventHours.activeEnd },
+            {
+              key: 'ops.meetingDurationMinutes',
+              value: Number(eventHours.durationMinutes) || 15,
+            },
+          ],
+        }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['settings'] });
+      void qc.invalidateQueries({ queryKey: ['meeting-booking-window'] });
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -207,10 +277,132 @@ export default function SettingsPage() {
       <Card className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
+            <h2 className="font-medium">Event dates & hours</h2>
+            <p className="text-xs text-[var(--muted)]">
+              Meetings can only be booked on these days during active hours
+              (Dubai time). Investor, innovator, and admin calendars show only
+              these dates.
+            </p>
+          </div>
+          <Button
+            onClick={() => saveEventSchedule.mutate()}
+            loading={saveEventSchedule.isPending}
+            disabled={eventDates.length === 0}
+          >
+            {saveEventSchedule.isPending ? 'Saving…' : 'Save event schedule'}
+          </Button>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm font-medium">Event dates</p>
+          <div className="flex flex-wrap gap-2">
+            {eventDates.map((ymd) => (
+              <span
+                key={ymd}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-1.5 text-sm"
+              >
+                {formatEventDate(ymd)}
+                <button
+                  type="button"
+                  className="text-[var(--muted)] hover:text-rose-700"
+                  onClick={() =>
+                    setEventDates((dates) => dates.filter((d) => d !== ymd))
+                  }
+                  aria-label={`Remove ${ymd}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="min-w-[12rem] flex-1 text-sm">
+              <span className="mb-1 block text-[var(--muted)]">Add a date</span>
+              <Input
+                type="date"
+                value={newEventDate}
+                onChange={(e) => setNewEventDate(e.target.value)}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                !/^\d{4}-\d{2}-\d{2}$/.test(newEventDate) ||
+                eventDates.includes(newEventDate)
+              }
+              onClick={() => {
+                setEventDates((dates) =>
+                  [...new Set([...dates, newEventDate])].sort(),
+                );
+                setNewEventDate('');
+              }}
+            >
+              Add date
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="text-sm">
+            <span className="mb-1 block text-[var(--muted)]">Active from</span>
+            <Input
+              type="time"
+              value={eventHours.activeStart}
+              onChange={(e) =>
+                setEventHours((h) => ({ ...h, activeStart: e.target.value }))
+              }
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-[var(--muted)]">Active until</span>
+            <Input
+              type="time"
+              value={eventHours.activeEnd}
+              onChange={(e) =>
+                setEventHours((h) => ({ ...h, activeEnd: e.target.value }))
+              }
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-[var(--muted)]">
+              Meeting length (min)
+            </span>
+            <Input
+              type="number"
+              min={5}
+              max={240}
+              value={eventHours.durationMinutes}
+              onChange={(e) =>
+                setEventHours((h) => ({
+                  ...h,
+                  durationMinutes: e.target.value,
+                }))
+              }
+            />
+          </label>
+        </div>
+
+        {saveEventSchedule.isSuccess ? (
+          <p className="text-sm text-[var(--success)]">
+            Event dates and hours saved. Meetings can only be booked in this
+            window.
+          </p>
+        ) : null}
+        {saveEventSchedule.error ? (
+          <p className="text-sm text-[var(--danger)]">
+            {(saveEventSchedule.error as Error).message}
+          </p>
+        ) : null}
+      </Card>
+
+      <Card className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
             <h2 className="font-medium">Event registration</h2>
             <p className="text-xs text-[var(--muted)]">
               Public “Register for event” uses a published form, then email OTP
-              and password setup. Client/Guest is collected on the form flow.
+              and password setup. Investor/Innovator is collected on the form flow.
             </p>
           </div>
           <Button
@@ -251,7 +443,7 @@ export default function SettingsPage() {
             ))}
           </select>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Latest published version is used. The Client/Guest role field is
+            Latest published version is used. The Investor/Innovator role field is
             added automatically.
           </p>
         </div>
@@ -285,14 +477,20 @@ export default function SettingsPage() {
         ) : null}
       </Card>
 
-      {data?.integration.map((group) => (
+      {data?.integration.map((group) => {
+        const fields =
+          group.id === 'ops'
+            ? group.fields.filter((field) => !EVENT_SETTING_KEYS.has(field.key))
+            : group.fields;
+        if (fields.length === 0) return null;
+        return (
         <Card key={group.id} className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="font-medium">{group.title}</h2>
               <p className="text-xs text-[var(--muted)]">
                 {group.id === 'email'
-                  ? 'Messages to guests use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
+                  ? 'Messages to innovators use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
                   : 'Setting key shown on each row'}
               </p>
             </div>
@@ -308,7 +506,7 @@ export default function SettingsPage() {
             </Button>
           </div>
           <div className="space-y-3">
-            {group.fields.map((field) => (
+            {fields.map((field) => (
               <div
                 key={field.key}
                 className="grid gap-2 md:grid-cols-[220px_1fr_140px] items-center border-b border-[var(--border)] pb-3"
@@ -457,7 +655,8 @@ export default function SettingsPage() {
             </div>
           ) : null}
         </Card>
-      ))}
+        );
+      })}
 
       <Card>
         <h2 className="font-medium mb-3">Feature flags</h2>
