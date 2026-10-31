@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { formatVendorStatus, statusTone } from '@/lib/status';
 import { orgKindLabel } from '@/lib/org-labels';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { ConfirmDialog } from '@/components/ui/dialog';
 
@@ -40,18 +38,6 @@ export type OrgRow = {
   } | null;
 };
 
-type OrgDetail = OrgRow & {
-  members?: Array<{
-    user: {
-      id: string;
-      email: string;
-      firstName: string | null;
-      lastName: string | null;
-      status: string;
-    };
-  }>;
-};
-
 export function OrgRowActions({
   org,
   kind,
@@ -62,7 +48,7 @@ export function OrgRowActions({
   queryKey: unknown[];
 }) {
   const qc = useQueryClient();
-  const [mode, setMode] = useState<'view' | 'edit' | null>(null);
+  const [mode, setMode] = useState<'edit' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({
     name: org.name,
@@ -91,15 +77,6 @@ export function OrgRowActions({
       });
     }
   }, [mode, org]);
-
-  const detail = useQuery({
-    queryKey: ['organization', org.id],
-    enabled: mode === 'view',
-    queryFn: () =>
-      apiFetch<OrgDetail>(`/organizations/${org.id}`, {
-        token: getAccessToken(),
-      }),
-  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -166,46 +143,29 @@ export function OrgRowActions({
     },
   });
 
-  const viewed = detail.data ?? org;
-
   return (
     <>
       <div className="inline-flex flex-nowrap items-center gap-1">
-        <Button size="sm" variant="ghost" onClick={() => setMode('view')}>
-          View
-        </Button>
         <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
           Edit
         </Button>
         <Link href={`/admin/recommendations?orgId=${org.id}`}>
-          <Button
-            size="sm"
-            variant="outline"
-            title={
-              kind === 'company'
-                ? 'Manage recommended guests for this client'
-                : 'Manage recommended clients for this guest'
-            }
-          >
+          <Button size="sm" variant="ghost">
             Recs
           </Button>
         </Link>
         <Button
           size="sm"
-          variant={isFeatured ? 'secondary' : 'outline'}
+          variant="ghost"
           loading={toggleFeatured.isPending}
           onClick={() => toggleFeatured.mutate()}
-          title={
-            isFeatured
-              ? 'Remove from admin suggestions'
-              : 'Show as admin suggestion on the counterpart panel'
-          }
+          title={isFeatured ? 'Unfeature' : 'Feature'}
         >
           {isFeatured ? 'Unfeature' : 'Feature'}
         </Button>
         <Button
           size="sm"
-          variant="danger"
+          variant="ghost"
           onClick={() => setConfirmDelete(true)}
         >
           Delete
@@ -213,133 +173,10 @@ export function OrgRowActions({
       </div>
 
       <Modal
-        open={mode === 'view'}
-        title={viewed.name}
-        description={`${orgKindLabel(kind)} details`}
-        onClose={() => setMode(null)}
-        wide
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setMode(null)}>
-              Close
-            </Button>
-            <Link href={`/admin/recommendations?orgId=${org.id}`}>
-              <Button variant="outline">
-                {kind === 'company'
-                  ? 'Manage guest recommendations'
-                  : 'Manage client recommendations'}
-              </Button>
-            </Link>
-            <Button
-              onClick={() => {
-                setMode('edit');
-              }}
-            >
-              Edit
-            </Button>
-          </>
-        }
-      >
-        {detail.isLoading && <p className="text-[var(--muted)]">Loading…</p>}
-        {detail.error && (
-          <p className="text-rose-700">{(detail.error as Error).message}</p>
-        )}
-        <dl className="overflow-hidden rounded-xl border border-[var(--border)]">
-          {(
-            [
-              ['Code', viewed.code],
-              ['Status', viewed.status, 'status'],
-              ['Industry', viewed.industry ?? '—'],
-              ['Country', viewed.country ?? '—'],
-              ['Region', viewed.region ?? '—'],
-              ['Website', viewed.website ?? '—'],
-              ['Address', viewed.address ?? '—'],
-              [
-                'Featured',
-                (kind === 'vendor'
-                  ? viewed.vendor?.featured
-                  : viewed.company?.featured)
-                  ? 'Yes'
-                  : 'No',
-              ],
-              ...(kind === 'vendor'
-                ? ([
-                    ['Display name', viewed.vendor?.displayName ?? '—'],
-                    [
-                      'Approval',
-                      viewed.vendor?.approvalStatus ?? '—',
-                      'status',
-                    ],
-                    [
-                      'Eligible',
-                      viewed.vendor?.matchingEligible ? 'Yes' : 'No',
-                    ],
-                    [
-                      'Categories',
-                      (viewed.vendor?.categories ?? []).join(', ') || '—',
-                    ],
-                    [
-                      'Capabilities',
-                      (viewed.vendor?.capabilities ?? []).join(', ') || '—',
-                    ],
-                  ] as Array<[string, string, string?]>)
-                : []),
-            ] as Array<[string, string, string?]>
-          ).map(([label, value, kindOf], index) => (
-            <div
-              key={label}
-              className={`grid grid-cols-[8.5rem_minmax(0,1fr)] items-start gap-x-4 gap-y-1 px-4 py-3 text-left sm:grid-cols-[10rem_minmax(0,1fr)] ${
-                index > 0 ? 'border-t border-[var(--border)]' : ''
-              } ${index % 2 === 0 ? 'bg-white' : 'bg-[var(--card-elevated)]'}`}
-            >
-              <dt className="pt-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                {label}
-              </dt>
-              <dd className="min-w-0 break-words text-sm font-medium text-[var(--foreground)]">
-                {kindOf === 'status' ? (
-                  <Badge variant={statusTone(String(value))}>
-                    {formatVendorStatus(String(value))}
-                  </Badge>
-                ) : (
-                  value
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-
-        {detail.data?.members && detail.data.members.length > 0 ? (
-          <div className="mt-5">
-            <h3 className="mb-2 text-sm font-semibold">Members</h3>
-            <ul className="overflow-hidden rounded-xl border border-[var(--border)]">
-              {detail.data.members.map((m, index) => (
-                <li
-                  key={m.user.id}
-                  className={`px-4 py-3 text-left text-sm ${
-                    index > 0 ? 'border-t border-[var(--border)]' : ''
-                  }`}
-                >
-                  <span className="font-medium">{m.user.email}</span>
-                  <span className="text-[var(--muted)]">
-                    {' '}
-                    ·{' '}
-                    {[m.user.firstName, m.user.lastName]
-                      .filter(Boolean)
-                      .join(' ') || 'No name'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </Modal>
-
-      <Modal
         open={mode === 'edit'}
         title={`Edit ${orgKindLabel(kind).toLowerCase()}`}
-        description={`Update ${org.code}`}
+        description={org.code}
         onClose={() => setMode(null)}
-        wide
         footer={
           <>
             <Button variant="outline" onClick={() => setMode(null)}>
@@ -350,7 +187,7 @@ export function OrgRowActions({
               loading={save.isPending}
               disabled={!form.name.trim()}
             >
-              {save.isPending ? 'Saving…' : 'Save changes'}
+              {save.isPending ? 'Saving…' : 'Save'}
             </Button>
           </>
         }

@@ -92,7 +92,7 @@ type RequestRow = {
 
 export default function AdminMeetingsPage() {
   const qc = useQueryClient();
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
   const [filters, setFilters] = useState(emptyFilters);
   const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
@@ -378,10 +378,10 @@ export default function AdminMeetingsPage() {
 
       <Card>
         <div className="mb-4 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-semibold">
-              {viewMode === 'calendar' ? 'Calendar' : 'Schedule'}
-            </h2>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <p className="text-xs text-[var(--muted)]">
+              Showing {rows.length} of {activeMeetings.length} meetings
+            </p>
             {filtersActive ? (
               <Button
                 size="sm"
@@ -392,7 +392,7 @@ export default function AdminMeetingsPage() {
               </Button>
             ) : null}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <label className="block text-sm">
               <span className="mb-1 block text-[var(--muted)]">Date</span>
               <Input
@@ -400,26 +400,6 @@ export default function AdminMeetingsPage() {
                 value={filters.date}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, date: e.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Time from</span>
-              <Input
-                type="time"
-                value={filters.timeFrom}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, timeFrom: e.target.value }))
-                }
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Time to</span>
-              <Input
-                type="time"
-                value={filters.timeTo}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, timeTo: e.target.value }))
                 }
               />
             </label>
@@ -468,9 +448,6 @@ export default function AdminMeetingsPage() {
               />
             </label>
           </div>
-          <p className="text-xs text-[var(--muted)]">
-            Showing {rows.length} of {activeMeetings.length} meetings
-          </p>
         </div>
 
         {error ? <p className="mb-3 text-sm text-rose-700">{error}</p> : null}
@@ -493,6 +470,7 @@ export default function AdminMeetingsPage() {
           ) : (
             <MeetingsCalendar
               events={calendarEvents}
+              variant="admin"
               onSelectEvent={(event) => {
                 if (event.kind !== 'meeting') return;
                 const meetingId = event.id.replace(/^meeting:/, '');

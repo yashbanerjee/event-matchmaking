@@ -282,22 +282,13 @@ export function LocationMapPicker({
         ref={mapEl}
         className="h-56 w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] z-0"
       />
-      <p className="text-xs text-[var(--muted)]">
-        Search for a place or click the map to drop a pin. Drag the marker to
-        fine-tune.
-      </p>
       {value.mapAddress ? (
-        <p className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent-soft)]/40 px-3 py-2 text-xs">
-          <span className="font-semibold">Pinned: </span>
-          {value.mapAddress}
-          {value.latitude != null && value.longitude != null ? (
-            <span className="text-[var(--muted)]">
-              {' '}
-              · {value.latitude.toFixed(5)}, {value.longitude.toFixed(5)}
-            </span>
-          ) : null}
+        <p className="truncate text-xs text-[var(--muted)]">{value.mapAddress}</p>
+      ) : (
+        <p className="text-xs text-[var(--muted)]">
+          Search or click the map to set a pin.
         </p>
-      ) : null}
+      )}
     </div>
   );
 }

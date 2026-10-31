@@ -41,29 +41,29 @@ export default function AdminOverviewPage() {
   }
   if (!data) return null;
 
-  const hero = [
-    { label: 'Client', value: data.totalCompanies, tone: 'teal' },
-    { label: 'Guests', value: data.totalVendors, tone: 'sky' },
-    { label: 'Scheduled', value: data.scheduledMeetings, tone: 'teal' },
-    { label: 'Confirmed', value: data.confirmedMeetings, tone: 'sky' },
-  ];
-
   const metrics: Array<{ label: string; value: string | number }> = [
+    { label: 'Clients', value: data.totalCompanies },
+    { label: 'Guests', value: data.totalVendors },
+    { label: 'Scheduled meetings', value: data.scheduledMeetings },
+    { label: 'Confirmed meetings', value: data.confirmedMeetings },
+    { label: 'Completed meetings', value: data.completedMeetings },
     { label: 'Active users', value: data.activeUsers },
     { label: 'Pending invitations', value: data.pendingInvitations },
     { label: 'Eligible participants', value: data.eligibleParticipants },
     { label: 'Generated matches', value: data.generatedMatches },
-    { label: 'Completed meetings', value: data.completedMeetings },
+    {
+      label: 'Avg match score',
+      value: data.averageMatchScore.toFixed(1),
+    },
     {
       label: 'Cancellation rate',
       value: `${(data.cancellationRate * 100).toFixed(1)}%`,
     },
-    { label: 'No-show rate', value: `${(data.noShowRate * 100).toFixed(1)}%` },
-    { label: 'Pending feedback', value: data.pendingFeedback },
     {
-      label: 'Average match score',
-      value: data.averageMatchScore.toFixed(1),
+      label: 'No-show rate',
+      value: `${(data.noShowRate * 100).toFixed(1)}%`,
     },
+    { label: 'Pending feedback', value: data.pendingFeedback },
     { label: 'Job failures', value: data.backgroundJobFailures },
   ];
 
@@ -72,42 +72,23 @@ export default function AdminOverviewPage() {
       <PageHeader
         eyebrow="Control center"
         title="Overview"
-        description="Live operational metrics from PostgreSQL — invitations through outcomes."
+        description="Operational metrics from invitations through meeting outcomes."
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {hero.map((m, i) => (
-          <Card
-            key={m.label}
-            className={
-              m.tone === 'sky'
-                ? 'relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#1bc4ab,#0f9f8c)] text-white'
-                : 'relative overflow-hidden border-transparent bg-[linear-gradient(145deg,#26e2c6,#1bc4ab)] text-[var(--accent-foreground)]'
-            }
-            style={{ animationDelay: `${i * 60}ms` }}
-          >
-            <div
-              className={
-                m.tone === 'sky'
-                  ? 'text-sm text-white/75'
-                  : 'text-sm text-[var(--accent-foreground)]/70'
-              }
-            >
-              {m.label}
+      <Card className="overflow-hidden p-0">
+        <div className="grid divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-x xl:grid-cols-3">
+          {metrics.map((m) => (
+            <div key={m.label} className="px-4 py-3 sm:odd:border-r-0">
+              <div className="text-xs font-medium text-[var(--muted)]">
+                {m.label}
+              </div>
+              <div className="mt-1 text-xl font-semibold tracking-tight">
+                {m.value}
+              </div>
             </div>
-            <div className="mt-3 text-3xl font-bold tracking-tight">{m.value}</div>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {metrics.map((m) => (
-          <Card key={m.label} className="hover:border-[var(--accent)]/30 transition-colors">
-            <div className="text-sm text-[var(--muted)]">{m.label}</div>
-            <div className="mt-2 text-2xl font-semibold tracking-tight">{m.value}</div>
-          </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

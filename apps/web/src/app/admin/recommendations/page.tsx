@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   keepPreviousData,
@@ -20,21 +20,6 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 
-type TopRec = {
-  toOrg: {
-    id: string;
-    name: string;
-    type: string;
-    industry: string | null;
-  };
-  source?: 'COMPUTED' | 'MANUAL';
-  totalScore: number;
-  aiScore: number | null;
-  aiDescription: string | null;
-  reasons: string[];
-  computedAt: string;
-};
-
 type OverviewItem = {
   organizationId: string;
   name: string;
@@ -42,7 +27,12 @@ type OverviewItem = {
   industry: string | null;
   featured: boolean;
   recommendationCount: number;
-  topRecommendations: TopRec[];
+  topRecommendations: Array<{
+    toOrg: { id: string; name: string; type: string };
+    source?: 'COMPUTED' | 'MANUAL';
+    totalScore: number;
+    aiDescription: string | null;
+  }>;
 };
 
 type OverviewResponse = {
@@ -58,35 +48,16 @@ type OrgDetailResponse = {
   items: Array<{
     id: string;
     source: 'COMPUTED' | 'MANUAL';
-    toOrg: {
-      id: string;
-      name: string;
-      type: string;
-      industry: string | null;
-      region: string | null;
-    };
-    ruleScore: number;
-    aiScore: number | null;
+    toOrg: { id: string; name: string; type: string; industry: string | null };
     totalScore: number;
-    reasons: string[];
+    aiScore: number | null;
     aiDescription: string | null;
-    computedAt: string;
   }>;
 };
 
-type CandidateOrg = {
-  id: string;
-  name: string;
-  type: string;
-  industry: string | null;
-  region: string | null;
-};
-
 type CandidatesResponse = {
-  organization: { id: string; name: string; type: string };
-  counterpartType: 'COMPANY' | 'VENDOR';
   counterpartLabel: 'clients' | 'guests';
-  items: CandidateOrg[];
+  items: Array<{ id: string; name: string; industry: string | null }>;
 };
 
 const PAGE_SIZE = 20;
@@ -113,11 +84,9 @@ function AdminRecommendationsPageInner() {
   const [detailOrgId, setDetailOrgId] = useState<string | null>(null);
   const [candidateQ, setCandidateQ] = useState('');
   const [candidateSearch, setCandidateSearch] = useState('');
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
-  const [adminNote, setAdminNote] = useState('');
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Deep-link: /admin/recommendations?orgId=...
   useEffect(() => {
     const orgId = searchParams.get('orgId');
     if (orgId) setDetailOrgId(orgId);
@@ -167,6 +136,17 @@ function AdminRecommendationsPageInner() {
     },
   });
 
+  const invalidateOrg = async (organizationId: string | null) => {
+    await qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
+    if (!organizationId) return;
+    await qc.invalidateQueries({
+      queryKey: ['admin-peer-recommendations-org', organizationId],
+    });
+    await qc.invalidateQueries({
+      queryKey: ['admin-peer-recommendation-candidates', organizationId],
+    });
+  };
+
   const recompute = useMutation({
     mutationFn: (organizationId: string) =>
       apiFetch(`/peer-recommendations/org/${organizationId}/recompute`, {
@@ -174,15 +154,7 @@ function AdminRecommendationsPageInner() {
         token: getAccessToken(),
         body: JSON.stringify({}),
       }),
-    onSuccess: async (_data, organizationId) => {
-      await qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendations-org', organizationId],
-      });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendation-candidates', organizationId],
-      });
-    },
+    onSuccess: async (_data, organizationId) => invalidateOrg(organizationId),
   });
 
   const addManual = useMutation({
@@ -193,23 +165,13 @@ function AdminRecommendationsPageInner() {
       return apiFetch(`/peer-recommendations/org/${detailOrgId}`, {
         method: 'POST',
         token: getAccessToken(),
-        body: JSON.stringify({
-          toOrgId: selectedCandidateId,
-          note: adminNote.trim() || undefined,
-        }),
+        body: JSON.stringify({ toOrgId: selectedCandidateId }),
       });
     },
     onSuccess: async () => {
       setActionError(null);
       setSelectedCandidateId('');
-      setAdminNote('');
-      await qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendations-org', detailOrgId],
-      });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendation-candidates', detailOrgId],
-      });
+      await invalidateOrg(detailOrgId);
     },
     onError: (err) => setActionError((err as Error).message),
   });
@@ -224,13 +186,7 @@ function AdminRecommendationsPageInner() {
     },
     onSuccess: async () => {
       setActionError(null);
-      await qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendations-org', detailOrgId],
-      });
-      await qc.invalidateQueries({
-        queryKey: ['admin-peer-recommendation-candidates', detailOrgId],
-      });
+      await invalidateOrg(detailOrgId);
     },
     onError: (err) => setActionError((err as Error).message),
   });
@@ -239,23 +195,16 @@ function AdminRecommendationsPageInner() {
   const viewerType = detail.data?.organization.type;
   const counterpartWord =
     detail.data?.counterpartLabel ||
+    candidates.data?.counterpartLabel ||
     (viewerType === 'COMPANY' ? 'guests' : 'clients');
   const counterpartSingular =
     counterpartWord === 'guests' ? 'guest' : 'client';
-
-  const selectedCandidate = useMemo(
-    () =>
-      (candidates.data?.items ?? []).find((c) => c.id === selectedCandidateId) ??
-      null,
-    [candidates.data?.items, selectedCandidateId],
-  );
 
   function closeDetail() {
     setDetailOrgId(null);
     setCandidateQ('');
     setCandidateSearch('');
     setSelectedCandidateId('');
-    setAdminNote('');
     setActionError(null);
   }
 
@@ -263,19 +212,16 @@ function AdminRecommendationsPageInner() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Match & meet"
-        title="AI recommendations"
-        description="Open a client to manage guest recommendations, or a guest to manage client recommendations — same direction as the live matching engine. Admin pins survive AI recompute."
+        title="Recommendations"
+        description="Clients see guests; guests see clients. Manage opens that org’s list."
       />
 
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-              Search
-            </label>
             <Input
               value={q}
-              placeholder="Organization name"
+              placeholder="Search organization"
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -285,70 +231,69 @@ function AdminRecommendationsPageInner() {
               }}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-              Type
-            </label>
-            <select
-              className="h-10 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
-              value={type}
-              onChange={(e) => {
-                setPage(1);
-                setType(e.target.value as 'ALL' | 'COMPANY' | 'VENDOR');
-              }}
-            >
-              <option value="ALL">All</option>
-              <option value="COMPANY">Clients</option>
-              <option value="VENDOR">Guests</option>
-            </select>
-          </div>
+          <select
+            className="h-10 rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+            value={type}
+            onChange={(e) => {
+              setPage(1);
+              setType(e.target.value as 'ALL' | 'COMPANY' | 'VENDOR');
+            }}
+          >
+            <option value="ALL">All</option>
+            <option value="COMPANY">Clients</option>
+            <option value="VENDOR">Guests</option>
+          </select>
           <Button
             onClick={() => {
               setPage(1);
               setSearch(q);
             }}
           >
-            Apply
+            Search
           </Button>
         </div>
 
         {overview.isLoading ? (
-          <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
+          <p className="text-sm text-[var(--muted)]">Loading…</p>
         ) : items.length === 0 ? (
           <EmptyState
-            title="No stored recommendations yet"
-            description="Approve a client or guest (or recompute) so preferences can be scored with JAV AI."
+            title="No recommendations yet"
+            description="Approve a client or guest, then recompute or add manually."
           />
         ) : (
-          <div className="space-y-4">
-            {items.map((org) => (
-              <div
-                key={org.organizationId}
-                className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-base font-semibold">
-                        {org.name}
-                      </h3>
-                      <Badge variant="secondary">
-                        {org.type === 'COMPANY' ? 'Client' : 'Guest'}
-                      </Badge>
-                      {org.featured ? (
-                        <Badge variant="accent">Featured</Badge>
-                      ) : null}
+          <Table>
+            <THead>
+              <TR>
+                <TH>Organization</TH>
+                <TH>Type</TH>
+                <TH>Matches</TH>
+                <TH>Top matches</TH>
+                <TH />
+              </TR>
+            </THead>
+            <TBody>
+              {items.map((org) => (
+                <TR key={org.organizationId}>
+                  <TD>
+                    <div className="font-medium">{org.name}</div>
+                    <div className="text-xs text-[var(--muted)]">
+                      {org.industry || '—'}
                     </div>
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      {org.industry || 'No industry'} ·{' '}
-                      {org.recommendationCount} stored match
-                      {org.recommendationCount === 1 ? '' : 'es'}
-                      {org.type === 'COMPANY'
-                        ? ' · recommends guests'
-                        : ' · recommends clients'}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
+                  </TD>
+                  <TD>{org.type === 'COMPANY' ? 'Client' : 'Guest'}</TD>
+                  <TD>{org.recommendationCount}</TD>
+                  <TD className="max-w-sm text-sm text-[var(--muted)]">
+                    {org.topRecommendations.length === 0
+                      ? '—'
+                      : org.topRecommendations
+                          .slice(0, 3)
+                          .map(
+                            (rec) =>
+                              `${rec.toOrg.name} (${Math.round(rec.totalScore)})`,
+                          )
+                          .join(', ')}
+                  </TD>
+                  <TD className="space-x-2 whitespace-nowrap text-right">
                     <Button
                       size="sm"
                       variant="outline"
@@ -358,86 +303,17 @@ function AdminRecommendationsPageInner() {
                     </Button>
                     <Button
                       size="sm"
+                      variant="ghost"
                       disabled={recompute.isPending}
                       onClick={() => recompute.mutate(org.organizationId)}
                     >
-                      Recompute AI
+                      Recompute
                     </Button>
-                  </div>
-                </div>
-
-                {org.topRecommendations.length === 0 ? (
-                  <p className="mt-3 text-sm text-[var(--muted)]">
-                    No peers scored yet. Open Manage to add admin recommendations
-                    or recompute AI.
-                  </p>
-                ) : (
-                  <div className="mt-3 overflow-x-auto">
-                    <Table>
-                      <THead>
-                        <TR>
-                          <TH>Match</TH>
-                          <TH>Source</TH>
-                          <TH>Total</TH>
-                          <TH>AI score</TH>
-                          <TH>Description</TH>
-                        </TR>
-                      </THead>
-                      <TBody>
-                        {org.topRecommendations.map((rec) => (
-                          <TR key={`${org.organizationId}-${rec.toOrg.id}`}>
-                            <TD>
-                              <div className="font-medium">{rec.toOrg.name}</div>
-                              <div className="text-xs text-[var(--muted)]">
-                                {rec.toOrg.type === 'COMPANY'
-                                  ? 'Client'
-                                  : 'Guest'}
-                                {rec.toOrg.industry
-                                  ? ` · ${rec.toOrg.industry}`
-                                  : ''}
-                              </div>
-                            </TD>
-                            <TD>
-                              <Badge
-                                variant={
-                                  rec.source === 'MANUAL'
-                                    ? 'warning'
-                                    : 'secondary'
-                                }
-                              >
-                                {rec.source === 'MANUAL' ? 'Admin' : 'AI'}
-                              </Badge>
-                            </TD>
-                            <TD>
-                              <Badge variant="info">
-                                {Math.round(rec.totalScore)}
-                              </Badge>
-                            </TD>
-                            <TD>
-                              {rec.aiScore != null ? (
-                                <Badge variant="accent">
-                                  {Math.round(rec.aiScore)}
-                                </Badge>
-                              ) : (
-                                <span className="text-xs text-[var(--muted)]">
-                                  —
-                                </span>
-                              )}
-                            </TD>
-                            <TD className="max-w-md text-sm text-[var(--muted)]">
-                              {rec.aiDescription ||
-                                rec.reasons.slice(0, 2).join(' · ') ||
-                                '—'}
-                            </TD>
-                          </TR>
-                        ))}
-                      </TBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
         )}
 
         <Pagination
@@ -453,13 +329,13 @@ function AdminRecommendationsPageInner() {
         title={detail.data?.organization.name ?? 'Recommendations'}
         description={
           viewerType === 'COMPANY'
-            ? 'Client view — add or remove recommended guests (same as the matching engine).'
+            ? 'Recommended guests for this client'
             : viewerType === 'VENDOR'
-              ? 'Guest view — add or remove recommended clients (same as the matching engine).'
-              : 'Manage stored recommendations for this organization'
+              ? 'Recommended clients for this guest'
+              : undefined
         }
         onClose={closeDetail}
-        size="xl"
+        wide
       >
         {detail.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading…</p>
@@ -468,16 +344,41 @@ function AdminRecommendationsPageInner() {
             {(detail.error as Error).message}
           </p>
         ) : (
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">
-                  {viewerType === 'COMPANY' ? 'Client' : 'Guest'}
-                </Badge>
-                <span className="text-sm text-[var(--muted)]">
-                  Showing {counterpartWord} only
-                </span>
-              </div>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                className="min-w-[160px] flex-1"
+                value={candidateQ}
+                placeholder={`Search ${counterpartWord}…`}
+                onChange={(e) => setCandidateQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setCandidateSearch(candidateQ);
+                }}
+              />
+              <select
+                className="h-10 min-w-[12rem] flex-1 rounded-md border border-[var(--border)] bg-white px-3 text-sm"
+                value={selectedCandidateId}
+                onChange={(e) => setSelectedCandidateId(e.target.value)}
+              >
+                <option value="">
+                  {candidates.isLoading
+                    ? 'Loading…'
+                    : `Add ${counterpartSingular}…`}
+                </option>
+                {(candidates.data?.items ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.industry ? ` · ${c.industry}` : ''}
+                  </option>
+                ))}
+              </select>
+              <Button
+                disabled={!selectedCandidateId || addManual.isPending}
+                loading={addManual.isPending}
+                onClick={() => addManual.mutate()}
+              >
+                Add
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -486,170 +387,72 @@ function AdminRecommendationsPageInner() {
                   detailOrgId ? recompute.mutate(detailOrgId) : undefined
                 }
               >
-                Recompute AI
+                Recompute
               </Button>
-            </div>
-
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)] p-4">
-              <h4 className="text-sm font-semibold">
-                Add admin recommendation
-              </h4>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                Pin a {counterpartSingular} so this{' '}
-                {viewerType === 'COMPANY' ? 'client' : 'guest'} sees them in
-                their feed. Admin pins are not overwritten by AI recompute.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Input
-                  className="min-w-[180px] flex-1"
-                  value={candidateQ}
-                  placeholder={`Search ${counterpartWord}…`}
-                  onChange={(e) => setCandidateQ(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') setCandidateSearch(candidateQ);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCandidateSearch(candidateQ)}
-                >
-                  Search
-                </Button>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-                <select
-                  className="h-10 w-full rounded-md border border-[var(--border)] bg-white px-3 text-sm"
-                  value={selectedCandidateId}
-                  onChange={(e) => setSelectedCandidateId(e.target.value)}
-                >
-                  <option value="">
-                    {candidates.isLoading
-                      ? 'Loading…'
-                      : `Select a ${counterpartSingular}…`}
-                  </option>
-                  {(candidates.data?.items ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.industry ? ` · ${c.industry}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  disabled={!selectedCandidateId || addManual.isPending}
-                  loading={addManual.isPending}
-                  onClick={() => addManual.mutate()}
-                >
-                  Add
-                </Button>
-              </div>
-              <Input
-                className="mt-3"
-                value={adminNote}
-                onChange={(e) => setAdminNote(e.target.value)}
-                placeholder="Optional note shown as description"
-              />
-              {selectedCandidate ? (
-                <p className="mt-2 text-xs text-[var(--muted)]">
-                  Will recommend{' '}
-                  <span className="font-semibold text-[var(--foreground)]">
-                    {selectedCandidate.name}
-                  </span>{' '}
-                  to {detail.data?.organization.name}.
-                </p>
-              ) : null}
-              {(candidates.data?.items.length ?? 0) === 0 &&
-              !candidates.isLoading ? (
-                <p className="mt-2 text-xs text-[var(--muted)]">
-                  No eligible {counterpartWord} left to add
-                  {candidateSearch ? ' for this search' : ''}.
-                </p>
-              ) : null}
             </div>
 
             {actionError ? (
               <p className="text-sm text-rose-700">{actionError}</p>
             ) : null}
 
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Peer</TH>
-                  <TH>Source</TH>
-                  <TH>Rule</TH>
-                  <TH>AI</TH>
-                  <TH>Total</TH>
-                  <TH>Description</TH>
-                  <TH />
-                </TR>
-              </THead>
-              <TBody>
-                {(detail.data?.items ?? []).map((row) => (
-                  <TR key={row.id}>
-                    <TD>
-                      <div className="font-medium">{row.toOrg.name}</div>
-                      <div className="text-xs text-[var(--muted)]">
-                        {row.toOrg.type === 'COMPANY' ? 'Client' : 'Guest'}
-                        {row.toOrg.industry
-                          ? ` · ${row.toOrg.industry}`
-                          : ''}
-                      </div>
-                    </TD>
-                    <TD>
-                      <Badge
-                        variant={
-                          row.source === 'MANUAL' ? 'warning' : 'secondary'
-                        }
-                      >
-                        {row.source === 'MANUAL' ? 'Admin' : 'AI'}
-                      </Badge>
-                    </TD>
-                    <TD>{Math.round(row.ruleScore)}</TD>
-                    <TD>
-                      {row.aiScore != null ? Math.round(row.aiScore) : '—'}
-                    </TD>
-                    <TD>
-                      <Badge variant="info">{Math.round(row.totalScore)}</Badge>
-                    </TD>
-                    <TD className="max-w-lg text-sm">
-                      <p className="text-[var(--foreground)]">
-                        {row.aiDescription || '—'}
-                      </p>
-                      {row.reasons.length > 0 ? (
-                        <p className="mt-1 text-xs text-[var(--muted)]">
-                          {row.reasons.join(' · ')}
-                        </p>
-                      ) : null}
-                    </TD>
-                    <TD className="text-right">
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        loading={
-                          removeRec.isPending &&
-                          removeRec.variables === row.toOrg.id
-                        }
-                        onClick={() => {
-                          const ok = window.confirm(
-                            `Remove ${row.toOrg.name} from recommendations for ${detail.data?.organization.name}?`,
-                          );
-                          if (!ok) return;
-                          removeRec.mutate(row.toOrg.id);
-                        }}
-                      >
-                        Remove
-                      </Button>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
             {(detail.data?.items.length ?? 0) === 0 ? (
               <EmptyState
-                title="No recommendations stored"
-                description={`Add a ${counterpartSingular} above, or run Recompute AI after preferences are filled.`}
+                title="No recommendations"
+                description={`Add a ${counterpartSingular} or run Recompute.`}
               />
-            ) : null}
+            ) : (
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Peer</TH>
+                    <TH>Source</TH>
+                    <TH>Score</TH>
+                    <TH>Note</TH>
+                    <TH />
+                  </TR>
+                </THead>
+                <TBody>
+                  {(detail.data?.items ?? []).map((row) => (
+                    <TR key={row.id}>
+                      <TD className="font-medium">{row.toOrg.name}</TD>
+                      <TD>
+                        {row.source === 'MANUAL' ? (
+                          <Badge variant="warning">Admin</Badge>
+                        ) : (
+                          <span className="text-sm text-[var(--muted)]">AI</span>
+                        )}
+                      </TD>
+                      <TD>{Math.round(row.totalScore)}</TD>
+                      <TD className="max-w-xs truncate text-sm text-[var(--muted)]">
+                        {row.aiDescription || '—'}
+                      </TD>
+                      <TD className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          loading={
+                            removeRec.isPending &&
+                            removeRec.variables === row.toOrg.id
+                          }
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                `Remove ${row.toOrg.name}?`,
+                              )
+                            ) {
+                              return;
+                            }
+                            removeRec.mutate(row.toOrg.id);
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
           </div>
         )}
       </Modal>

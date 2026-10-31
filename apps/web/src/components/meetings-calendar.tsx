@@ -648,11 +648,15 @@ export function MeetingsCalendar({
   events,
   onSelectEvent,
   className,
+  variant = 'default',
 }: {
   events: CalendarEvent[];
   onSelectEvent?: (event: CalendarEvent) => void;
   className?: string;
+  /** Admin: leaner chrome — no legend, week agenda strip, or empty details pane */
+  variant?: 'default' | 'admin';
 }) {
+  const lean = variant === 'admin';
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -751,60 +755,49 @@ export function MeetingsCalendar({
 
   return (
     <div className={cn('space-y-3 md:space-y-4', className)}>
-      <div className="z-10 rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-3 py-3 shadow-[0_8px_24px_rgba(10,10,10,0.05)] backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="hidden h-9 rounded-full px-3 sm:inline-flex"
-            onClick={goToday}
-          >
-            Today
-          </Button>
-          <div className="flex items-center rounded-full border border-[var(--border)] bg-white shadow-sm">
-            <button
-              type="button"
-              aria-label="Previous"
-              className="rounded-l-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
-              onClick={goPrev}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next"
-              className="rounded-r-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
-              onClick={goNext}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+      <div
+        className={cn(
+          'z-10 flex flex-wrap items-center gap-2',
+          !lean &&
+            'rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-3 py-3 shadow-[0_8px_24px_rgba(10,10,10,0.05)] backdrop-blur-md',
+        )}
+      >
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-full px-3"
+          onClick={goToday}
+        >
+          Today
+        </Button>
+        <div className="flex items-center rounded-full border border-[var(--border)] bg-white">
           <button
             type="button"
-            onClick={goToday}
-            className="min-w-0 flex-1 text-left sm:flex-none"
+            aria-label="Previous"
+            className="rounded-l-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
+            onClick={goPrev}
           >
-            <h3 className="h-display truncate text-base font-bold tracking-tight md:text-xl">
-              {title}
-            </h3>
-            <p className="text-[11px] text-[var(--muted)]">
-              {visibleRangeEvents} item{visibleRangeEvents === 1 ? '' : 's'} in
-              view
-            </p>
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next"
+            className="rounded-r-full px-2.5 py-2 text-[var(--muted)] hover:bg-black/5"
+            onClick={goNext}
+          >
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-full px-3 sm:hidden"
-            onClick={goToday}
-          >
-            Today
-          </Button>
+        <h3 className="h-display min-w-0 flex-1 truncate text-base font-semibold tracking-tight md:text-lg">
+          {title}
+          {!lean ? (
+            <span className="ml-2 text-xs font-medium text-[var(--muted)]">
+              {visibleRangeEvents} item{visibleRangeEvents === 1 ? '' : 's'}
+            </span>
+          ) : null}
+        </h3>
+        {!lean ? (
           <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />{' '}
@@ -814,23 +807,23 @@ export function MeetingsCalendar({
               <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Request
             </span>
           </div>
-          <div className="ml-auto inline-flex rounded-full border border-[var(--border)] bg-[var(--card-elevated)] p-0.5">
-            {mobileViews.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setView(mode)}
-                className={cn(
-                  'rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition-colors',
-                  view === mode
-                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)]',
-                )}
-              >
-                {isMobile && mode === 'week' ? '3 days' : mode}
-              </button>
-            ))}
-          </div>
+        ) : null}
+        <div className="inline-flex rounded-full border border-[var(--border)] bg-[var(--card-elevated)] p-0.5">
+          {mobileViews.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setView(mode)}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs font-semibold capitalize transition-colors',
+                view === mode
+                  ? 'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm'
+                  : 'text-[var(--muted)] hover:text-[var(--foreground)]',
+              )}
+            >
+              {isMobile && mode === 'week' ? '3 days' : mode}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -1010,7 +1003,7 @@ export function MeetingsCalendar({
             onSelectDay={view === 'week' ? setCursor : undefined}
             compactMobile={isMobile}
           />
-          {view === 'week' ? (
+          {view === 'week' && !lean ? (
             <div className="rounded-2xl border border-[var(--border)] bg-white p-3 shadow-[0_8px_24px_rgba(10,10,10,0.04)] sm:p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">
@@ -1068,12 +1061,12 @@ export function MeetingsCalendar({
         </div>
       ) : null}
 
-      {/* Details: sheet-like on mobile when selected */}
-      {selected || !isMobile ? (
+      {/* Details: skip empty pane in admin; show only when something is selected */}
+      {(lean ? Boolean(selected) : selected || !isMobile) ? (
         <EventDetails
           selected={selected}
           onClose={
-            isMobile && selected
+            (isMobile || lean) && selected
               ? () => setSelectedId(null)
               : undefined
           }
