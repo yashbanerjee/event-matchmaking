@@ -185,6 +185,53 @@ function positionInDay(event: CalendarEvent, day: Date) {
   return { top, height };
 }
 
+/** Pack overlapping events into columns so week/day grids stay readable. */
+function layoutDayEvents(events: CalendarEvent[], day: Date) {
+  const timed = events.map((event) => {
+    const start = new Date(event.startsAt).getTime();
+    const end = eventEnd(event).getTime();
+    return { event, start, end };
+  });
+  timed.sort((a, b) => a.start - b.start || a.end - b.end);
+
+  type Active = { end: number; col: number };
+  const active: Active[] = [];
+  const placed: Array<{
+    event: CalendarEvent;
+    col: number;
+    colCount: number;
+  }> = [];
+  let cluster: typeof placed = [];
+  let clusterMax = 0;
+
+  const flush = () => {
+    for (const item of cluster) {
+      placed.push({ ...item, colCount: Math.max(clusterMax, 1) });
+    }
+    cluster = [];
+    clusterMax = 0;
+  };
+
+  for (const item of timed) {
+    for (let i = active.length - 1; i >= 0; i -= 1) {
+      if (active[i]!.end <= item.start) active.splice(i, 1);
+    }
+    if (active.length === 0 && cluster.length) flush();
+
+    const used = new Set(active.map((a) => a.col));
+    let col = 0;
+    while (used.has(col)) col += 1;
+    active.push({ end: item.end, col });
+    cluster.push({ event: item.event, col, colCount: 1 });
+    clusterMax = Math.max(clusterMax, active.length, col + 1);
+  }
+  flush();
+  return placed.map((item) => ({
+    ...item,
+    ...positionInDay(item.event, day),
+  }));
+}
+
 function nowOffsetPercent(day: Date) {
   const now = new Date();
   if (!sameDay(now, day)) return null;
@@ -209,9 +256,15 @@ function EventDetails({
 }) {
   if (!selected) {
     return (
-      <p className="hidden text-sm text-[var(--muted)] md:block">
-        Select an event on the calendar to see details.
-      </p>
+      <div className="hidden rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-elevated)]/50 px-4 py-6 text-center md:block">
+        <p className="text-sm font-medium text-[var(--foreground)]">
+          Pick an event
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Click any meeting or request on the calendar to see who, when, and
+          where.
+        </p>
+      </div>
     );
   }
 
@@ -219,7 +272,14 @@ function EventDetails({
     <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[0_8px_30px_rgba(10,10,10,0.06)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+          <p
+            className={cn(
+              'text-[11px] font-semibold uppercase tracking-[0.14em]',
+              selected.kind === 'meeting'
+                ? 'text-[var(--accent-hover)]'
+                : 'text-amber-700',
+            )}
+          >
             {selected.kind === 'meeting' ? 'Meeting' : 'Meeting request'}
           </p>
           <h4 className="mt-1 h-display text-lg font-semibold tracking-tight">
@@ -291,10 +351,10 @@ function DayAgendaList({
     return (
       <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-elevated)]/60 px-4 py-8 text-center">
         <p className="text-sm font-medium text-[var(--foreground)]">
-          Nothing scheduled
+          Free day
         </p>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          {formatDayTitle(day)}
+          No meetings or requests on {formatDayTitle(day)}.
         </p>
       </div>
     );
@@ -302,9 +362,14 @@ function DayAgendaList({
 
   return (
     <div className="space-y-2">
-      <p className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
-        {formatDayTitle(day)}
-      </p>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+          {formatDayTitle(day)}
+        </p>
+        <p className="text-xs tabular-nums text-[var(--muted)]">
+          {dayEvents.length} item{dayEvents.length === 1 ? '' : 's'}
+        </p>
+      </div>
       {dayEvents.map((event) => {
         const colors = eventColor(event);
         return (
@@ -313,28 +378,32 @@ function DayAgendaList({
             type="button"
             onClick={() => onPick(event)}
             className={cn(
-              'flex w-full gap-3 rounded-2xl border bg-white p-3 text-left shadow-[0_6px_18px_rgba(10,10,10,0.04)] transition active:scale-[0.99]',
+              'flex w-full gap-3 rounded-2xl border bg-white p-3 text-left shadow-[0_6px_18px_rgba(10,10,10,0.04)] transition hover:bg-[var(--card-elevated)] active:scale-[0.99]',
               colors.border,
               selectedId === event.id && 'ring-2 ring-[var(--ring)]',
             )}
           >
-            <div className="w-16 shrink-0 pt-0.5 text-right">
-              <p className="text-sm font-semibold tabular-nums">
+            <div className="w-[4.25rem] shrink-0 pt-0.5 text-right">
+              <p className="text-sm font-semibold tabular-nums leading-none">
                 {formatTime(event.startsAt)}
               </p>
               {event.endsAt ? (
-                <p className="text-[11px] text-[var(--muted)] tabular-nums">
+                <p className="mt-1 text-[11px] tabular-nums text-[var(--muted)]">
                   {formatTime(event.endsAt)}
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  {event.kind === 'request' ? 'Ask' : 'Meet'}
+                </p>
+              )}
             </div>
-            <div className={cn('w-1 shrink-0 rounded-full', colors.bar)} />
+            <div className={cn('w-1 shrink-0 self-stretch rounded-full', colors.bar)} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{event.title}</p>
               <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
                 {event.location ||
                   (event.kind === 'request'
-                    ? 'Proposed meeting'
+                    ? 'Proposed time awaiting reply'
                     : 'Confirmed meeting')}
               </p>
               <div className="mt-2">
@@ -354,13 +423,17 @@ function TimeGrid({
   days,
   events,
   selectedId,
+  selectedDay,
   onPick,
+  onSelectDay,
   compactMobile,
 }: {
   days: Date[];
   events: CalendarEvent[];
   selectedId: string | null;
+  selectedDay?: Date | null;
   onPick: (event: CalendarEvent) => void;
+  onSelectDay?: (day: Date) => void;
   compactMobile?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -384,7 +457,7 @@ function TimeGrid({
     <div
       ref={scrollRef}
       className={cn(
-        'overflow-auto rounded-2xl border border-[var(--border)] bg-white',
+        'overflow-auto rounded-2xl border border-[var(--border)] bg-white shadow-[0_10px_28px_rgba(10,10,10,0.04)]',
         compactMobile ? 'max-h-[min(70vh,560px)]' : 'max-h-[min(72vh,680px)]',
       )}
     >
@@ -394,43 +467,76 @@ function TimeGrid({
           display: 'grid',
           gridTemplateColumns:
             days.length === 1
-              ? '52px minmax(0, 1fr)'
-              : `44px repeat(${days.length}, minmax(${compactMobile ? 72 : 96}px, 1fr))`,
-          minWidth: days.length > 1 ? undefined : undefined,
+              ? '56px minmax(0, 1fr)'
+              : `48px repeat(${days.length}, minmax(${compactMobile ? 78 : 110}px, 1fr))`,
         }}
       >
-        <div className="sticky top-0 z-20 border-b border-r border-[var(--border)] bg-white" />
+        <div className="sticky top-0 z-20 border-b border-r border-[var(--border)] bg-white/95 backdrop-blur" />
         {days.map((day) => {
           const isToday = sameDay(day, today);
-          return (
-            <div
-              key={day.toISOString()}
-              className={cn(
-                'sticky top-0 z-20 border-b border-r border-[var(--border)] bg-white px-1 py-2 text-center',
-                isToday && 'bg-[var(--accent-soft)]/40',
-              )}
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
+          const isSelected = selectedDay ? sameDay(day, selectedDay) : false;
+          const count = eventsForDay(events, day).length;
+          const headerClass = cn(
+            'sticky top-0 z-20 w-full border-b border-r border-[var(--border)] bg-white/95 px-1 py-2.5 text-center backdrop-blur',
+            isToday && 'bg-[var(--accent-soft)]/55',
+            isSelected && !isToday && 'bg-black/[0.03]',
+            onSelectDay &&
+              'cursor-pointer transition hover:bg-[var(--accent-soft)]/40',
+          );
+          const headerBody = (
+            <>
+              <p
+                className={cn(
+                  'text-[10px] font-semibold uppercase tracking-[0.14em]',
+                  isToday || isSelected
+                    ? 'text-[var(--accent-hover)]'
+                    : 'text-[var(--muted)]',
+                )}
+              >
                 {day.toLocaleDateString(undefined, { weekday: 'short' })}
               </p>
               <p
                 className={cn(
-                  'mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                  'mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold',
                   isToday &&
                     'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm',
+                  isSelected &&
+                    !isToday &&
+                    'bg-[var(--foreground)] text-[var(--card)]',
                 )}
               >
                 {day.getDate()}
               </p>
+              {count > 0 ? (
+                <p className="mt-1 text-[10px] font-medium tabular-nums text-[var(--muted)]">
+                  {count}
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-[var(--muted)]/50">·</p>
+              )}
+            </>
+          );
+          return onSelectDay ? (
+            <button
+              key={day.toISOString()}
+              type="button"
+              onClick={() => onSelectDay(day)}
+              className={headerClass}
+            >
+              {headerBody}
+            </button>
+          ) : (
+            <div key={day.toISOString()} className={headerClass}>
+              {headerBody}
             </div>
           );
         })}
 
-        <div className="relative border-r border-[var(--border)]">
+        <div className="relative border-r border-[var(--border)] bg-[var(--card-elevated)]/40">
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="border-b border-[var(--border)] pr-1.5 text-right text-[10px] text-[var(--muted)]"
+              className="border-b border-[var(--border)]/80 pr-1.5 text-right text-[10px] tabular-nums text-[var(--muted)]"
               style={{ height: HOUR_PX }}
             >
               <span className="-mt-2 inline-block">
@@ -443,17 +549,21 @@ function TimeGrid({
         </div>
 
         {days.map((day) => {
-          const dayEvents = eventsForDay(events, day);
+          const laidOut = layoutDayEvents(eventsForDay(events, day), day);
           const nowPct = nowOffsetPercent(day);
+          const isToday = sameDay(day, today);
           return (
             <div
               key={`col-${day.toISOString()}`}
-              className="relative border-r border-[var(--border)]"
+              className={cn(
+                'relative border-r border-[var(--border)]',
+                isToday && 'bg-[var(--accent-soft)]/15',
+              )}
             >
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="border-b border-[var(--border)]"
+                  className="border-b border-[var(--border)]/70"
                   style={{ height: HOUR_PX }}
                 />
               ))}
@@ -468,28 +578,32 @@ function TimeGrid({
                   </div>
                 </div>
               ) : null}
-              {dayEvents.map((event) => {
-                const { top, height } = positionInDay(event, day);
+              {laidOut.map(({ event, top, height, col, colCount }) => {
                 const colors = eventColor(event);
+                const width = 100 / colCount;
+                const left = col * width;
+                const showBody = height > 6;
                 return (
                   <button
                     key={event.id}
                     type="button"
                     onClick={() => onPick(event)}
                     className={cn(
-                      'absolute right-0.5 left-0.5 z-10 overflow-hidden rounded-lg border px-1.5 py-1 text-left shadow-sm transition active:scale-[0.99] hover:brightness-[0.98]',
+                      'absolute z-10 overflow-hidden rounded-lg border px-1 py-0.5 text-left shadow-sm transition hover:brightness-[0.98] active:scale-[0.99]',
                       colors.bg,
                       colors.border,
                       colors.text,
                       selectedId === event.id &&
-                        'ring-2 ring-[var(--ring)] ring-offset-1',
+                        'z-30 ring-2 ring-[var(--ring)] ring-offset-1',
                     )}
                     style={{
                       top: `${top}%`,
                       height: `${height}%`,
-                      minHeight: 28,
+                      minHeight: 22,
+                      left: `calc(${left}% + 2px)`,
+                      width: `calc(${width}% - 4px)`,
                     }}
-                    title={event.title}
+                    title={`${formatTime(event.startsAt)} ${event.title}`}
                   >
                     <div
                       className={cn(
@@ -500,10 +614,12 @@ function TimeGrid({
                     <p className="truncate pl-1.5 text-[11px] font-semibold leading-tight">
                       {event.title}
                     </p>
-                    <p className="truncate pl-1.5 text-[10px] opacity-80">
-                      {formatTime(event.startsAt)}
-                      {event.endsAt ? ` – ${formatTime(event.endsAt)}` : ''}
-                    </p>
+                    {showBody ? (
+                      <p className="truncate pl-1.5 text-[10px] opacity-80">
+                        {formatTime(event.startsAt)}
+                        {event.endsAt ? ` – ${formatTime(event.endsAt)}` : ''}
+                      </p>
+                    ) : null}
                   </button>
                 );
               })}
@@ -607,10 +723,22 @@ export function MeetingsCalendar({
     ? ['day', 'week', 'month']
     : ['month', 'week', 'day'];
 
+  const visibleRangeEvents =
+    view === 'month'
+      ? events.filter((event) => {
+          const d = new Date(event.startsAt);
+          return (
+            d.getMonth() === cursor.getMonth() &&
+            d.getFullYear() === cursor.getFullYear()
+          );
+        }).length
+      : view === 'week'
+        ? weekDays.reduce((n, day) => n + eventsForDay(events, day).length, 0)
+        : eventsForDay(events, cursor).length;
+
   return (
     <div className={cn('space-y-3 md:space-y-4', className)}>
-      {/* Toolbar — Google Calendar style */}
-      <div className="z-10 -mx-1 rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-2 py-2 shadow-[0_8px_24px_rgba(10,10,10,0.05)] backdrop-blur-md md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+      <div className="z-10 rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-3 py-3 shadow-[0_8px_24px_rgba(10,10,10,0.05)] backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -621,7 +749,7 @@ export function MeetingsCalendar({
           >
             Today
           </Button>
-          <div className="flex items-center rounded-full border border-[var(--border)] bg-white">
+          <div className="flex items-center rounded-full border border-[var(--border)] bg-white shadow-sm">
             <button
               type="button"
               aria-label="Previous"
@@ -647,13 +775,14 @@ export function MeetingsCalendar({
             <h3 className="h-display truncate text-base font-bold tracking-tight md:text-xl">
               {title}
             </h3>
-            <p className="text-[10px] font-medium text-[var(--muted)] sm:hidden">
-              Tap title area · Today jumps here
+            <p className="text-[11px] text-[var(--muted)]">
+              {visibleRangeEvents} item{visibleRangeEvents === 1 ? '' : 's'} in
+              view
             </p>
           </button>
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <Button
             type="button"
             variant="outline"
@@ -663,6 +792,15 @@ export function MeetingsCalendar({
           >
             Today
           </Button>
+          <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />{' '}
+              Meeting
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Request
+            </span>
+          </div>
           <div className="ml-auto inline-flex rounded-full border border-[var(--border)] bg-[var(--card-elevated)] p-0.5">
             {mobileViews.map((mode) => (
               <button
@@ -683,25 +821,15 @@ export function MeetingsCalendar({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />{' '}
-          Meeting
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> Request
-        </span>
-      </div>
-
       {/* Month view */}
       {view === 'month' ? (
         <div className="space-y-3">
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-[0_10px_28px_rgba(10,10,10,0.05)]">
-            <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--card-elevated)]/80">
+            <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--card-elevated)]/90">
               {(isMobile ? WEEKDAYS_SHORT : WEEKDAYS).map((day, index) => (
                 <div
                   key={`${day}-${index}`}
-                  className="px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted)] md:text-[11px]"
+                  className="px-1 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)] md:text-[11px]"
                 >
                   {day}
                 </div>
@@ -713,16 +841,14 @@ export function MeetingsCalendar({
                 const isToday = sameDay(day, today);
                 const isSelected = sameDay(day, cursor);
                 const dayEvents = eventsForDay(events, day);
+                const previewLimit = isMobile ? 0 : dayEvents.length > 4 ? 2 : 3;
                 return (
                   <button
                     key={day.toISOString()}
                     type="button"
                     onClick={() => {
                       setCursor(day);
-                      if (isMobile) {
-                        // Keep month + agenda like Google; double-intent via long view switch
-                        return;
-                      }
+                      if (isMobile) return;
                       setView('day');
                     }}
                     onDoubleClick={() => {
@@ -732,32 +858,43 @@ export function MeetingsCalendar({
                     className={cn(
                       'relative border-b border-r border-[var(--border)] text-left transition-colors',
                       isMobile
-                        ? 'flex min-h-[3.1rem] flex-col items-center justify-start gap-1 px-0.5 py-1.5'
-                        : 'min-h-24 p-1.5 align-top hover:bg-[var(--highlight-soft)]/50 sm:min-h-28',
-                      !inMonth && 'bg-[var(--card-elevated)]/60 text-[var(--muted)]',
-                      isSelected && isMobile && 'bg-[var(--accent-soft)]/45',
-                      isToday && !isMobile && 'bg-[var(--accent-soft)]/35',
+                        ? 'flex min-h-[3.25rem] flex-col items-center justify-start gap-1 px-0.5 py-1.5'
+                        : 'min-h-24 p-1.5 align-top hover:bg-[var(--highlight-soft)]/55 sm:min-h-[7.25rem]',
+                      !inMonth && 'bg-[var(--card-elevated)]/70 text-[var(--muted)]',
+                      isSelected && isMobile && 'bg-[var(--accent-soft)]/50',
+                      isToday && !isMobile && 'bg-[var(--accent-soft)]/40',
                     )}
                   >
-                    <span
+                    <div
                       className={cn(
-                        'inline-flex items-center justify-center rounded-full text-xs font-semibold',
-                        isMobile ? 'h-7 w-7' : 'h-6 w-6',
-                        isToday &&
-                          'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm',
-                        isSelected &&
-                          !isToday &&
-                          isMobile &&
-                          'bg-black/90 text-white',
+                        'flex w-full items-center',
+                        isMobile ? 'justify-center' : 'justify-between gap-1',
                       )}
                     >
-                      {day.getDate()}
-                    </span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center justify-center rounded-full text-xs font-semibold',
+                          isMobile ? 'h-7 w-7' : 'h-6 w-6',
+                          isToday &&
+                            'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm',
+                          isSelected &&
+                            !isToday &&
+                            isMobile &&
+                            'bg-black/90 text-white',
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                      {!isMobile && dayEvents.length > 0 ? (
+                        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-[var(--muted)]">
+                          {dayEvents.length}
+                        </span>
+                      ) : null}
+                    </div>
 
-                    {/* Mobile: Google-style dots */}
                     {isMobile ? (
                       <div className="flex max-w-full flex-wrap justify-center gap-0.5">
-                        {dayEvents.slice(0, 3).map((event) => (
+                        {dayEvents.slice(0, 4).map((event) => (
                           <span
                             key={event.id}
                             className={cn(
@@ -766,49 +903,53 @@ export function MeetingsCalendar({
                             )}
                           />
                         ))}
-                        {dayEvents.length > 3 ? (
+                        {dayEvents.length > 4 ? (
                           <span className="text-[8px] leading-none text-[var(--muted)]">
                             +
                           </span>
                         ) : null}
                       </div>
                     ) : (
-                      <>
-                        <div className="mb-1 flex items-center justify-between gap-1">
-                          {dayEvents.length > 3 ? (
-                            <span className="ml-auto text-[10px] text-[var(--muted)]">
-                              +{dayEvents.length - 3}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="space-y-1">
-                          {dayEvents.slice(0, 3).map((event) => {
-                            const colors = eventColor(event);
-                            return (
-                              <div
-                                key={event.id}
-                                role="presentation"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  pickEvent(event);
-                                }}
+                      <div className="mt-1 space-y-1">
+                        {dayEvents.slice(0, previewLimit).map((event) => {
+                          const colors = eventColor(event);
+                          return (
+                            <div
+                              key={event.id}
+                              role="presentation"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                pickEvent(event);
+                              }}
+                              className={cn(
+                                'flex items-start gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-tight sm:text-[11px]',
+                                colors.bg,
+                                colors.border,
+                                colors.text,
+                              )}
+                              title={`${formatTime(event.startsAt)} ${event.title}`}
+                            >
+                              <span
                                 className={cn(
-                                  'truncate rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-tight sm:text-[11px]',
-                                  colors.bg,
-                                  colors.border,
-                                  colors.text,
+                                  'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
+                                  colors.dot,
                                 )}
-                                title={`${formatTime(event.startsAt)} ${event.title}`}
-                              >
-                                <span className="opacity-80">
+                              />
+                              <span className="min-w-0 truncate">
+                                <span className="font-semibold tabular-nums opacity-80">
                                   {formatTime(event.startsAt)}
                                 </span>{' '}
                                 {event.title}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {dayEvents.length > previewLimit ? (
+                          <p className="px-0.5 text-[10px] font-medium text-[var(--muted)]">
+                            +{dayEvents.length - previewLimit} more · open day
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                   </button>
                 );
@@ -816,7 +957,7 @@ export function MeetingsCalendar({
             </div>
           </div>
 
-          {/* Mobile agenda under month (Google Calendar pattern) */}
+          {/* Agenda under month — always on mobile; desktop when day selected via count */}
           {isMobile ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
@@ -830,7 +971,7 @@ export function MeetingsCalendar({
                   className="h-8 rounded-full"
                   onClick={() => setView('day')}
                 >
-                  Day view
+                  Day timeline
                 </Button>
               </div>
               <DayAgendaList
@@ -844,15 +985,74 @@ export function MeetingsCalendar({
         </div>
       ) : null}
 
-      {/* Week / Day time grids */}
+      {/* Week / Day time grids + readable agenda for the focused day */}
       {view === 'week' || view === 'day' ? (
-        <TimeGrid
-          days={view === 'day' ? [cursor] : weekDays}
-          events={events}
-          selectedId={selectedId}
-          onPick={pickEvent}
-          compactMobile={isMobile}
-        />
+        <div className="space-y-3">
+          <TimeGrid
+            days={view === 'day' ? [cursor] : weekDays}
+            events={events}
+            selectedId={selectedId}
+            selectedDay={cursor}
+            onPick={pickEvent}
+            onSelectDay={view === 'week' ? setCursor : undefined}
+            compactMobile={isMobile}
+          />
+          {view === 'week' ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-white p-3 shadow-[0_8px_24px_rgba(10,10,10,0.04)] sm:p-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">
+                  Agenda ·{' '}
+                  {sameDay(cursor, today) ? 'Today' : formatDayTitle(cursor)}
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  Tap a day column header to switch this list
+                </p>
+              </div>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {weekDays.map((day) => {
+                  const count = eventsForDay(events, day).length;
+                  const isActive = sameDay(day, cursor);
+                  const isToday = sameDay(day, today);
+                  return (
+                    <button
+                      key={day.toISOString()}
+                      type="button"
+                      onClick={() => setCursor(day)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
+                        isActive
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                          : 'border-[var(--border)] bg-[var(--card-elevated)] hover:border-[var(--accent)]/40',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          isToday && 'text-[var(--accent-hover)]',
+                        )}
+                      >
+                        {day.toLocaleDateString(undefined, {
+                          weekday: 'short',
+                        })}{' '}
+                        {day.getDate()}
+                      </span>
+                      {count > 0 ? (
+                        <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] tabular-nums">
+                          {count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <DayAgendaList
+                day={cursor}
+                events={events}
+                selectedId={selectedId}
+                onPick={pickEvent}
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Details: sheet-like on mobile when selected */}

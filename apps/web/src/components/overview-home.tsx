@@ -131,6 +131,16 @@ export function OverviewStatStrip({
   );
 }
 
+type WeekDayEvent = {
+  id: string;
+  title: string;
+  time: string;
+  sortAt: number;
+  tone: 'meeting' | 'request';
+  place?: string | null;
+  status?: string;
+};
+
 export function OverviewWeekCalendar({
   meetings,
   requests,
@@ -142,20 +152,28 @@ export function OverviewWeekCalendar({
   meetingsHref: string;
   myOrgIds?: string[];
 }) {
+  const today = startOfDay(new Date());
   const [weekStart, setWeekStart] = useState(() => {
-    const today = startOfDay(new Date());
     const start = new Date(today);
     start.setDate(today.getDate() - today.getDay());
     return start;
   });
-  const today = startOfDay(new Date());
+  const [selectedDay, setSelectedDay] = useState(() => today);
+
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
     [weekStart],
   );
 
+  // Keep selection inside the visible week (prefer today when jumping weeks).
+  const activeDay = useMemo(() => {
+    if (days.some((d) => sameDay(d, selectedDay))) return selectedDay;
+    const todayInWeek = days.find((d) => sameDay(d, today));
+    return todayInWeek ?? days[0]!;
+  }, [days, selectedDay, today]);
+
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, Array<{ id: string; title: string; time: string; tone: string }>>();
+    const map = new Map<string, WeekDayEvent[]>();
     for (const day of days) {
       map.set(day.toDateString(), []);
     }
@@ -168,7 +186,10 @@ export function OverviewWeekCalendar({
         id: `m-${meeting.id}`,
         title: meeting.counterpartyName,
         time: formatShortTime(meeting.startsAt),
+        sortAt: start.getTime(),
         tone: 'meeting',
+        place: meeting.placeName,
+        status: meeting.status,
       });
     }
     const mine = new Set(myOrgIds);
@@ -185,34 +206,83 @@ export function OverviewWeekCalendar({
         id: `r-${req.id}`,
         title: counterpart,
         time: formatShortTime(req.proposedStartsAt),
+        sortAt: start.getTime(),
         tone: 'request',
+        place: req.place
+          ? req.place.location
+            ? `${req.place.name} · ${req.place.location}`
+            : req.place.name
+          : null,
+        status: req.status,
       });
     }
     for (const [, bucket] of map) {
-      bucket.sort((a, b) => a.time.localeCompare(b.time));
+      bucket.sort((a, b) => a.sortAt - b.sortAt);
     }
     return map;
   }, [days, meetings, requests, myOrgIds]);
 
-  const title = `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  const weekTotal = useMemo(() => {
+    let n = 0;
+    for (const day of days) n += eventsByDay.get(day.toDateString())?.length ?? 0;
+    return n;
+  }, [days, eventsByDay]);
+
+  const dayEvents = eventsByDay.get(activeDay.toDateString()) ?? [];
+  const meetingCount = dayEvents.filter((e) => e.tone === 'meeting').length;
+  const requestCount = dayEvents.filter((e) => e.tone === 'request').length;
+
+  const rangeLabel = `${weekStart.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })}`;
+
+  const dayHeading = sameDay(activeDay, today)
+    ? 'Today'
+    : activeDay.toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      });
+
+  function jumpToToday() {
+    const t = startOfDay(new Date());
+    const s = new Date(t);
+    s.setDate(t.getDate() - t.getDay());
+    setWeekStart(s);
+    setSelectedDay(t);
+  }
 
   return (
-    <Card className="min-w-0 overflow-hidden p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-[var(--accent)]" />
+    <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-hover)]">
+            <CalendarDays className="h-4 w-4" />
+          </span>
           <div className="min-w-0">
-            <h2 className="h-display text-base font-semibold tracking-tight">
+            <h2 className="h-display text-base font-semibold tracking-tight sm:text-lg">
               This week
             </h2>
-            <p className="truncate text-xs text-[var(--muted)]">{title}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              {rangeLabel}
+              {weekTotal > 0 ? (
+                <span className="text-[var(--foreground)]/70">
+                  {' '}
+                  · {weekTotal} item{weekTotal === 1 ? '' : 's'}
+                </span>
+              ) : null}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <button
             type="button"
             aria-label="Previous week"
-            className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-black/5"
+            className="rounded-full p-2 text-[var(--muted)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
             onClick={() => setWeekStart((d) => addDays(d, -7))}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -220,90 +290,181 @@ export function OverviewWeekCalendar({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 px-2 text-xs"
-            onClick={() => {
-              const t = startOfDay(new Date());
-              const s = new Date(t);
-              s.setDate(t.getDate() - t.getDay());
-              setWeekStart(s);
-            }}
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={jumpToToday}
           >
             Today
           </Button>
           <button
             type="button"
             aria-label="Next week"
-            className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-black/5"
+            className="rounded-full p-2 text-[var(--muted)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
             onClick={() => setWeekStart((d) => addDays(d, 7))}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
-          <Link href={meetingsHref}>
-            <Button size="sm" variant="ghost" className="h-8 px-2 text-xs">
+          <Link href={meetingsHref} className="ml-1">
+            <Button size="sm" variant="ghost" className="h-8 rounded-full px-3 text-xs">
               Full calendar
             </Button>
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1.5">
+      {/* Day selector — counts stay readable; agenda below has full titles */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-7 sm:overflow-visible sm:pb-0">
         {days.map((day) => {
           const isToday = sameDay(day, today);
-          const events = eventsByDay.get(day.toDateString()) ?? [];
+          const isActive = sameDay(day, activeDay);
+          const count = eventsByDay.get(day.toDateString())?.length ?? 0;
           return (
-            <div
+            <button
               key={day.toISOString()}
+              type="button"
+              onClick={() => setSelectedDay(day)}
               className={cn(
-                'min-h-[7.5rem] rounded-xl border p-1.5',
-                isToday
-                  ? 'border-[var(--accent)]/50 bg-[var(--accent-soft)]/50'
-                  : 'border-[var(--border)] bg-[var(--card-elevated)]',
+                'flex min-w-[3.4rem] flex-1 flex-col items-center gap-1 rounded-2xl border px-2 py-2.5 transition sm:min-w-0',
+                isActive
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] shadow-[0_8px_20px_rgba(38,226,198,0.18)]'
+                  : 'border-[var(--border)] bg-[var(--card-elevated)] hover:border-[var(--accent)]/40 hover:bg-white',
               )}
             >
-              <div className="mb-1 flex items-center justify-between gap-1">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-                  {day.toLocaleDateString(undefined, { weekday: 'short' })}
-                </span>
+              <span
+                className={cn(
+                  'text-[10px] font-semibold uppercase tracking-[0.12em]',
+                  isActive ? 'text-[var(--accent-hover)]' : 'text-[var(--muted)]',
+                )}
+              >
+                {day.toLocaleDateString(undefined, { weekday: 'short' })}
+              </span>
+              <span
+                className={cn(
+                  'inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold tabular-nums',
+                  isToday &&
+                    'bg-[var(--accent)] text-[var(--accent-foreground)] shadow-sm',
+                  isActive &&
+                    !isToday &&
+                    'bg-[var(--foreground)] text-[var(--card)]',
+                  !isActive && !isToday && 'text-[var(--foreground)]',
+                )}
+              >
+                {day.getDate()}
+              </span>
+              {count > 0 ? (
                 <span
                   className={cn(
-                    'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold',
-                    isToday &&
-                      'bg-[var(--accent)] text-[var(--accent-foreground)]',
+                    'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                    isActive
+                      ? 'bg-white/80 text-[var(--foreground)]'
+                      : 'bg-[var(--accent)]/15 text-[var(--accent-hover)]',
                   )}
                 >
-                  {day.getDate()}
+                  {count}
                 </span>
-              </div>
-              <div className="space-y-1">
-                {events.slice(0, 3).map((event) => (
-                  <div
-                    key={event.id}
-                    className={cn(
-                      'rounded-md px-1 py-0.5 text-[10px] leading-tight',
-                      event.tone === 'meeting'
-                        ? 'bg-[var(--accent)]/20 text-[var(--foreground)]'
-                        : 'bg-amber-100 text-amber-950',
-                    )}
-                    title={`${event.time} ${event.title}`}
-                  >
-                    <span className="font-semibold opacity-80">{event.time}</span>
-                    <p className="truncate">{event.title}</p>
-                  </div>
-                ))}
-                {events.length > 3 ? (
-                  <p className="px-0.5 text-[10px] text-[var(--muted)]">
-                    +{events.length - 3} more
-                  </p>
-                ) : null}
-                {events.length === 0 ? (
-                  <p className="px-0.5 pt-2 text-center text-[10px] text-[var(--muted)]/70">
-                    —
-                  </p>
-                ) : null}
-              </div>
-            </div>
+              ) : (
+                <span className="h-[18px] text-[10px] text-[var(--muted)]/60">
+                  ·
+                </span>
+              )}
+            </button>
           );
         })}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-[var(--border)] bg-gradient-to-b from-white to-[var(--card-elevated)] p-3 sm:p-4">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="h-display text-sm font-semibold tracking-tight sm:text-base">
+              {dayHeading}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              {dayEvents.length === 0
+                ? 'Nothing scheduled'
+                : [
+                    meetingCount
+                      ? `${meetingCount} meeting${meetingCount === 1 ? '' : 's'}`
+                      : null,
+                    requestCount
+                      ? `${requestCount} request${requestCount === 1 ? '' : 's'}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3 text-[11px] text-[var(--muted)]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[var(--accent)]" /> Meeting
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-500" /> Request
+            </span>
+          </div>
+        </div>
+
+        {dayEvents.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-8 text-center">
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              Free day
+            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              No meetings or pending requests on this date.
+            </p>
+          </div>
+        ) : (
+          <ul className="max-h-[22rem] space-y-2 overflow-y-auto pr-0.5">
+            {dayEvents.map((event) => (
+              <li
+                key={event.id}
+                className={cn(
+                  'flex gap-3 rounded-xl border bg-white px-3 py-2.5 shadow-[0_4px_14px_rgba(10,10,10,0.03)]',
+                  event.tone === 'meeting'
+                    ? 'border-[var(--accent)]/35'
+                    : 'border-amber-200',
+                )}
+              >
+                <div className="w-[4.25rem] shrink-0 pt-0.5 text-right">
+                  <p className="text-sm font-semibold tabular-nums leading-none">
+                    {event.time}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                    {event.tone === 'meeting' ? 'Meet' : 'Ask'}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    'w-1 shrink-0 self-stretch rounded-full',
+                    event.tone === 'meeting' ? 'bg-[var(--accent)]' : 'bg-amber-500',
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold leading-snug">
+                    {event.title}
+                  </p>
+                  {event.place ? (
+                    <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[var(--muted)]">
+                      <MapPin className="h-3 w-3 shrink-0 text-[var(--accent)]" />
+                      {event.place}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">
+                      {event.tone === 'request'
+                        ? 'Proposed time awaiting reply'
+                        : 'Confirmed meeting'}
+                    </p>
+                  )}
+                  {event.status ? (
+                    <div className="mt-1.5">
+                      <Badge variant={statusTone(event.status)}>
+                        {event.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Card>
   );

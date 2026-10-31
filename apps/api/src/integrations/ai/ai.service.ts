@@ -211,6 +211,16 @@ export class AiService implements OnModuleInit {
     return null;
   }
 
+  /** Accept pasted `export OPENROUTER_API_KEY=sk-or-v1-…` shell lines. */
+  private sanitizeApiKey(raw: string): string {
+    let text = String(raw ?? '').trim();
+    text = text.replace(/^export\s+/i, '');
+    text = text.replace(/^OPENROUTER_API_KEY\s*=\s*/i, '');
+    text = text.replace(/^JAV_AI_API_KEY\s*=\s*/i, '');
+    text = text.replace(/^["']|["']$/g, '').trim();
+    return text;
+  }
+
   private isCircuitOpen(name: string) {
     return (this.circuitOpenUntil.get(name) ?? 0) > Date.now();
   }
@@ -246,7 +256,9 @@ export class AiService implements OnModuleInit {
     // Credentials and models come from Admin → System Settings only.
     const openaiKey = await this.config.getString('ai.openaiApiKey', '');
     const anthropicKey = await this.config.getString('ai.anthropicApiKey', '');
-    const javKey = await this.config.getString('ai.openrouterApiKey', '');
+    const javKey = this.sanitizeApiKey(
+      await this.config.getString('ai.openrouterApiKey', ''),
+    );
     const javBaseUrl =
       (await this.config.getString('ai.javBaseUrl', '')) ||
       'https://openrouter.ai/api/v1';

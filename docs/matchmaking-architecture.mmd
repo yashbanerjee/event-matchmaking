@@ -1,0 +1,47 @@
+flowchart TB
+  subgraph inputs ["1. Inputs"]
+    Clients["Eligible clients<br/>verified + matching eligible"]
+    Guests["Eligible guests<br/>verified + onboarding complete"]
+    Filters["Filters / tags<br/>+ equivalences"]
+    Weights["Matching weights<br/>capability industry geography…"]
+    Config["Run config<br/>date · time · duration · useAi"]
+  end
+
+  subgraph scoring ["2. Scoring engine"]
+    Pair["All client × guest pairs"]
+    Expand["Expand tags with equivalences"]
+    Dims["Six dimension scores"]
+    Det["Deterministic score 0–100"]
+    AI{"useAi?"}
+    Sem["AI / local semantic similarity"]
+    Blend["Blended final score"]
+    CandRow["MatchCandidate<br/>score · breakdown · explanation"]
+  end
+
+  subgraph schedule ["3. Scheduling engine"]
+    Rank["Sort eligible pairs by score"]
+    Slots["Build daily slots<br/>buffers · breaks"]
+    Greedy["Greedy placement<br/>no double-booking"]
+  end
+
+  subgraph outputs ["4. Outputs"]
+    Preview["Preview<br/>proposed meetings"]
+    Publish["Admin publishes"]
+    Confirmed["Confirmed meetings"]
+    Notify["Notifications / emails"]
+  end
+
+  Clients --> Pair
+  Guests --> Pair
+  Filters --> Expand
+  Weights --> Dims
+  Config --> AI
+  Config --> Slots
+
+  Pair --> Expand --> Dims --> Det --> AI
+  AI -->|Yes| Sem --> Blend --> CandRow
+  AI -->|No| CandRow
+  Det -.-> CandRow
+
+  CandRow --> Rank --> Slots --> Greedy
+  Greedy --> Preview --> Publish --> Confirmed --> Notify
