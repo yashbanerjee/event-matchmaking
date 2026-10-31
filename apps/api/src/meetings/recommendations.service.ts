@@ -58,23 +58,30 @@ export class RecommendationsService {
     const companyOrg = myOrgs.find((o) => o.type === 'COMPANY' && o.company);
     const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR' && o.vendor);
 
-    // Prefer persisted JAV AI peer recommendations when available
+    // Hard rule: clients only see guests; guests only see clients.
+    // Prefer the actor's primary org type (company first only if they have one).
     const perspectiveOrg = companyOrg ?? vendorOrg;
-    if (perspectiveOrg) {
-      const stored = await this.fromStored(
-        perspectiveOrg.id,
-        max,
-        tagLabels,
-      );
-      if (stored) {
-        return {
-          ...stored,
-          perspective: perspectiveOrg.type as 'COMPANY' | 'VENDOR',
-        };
-      }
+    if (!perspectiveOrg) {
+      return { items: [], featured: [], perspective: null };
     }
 
-    if (companyOrg?.company) {
+    const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
+    // COMPANY (client) → VENDOR (guest); VENDOR (guest) → COMPANY (client)
+    const peerType = perspective === 'COMPANY' ? 'VENDOR' : 'COMPANY';
+
+    const stored = await this.fromStored({
+      fromOrgId: perspectiveOrg.id,
+      perspective,
+      peerType,
+      max,
+      tagLabels,
+      excludeOrgIds: orgIds,
+    });
+    if (stored) {
+      return { ...stored, perspective };
+    }
+
+    if (perspective === 'COMPANY' && companyOrg?.company) {
       const vendors = await this.prisma.vendor.findMany({
         where: {
           matchingEligible: true,
@@ -82,7 +89,10 @@ export class RecommendationsService {
           verificationStatus: 'VERIFIED',
           onboardingComplete: true,
           organizationId: { notIn: orgIds },
-          organization: { status: { not: 'ARCHIVED' } },
+          organization: {
+            status: { not: 'ARCHIVED' },
+            type: 'VENDOR',
+          },
         },
         include: { organization: true },
         take: 200,
@@ -92,6 +102,7 @@ export class RecommendationsService {
         companyOrg,
       );
       const scored: RecommendationItem[] = vendors
+        .filter((vendor) => vendor.organization.type === 'VENDOR')
         .map((vendor) => {
           const score = calculateMatchScore(
             companyFeatures,
@@ -128,14 +139,17 @@ export class RecommendationsService {
       };
     }
 
-    if (vendorOrg?.vendor) {
+    if (perspective === 'VENDOR' && vendorOrg?.vendor) {
       const companies = await this.prisma.company.findMany({
         where: {
           matchingEligible: true,
           approvalStatus: 'VERIFIED',
           verificationStatus: 'VERIFIED',
           organizationId: { notIn: orgIds },
-          organization: { status: { not: 'ARCHIVED' } },
+          organization: {
+            status: { not: 'ARCHIVED' },
+            type: 'COMPANY',
+          },
         },
         include: { organization: true },
         take: 200,
@@ -145,6 +159,7 @@ export class RecommendationsService {
         vendorOrg,
       );
       const scored: RecommendationItem[] = companies
+        .filter((company) => company.organization.type === 'COMPANY')
         .map((company) => {
           const score = calculateMatchScore(
             this.toCompanyFeatures(company, company.organization),
@@ -211,6 +226,26 @@ export class RecommendationsService {
     });
     if (!organization || organization.status === 'ARCHIVED') {
       throw new NotFoundException('Organization not found');
+    }
+
+    // Same direction as the feed: clients view guests, guests view clients
+    const viewerOrgs = await this.prisma.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: { type: true },
+    });
+    const viewerIsClient = viewerOrgs.some((o) => o.type === 'COMPANY');
+    const viewerIsGuest = viewerOrgs.some((o) => o.type === 'VENDOR');
+    if (viewerIsClient && !viewerIsGuest && organization.type !== 'VENDOR') {
+      throw new ForbiddenException('Clients can only view guest profiles');
+    }
+    if (viewerIsGuest && !viewerIsClient && organization.type !== 'COMPANY') {
+      throw new ForbiddenException('Guests can only view client profiles');
+    }
+    if (viewerIsClient && viewerIsGuest) {
+      // Prefer client perspective when both memberships exist
+      if (organization.type !== 'VENDOR' && organization.type !== 'COMPANY') {
+        throw new ForbiddenException('Unsupported organization type');
+      }
     }
 
     const submission = await this.prisma.formSubmission.findFirst({
@@ -289,64 +324,84 @@ export class RecommendationsService {
     return typeof logo === 'string' ? logo : null;
   }
 
-  private async fromStored(
-    fromOrgId: string,
-    max: number,
-    tagLabels: Record<string, string>,
-  ): Promise<{ items: RecommendationItem[]; featured: RecommendationItem[] } | null> {
+  private async fromStored(input: {
+    fromOrgId: string;
+    perspective: 'COMPANY' | 'VENDOR';
+    peerType: 'COMPANY' | 'VENDOR';
+    max: number;
+    tagLabels: Record<string, string>;
+    excludeOrgIds: string[];
+  }): Promise<{
+    items: RecommendationItem[];
+    featured: RecommendationItem[];
+  } | null> {
     const rows = await this.prisma.orgPeerRecommendation.findMany({
-      where: { fromOrgId },
+      where: {
+        fromOrgId: input.fromOrgId,
+        // Enforce engine direction at read time
+        perspective: input.perspective,
+        toOrgId: { notIn: input.excludeOrgIds },
+        toOrg: {
+          type: input.peerType,
+          status: { not: 'ARCHIVED' },
+        },
+      },
       include: {
         toOrg: {
           include: { company: true, vendor: true },
         },
       },
-      orderBy: { totalScore: 'desc' },
-      take: Math.max(max * 2, 20),
+      orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
+      take: Math.max(input.max * 3, 30),
     });
     if (!rows.length) return null;
 
-    const scored: RecommendationItem[] = rows.map((row) => {
-      const peer = row.toOrg;
-      const featured = Boolean(
-        peer.company?.featured || peer.vendor?.featured,
-      );
-      const reasons =
-        row.reasons.length > 0
-          ? row.reasons
-          : row.aiDescription
-            ? [row.aiDescription]
-            : [];
-      return {
-        organizationId: peer.id,
-        name: peer.name,
-        type: peer.type as 'COMPANY' | 'VENDOR',
-        industry: this.labelOf(peer.industry, tagLabels),
-        categories: this.labelsOf(
-          peer.vendor?.categories ??
-            peer.company?.preferredCategories ??
-            [],
-          tagLabels,
-        ),
-        capabilities: this.labelsOf(
-          peer.vendor?.capabilities ??
-            peer.company?.requiredCapabilities ??
-            [],
-          tagLabels,
-        ),
-        score: row.totalScore,
-        reasons,
-        explanation:
-          row.aiDescription ??
-          (reasons.length ? reasons.join(' · ') : `Score ${row.totalScore}`),
-        aiScore: row.aiScore,
-        aiDescription: row.aiDescription,
-        logoUrl: this.logoOf(peer.customAttrs),
-        featured,
-      };
-    });
+    const scored: RecommendationItem[] = rows
+      .filter((row) => row.toOrg.type === input.peerType)
+      .map((row) => {
+        const peer = row.toOrg;
+        const featured = Boolean(
+          peer.company?.featured || peer.vendor?.featured,
+        );
+        const reasons =
+          row.reasons.length > 0
+            ? row.reasons
+            : row.aiDescription
+              ? [row.aiDescription]
+              : [];
+        return {
+          organizationId: peer.id,
+          name: peer.name,
+          type: peer.type as 'COMPANY' | 'VENDOR',
+          industry: this.labelOf(peer.industry, input.tagLabels),
+          categories: this.labelsOf(
+            peer.vendor?.categories ??
+              peer.company?.preferredCategories ??
+              [],
+            input.tagLabels,
+          ),
+          capabilities: this.labelsOf(
+            peer.vendor?.capabilities ??
+              peer.company?.requiredCapabilities ??
+              [],
+            input.tagLabels,
+          ),
+          score: row.totalScore,
+          reasons,
+          explanation:
+            row.aiDescription ??
+            (reasons.length
+              ? reasons.join(' · ')
+              : `Score ${row.totalScore}`),
+          aiScore: row.aiScore,
+          aiDescription: row.aiDescription,
+          logoUrl: this.logoOf(peer.customAttrs),
+          featured,
+        };
+      });
 
-    return this.splitRecommendations(scored, max);
+    if (!scored.length) return null;
+    return this.splitRecommendations(scored, input.max);
   }
 
   private labelOf(

@@ -330,6 +330,13 @@ class MatchmakingRepository {
       query: {'limit': limit},
       parse: (d) => d as Map<String, dynamic>,
     );
+    final perspective = data['perspective'] as String?;
+    // Client → guests; guest → clients (same as the matching engine)
+    final allowedPeerType = perspective == 'COMPANY'
+        ? 'VENDOR'
+        : perspective == 'VENDOR'
+            ? 'COMPANY'
+            : null;
     final featured = (data['featured'] as List? ?? const []);
     final items = (data['items'] as List? ?? const []);
     final merged = [...featured, ...items];
@@ -337,6 +344,12 @@ class MatchmakingRepository {
     return merged
         .map((e) => RecommendationItem.fromJson(e as Map<String, dynamic>))
         .where((e) => seen.add(e.organizationId))
+        .where(
+          (e) =>
+              allowedPeerType == null ||
+              e.type == null ||
+              e.type == allowedPeerType,
+        )
         .toList();
   }
 

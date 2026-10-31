@@ -208,8 +208,20 @@ export function RecommendationsPanel({
     onError: (err) => setError((err as Error).message),
   });
 
-  const featured = recs.data?.featured ?? [];
-  const items = recs.data?.items ?? [];
+  // Client (COMPANY) → guests (VENDOR); guest (VENDOR) → clients (COMPANY)
+  const perspective = recs.data?.perspective ?? null;
+  const allowedPeerType =
+    perspective === 'COMPANY'
+      ? 'VENDOR'
+      : perspective === 'VENDOR'
+        ? 'COMPANY'
+        : null;
+  const featured = (recs.data?.featured ?? []).filter(
+    (item) => !allowedPeerType || item.type === allowedPeerType,
+  );
+  const items = (recs.data?.items ?? []).filter(
+    (item) => !allowedPeerType || item.type === allowedPeerType,
+  );
   const empty = featured.length === 0 && items.length === 0;
   const profileItem = profileOrgId
     ? (featured.find((r) => r.organizationId === profileOrgId) ??
