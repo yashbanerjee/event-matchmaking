@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   calculateMatchScore,
   type ProfileFeatures,
@@ -10,6 +15,8 @@ import { FiltersService } from '../filters/filters.service';
 import { AiService } from '../integrations/ai/ai.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
 import { DEFAULT_MATCHMAKING_PROMPT } from '../integrations/ai/matchmaking-prompt';
+import type { AuthUser } from '../common/decorators';
+import { AuditService } from '../audit/audit.service';
 
 function profileNarrative(
   features: ProfileFeatures,
@@ -58,6 +65,7 @@ export class PeerRecommendationsService {
     private readonly filters: FiltersService,
     private readonly ai: AiService,
     private readonly config: EffectiveConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -106,12 +114,20 @@ export class PeerRecommendationsService {
       take: max,
     });
 
+    // Admin pins first, then by score
+    items.sort((a, b) => {
+      if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
+      return b.totalScore - a.totalScore;
+    });
+
     return {
       organization: org,
+      counterpartLabel: org.type === 'COMPANY' ? 'guests' : 'clients',
       items: items.map((row) => ({
         id: row.id,
         toOrg: row.toOrg,
         perspective: row.perspective,
+        source: row.source,
         ruleScore: row.ruleScore,
         aiScore: row.aiScore,
         totalScore: row.totalScore,
@@ -122,6 +138,238 @@ export class PeerRecommendationsService {
       })),
       total: items.length,
     };
+  }
+
+  /**
+   * Eligible opposite-type orgs not yet recommended for this viewer.
+   * Client → guests only; guest → clients only.
+   */
+  async listCandidates(
+    organizationId: string,
+    input?: { q?: string; limit?: number },
+  ) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true, name: true, type: true },
+    });
+    if (!org || !['COMPANY', 'VENDOR'].includes(org.type)) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const existing = await this.prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId: organizationId },
+      select: { toOrgId: true },
+    });
+    const excludeIds = [
+      organizationId,
+      ...existing.map((row) => row.toOrgId),
+    ];
+    const limit = Math.min(Math.max(input?.limit ?? 30, 1), 50);
+    const q = input?.q?.trim();
+
+    if (org.type === 'COMPANY') {
+      const vendors = await this.prisma.vendor.findMany({
+        where: {
+          matchingEligible: true,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          organizationId: { notIn: excludeIds },
+          organization: {
+            status: { not: 'ARCHIVED' },
+            ...(q
+              ? { name: { contains: q, mode: 'insensitive' as const } }
+              : {}),
+          },
+        },
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              industry: true,
+              region: true,
+            },
+          },
+        },
+        orderBy: { organization: { name: 'asc' } },
+        take: limit,
+      });
+      return {
+        organization: org,
+        counterpartType: 'VENDOR' as const,
+        counterpartLabel: 'guests' as const,
+        items: vendors.map((v) => v.organization),
+      };
+    }
+
+    const companies = await this.prisma.company.findMany({
+      where: {
+        matchingEligible: true,
+        approvalStatus: 'VERIFIED',
+        verificationStatus: 'VERIFIED',
+        organizationId: { notIn: excludeIds },
+        organization: {
+          status: { not: 'ARCHIVED' },
+          ...(q
+            ? { name: { contains: q, mode: 'insensitive' as const } }
+            : {}),
+        },
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            region: true,
+          },
+        },
+      },
+      orderBy: { organization: { name: 'asc' } },
+      take: limit,
+    });
+    return {
+      organization: org,
+      counterpartType: 'COMPANY' as const,
+      counterpartLabel: 'clients' as const,
+      items: companies.map((c) => c.organization),
+    };
+  }
+
+  async addManual(
+    actor: AuthUser,
+    fromOrgId: string,
+    input: { toOrgId: string; note?: string },
+  ) {
+    const toOrgId = input.toOrgId?.trim();
+    if (!toOrgId) throw new BadRequestException('toOrgId is required');
+
+    const [fromOrg, toOrg] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: fromOrgId },
+        include: { company: true, vendor: true },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: toOrgId },
+        include: { company: true, vendor: true },
+      }),
+    ]);
+    if (!fromOrg || !['COMPANY', 'VENDOR'].includes(fromOrg.type)) {
+      throw new NotFoundException('Organization not found');
+    }
+    if (!toOrg) throw new NotFoundException('Counterpart organization not found');
+
+    // Same direction as the recommendation engine
+    if (fromOrg.type === 'COMPANY' && toOrg.type !== 'VENDOR') {
+      throw new BadRequestException('Clients can only be recommended guests');
+    }
+    if (fromOrg.type === 'VENDOR' && toOrg.type !== 'COMPANY') {
+      throw new BadRequestException('Guests can only be recommended clients');
+    }
+    if (fromOrgId === toOrgId) {
+      throw new BadRequestException('Cannot recommend an organization to itself');
+    }
+
+    const note =
+      input.note?.trim() ||
+      `Admin recommendation for ${fromOrg.name}`;
+    const now = new Date();
+    const fromProfileVersion =
+      fromOrg.type === 'COMPANY'
+        ? (fromOrg.company?.profileVersion ?? 1)
+        : (fromOrg.vendor?.profileVersion ?? 1);
+    const toProfileVersion =
+      toOrg.type === 'COMPANY'
+        ? (toOrg.company?.profileVersion ?? 1)
+        : (toOrg.vendor?.profileVersion ?? 1);
+
+    const row = await this.prisma.orgPeerRecommendation.upsert({
+      where: {
+        fromOrgId_toOrgId: { fromOrgId, toOrgId },
+      },
+      create: {
+        fromOrgId,
+        toOrgId,
+        perspective: fromOrg.type as 'COMPANY' | 'VENDOR',
+        source: 'MANUAL',
+        ruleScore: 100,
+        aiScore: null,
+        totalScore: 100,
+        reasons: ['Admin recommendation'],
+        aiDescription: note,
+        scoreBreakdown: { source: 'MANUAL', admin: 100 },
+        fromProfileVersion,
+        toProfileVersion,
+        computedAt: now,
+      },
+      update: {
+        source: 'MANUAL',
+        ruleScore: 100,
+        totalScore: 100,
+        reasons: ['Admin recommendation'],
+        aiDescription: note,
+        scoreBreakdown: { source: 'MANUAL', admin: 100 },
+        computedAt: now,
+      },
+      include: {
+        toOrg: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            region: true,
+          },
+        },
+      },
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'peer_recommendation.manual_add',
+      entityType: 'OrgPeerRecommendation',
+      entityId: row.id,
+      outcome: 'SUCCESS',
+      metadata: { fromOrgId, toOrgId, note },
+    });
+
+    return {
+      id: row.id,
+      toOrg: row.toOrg,
+      source: row.source,
+      totalScore: row.totalScore,
+      aiDescription: row.aiDescription,
+      reasons: row.reasons,
+    };
+  }
+
+  async removeManual(actor: AuthUser, fromOrgId: string, toOrgId: string) {
+    const existing = await this.prisma.orgPeerRecommendation.findUnique({
+      where: {
+        fromOrgId_toOrgId: { fromOrgId, toOrgId },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException('Recommendation not found');
+    }
+
+    await this.prisma.orgPeerRecommendation.delete({
+      where: { id: existing.id },
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'peer_recommendation.remove',
+      entityType: 'OrgPeerRecommendation',
+      entityId: existing.id,
+      outcome: 'SUCCESS',
+      metadata: { fromOrgId, toOrgId, source: existing.source },
+    });
+
+    return { id: existing.id, deleted: true as const };
   }
 
   async listOverview(input: {
@@ -193,6 +441,7 @@ export class PeerRecommendationsService {
         recommendationCount: org._count.peerRecommendationsFrom,
         topRecommendations: org.peerRecommendationsFrom.map((row) => ({
           toOrg: row.toOrg,
+          source: row.source,
           totalScore: row.totalScore,
           aiScore: row.aiScore,
           aiDescription: row.aiDescription,
@@ -302,11 +551,12 @@ export class PeerRecommendationsService {
         upserted += 2;
       }
 
-      // Drop stale outbound rows for counterparts no longer eligible
+      // Drop stale computed outbound rows (keep admin MANUAL pins)
       const keepIds = vendors.map((v) => v.organizationId);
       await this.prisma.orgPeerRecommendation.deleteMany({
         where: {
           fromOrgId: org.id,
+          source: 'COMPUTED',
           ...(keepIds.length ? { toOrgId: { notIn: keepIds } } : {}),
         },
       });
@@ -359,6 +609,7 @@ export class PeerRecommendationsService {
       await this.prisma.orgPeerRecommendation.deleteMany({
         where: {
           fromOrgId: org.id,
+          source: 'COMPUTED',
           ...(keepIds.length ? { toOrgId: { notIn: keepIds } } : {}),
         },
       });
@@ -503,6 +754,7 @@ export class PeerRecommendationsService {
   }) {
     const now = new Date();
     const dataBase = {
+      source: 'COMPUTED' as const,
       ruleScore: input.pair.ruleScore,
       aiScore: input.pair.aiScore,
       totalScore: input.pair.totalScore,
@@ -512,47 +764,73 @@ export class PeerRecommendationsService {
       computedAt: now,
     };
 
-    await this.prisma.orgPeerRecommendation.upsert({
+    await this.upsertComputedIfNotManual({
+      fromOrgId: input.companyOrgId,
+      toOrgId: input.vendorOrgId,
+      perspective: 'COMPANY',
+      fromProfileVersion: input.companyProfileVersion,
+      toProfileVersion: input.vendorProfileVersion,
+      dataBase,
+    });
+
+    await this.upsertComputedIfNotManual({
+      fromOrgId: input.vendorOrgId,
+      toOrgId: input.companyOrgId,
+      perspective: 'VENDOR',
+      fromProfileVersion: input.vendorProfileVersion,
+      toProfileVersion: input.companyProfileVersion,
+      dataBase,
+    });
+  }
+
+  /** Never overwrite an admin MANUAL pin with engine scores. */
+  private async upsertComputedIfNotManual(input: {
+    fromOrgId: string;
+    toOrgId: string;
+    perspective: 'COMPANY' | 'VENDOR';
+    fromProfileVersion: number;
+    toProfileVersion: number;
+    dataBase: {
+      source: 'COMPUTED';
+      ruleScore: number;
+      aiScore: number | null;
+      totalScore: number;
+      reasons: string[];
+      aiDescription: string | null;
+      scoreBreakdown: Prisma.InputJsonValue;
+      computedAt: Date;
+    };
+  }) {
+    const existing = await this.prisma.orgPeerRecommendation.findUnique({
       where: {
         fromOrgId_toOrgId: {
-          fromOrgId: input.companyOrgId,
-          toOrgId: input.vendorOrgId,
+          fromOrgId: input.fromOrgId,
+          toOrgId: input.toOrgId,
         },
       },
-      create: {
-        fromOrgId: input.companyOrgId,
-        toOrgId: input.vendorOrgId,
-        perspective: 'COMPANY',
-        fromProfileVersion: input.companyProfileVersion,
-        toProfileVersion: input.vendorProfileVersion,
-        ...dataBase,
-      },
-      update: {
-        ...dataBase,
-        fromProfileVersion: input.companyProfileVersion,
-        toProfileVersion: input.vendorProfileVersion,
-      },
+      select: { id: true, source: true },
     });
+    if (existing?.source === 'MANUAL') return;
 
     await this.prisma.orgPeerRecommendation.upsert({
       where: {
         fromOrgId_toOrgId: {
-          fromOrgId: input.vendorOrgId,
-          toOrgId: input.companyOrgId,
+          fromOrgId: input.fromOrgId,
+          toOrgId: input.toOrgId,
         },
       },
       create: {
-        fromOrgId: input.vendorOrgId,
-        toOrgId: input.companyOrgId,
-        perspective: 'VENDOR',
-        fromProfileVersion: input.vendorProfileVersion,
-        toProfileVersion: input.companyProfileVersion,
-        ...dataBase,
+        fromOrgId: input.fromOrgId,
+        toOrgId: input.toOrgId,
+        perspective: input.perspective,
+        fromProfileVersion: input.fromProfileVersion,
+        toProfileVersion: input.toProfileVersion,
+        ...input.dataBase,
       },
       update: {
-        ...dataBase,
-        fromProfileVersion: input.vendorProfileVersion,
-        toProfileVersion: input.companyProfileVersion,
+        ...input.dataBase,
+        fromProfileVersion: input.fromProfileVersion,
+        toProfileVersion: input.toProfileVersion,
       },
     });
   }

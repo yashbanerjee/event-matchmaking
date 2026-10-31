@@ -8,6 +8,7 @@ import {
   MeetingsCalendar,
   toCalendarEvents,
 } from '@/components/meetings-calendar';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import {
   MeetingFeedbackModal,
   meetingHasEnded,
@@ -35,7 +36,13 @@ type Meeting = {
   hasSubmittedFeedback?: boolean;
   companyOrg: { name: string };
   vendorOrg: { name: string };
-  place?: { name: string } | null;
+  place?: {
+    name: string;
+    location?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    mapAddress?: string | null;
+  } | null;
 };
 
 type RequestRow = {
@@ -229,8 +236,12 @@ export default function VendorMeetingsPage() {
                         ? `${item.durationMinutes} min`
                         : '—'}
                     </TD>
-                    <TD>
-                      {item.location || item.place?.name || item.venue || '—'}
+                    <TD className="min-w-[11rem]">
+                      <MeetingPlaceLink
+                        place={item.place}
+                        fallback={item.location || item.venue}
+                        compact
+                      />
                     </TD>
                     <TD>
                       <Badge variant={badgeToneForStatus(item.status)}>

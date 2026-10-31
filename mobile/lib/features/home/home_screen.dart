@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/maps.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ethara_scaffold.dart';
 import '../../core/widgets/status_chip.dart';
@@ -286,6 +287,29 @@ class _MeetingTile extends StatelessWidget {
               ),
             ],
           ),
+          if (mapsNavigateUri(
+                place: meeting.place,
+                fallbackLabel: meeting.placeLabel,
+              ) !=
+              null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => openMapsForPlace(
+                  place: meeting.place,
+                  fallbackLabel: meeting.placeLabel,
+                ),
+                icon: const Icon(Icons.navigation_rounded, size: 16),
+                label: const Text('Navigate'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.accentDeep,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -325,6 +349,22 @@ class _RequestTile extends StatelessWidget {
               'Meeting place: ${request.place!.label}',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
+            if (mapsNavigateUri(place: request.place) != null) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => openMapsForPlace(place: request.place),
+                  icon: const Icon(Icons.navigation_rounded, size: 16),
+                  label: const Text('Navigate'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accentDeep,
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),

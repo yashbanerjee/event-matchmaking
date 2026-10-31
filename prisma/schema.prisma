@@ -398,24 +398,31 @@ model Organization {
   @@map("organizations")
 }
 
+enum PeerRecommendationSource {
+  COMPUTED
+  MANUAL
+}
+
 /// Persisted client↔guest recommendation with rule + JAV AI score/description.
 model OrgPeerRecommendation {
-  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  fromOrgId          String           @db.Uuid
-  toOrgId            String           @db.Uuid
+  id                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromOrgId          String                     @db.Uuid
+  toOrgId            String                     @db.Uuid
   /// Perspective of fromOrg (COMPANY sees guests, VENDOR sees clients)
   perspective        OrganizationType
+  /// COMPUTED = engine/AI; MANUAL = admin-curated (survives recompute)
+  source             PeerRecommendationSource   @default(COMPUTED)
   ruleScore          Float
   aiScore            Float?
   totalScore         Float
-  reasons            String[]         @default([])
+  reasons            String[]                   @default([])
   aiDescription      String?
-  scoreBreakdown     Json             @default("{}")
-  fromProfileVersion  Int              @default(1)
-  toProfileVersion   Int              @default(1)
-  computedAt         DateTime         @default(now())
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  scoreBreakdown     Json                       @default("{}")
+  fromProfileVersion  Int                        @default(1)
+  toProfileVersion   Int                        @default(1)
+  computedAt         DateTime                   @default(now())
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   fromOrg Organization @relation("PeerRecFrom", fields: [fromOrgId], references: [id], onDelete: Cascade)
   toOrg   Organization @relation("PeerRecTo", fields: [toOrgId], references: [id], onDelete: Cascade)
@@ -424,6 +431,7 @@ model OrgPeerRecommendation {
   @@index([fromOrgId, totalScore])
   @@index([toOrgId, totalScore])
   @@index([perspective, computedAt])
+  @@index([fromOrgId, source])
   @@map("org_peer_recommendations")
 }
 
@@ -814,7 +822,13 @@ model Place {
   code        String   @unique
   description String?
   capacity    Int?
+  /** Short on-site label (hall / booth / table area). */
   location    String?
+  /** Map pin — WGS84. */
+  latitude    Float?
+  longitude   Float?
+  /** Human-readable address from map search / reverse geocode. */
+  mapAddress  String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

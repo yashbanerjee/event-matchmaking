@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { EmptyState } from '@/components/empty-state';
+import { LocationMapPicker } from '@/components/location-map-picker';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 
 type Place = {
   id: string;
@@ -20,6 +22,9 @@ type Place = {
   description: string | null;
   capacity: number | null;
   location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  mapAddress: string | null;
   isActive: boolean;
 };
 
@@ -29,6 +34,9 @@ const emptyForm = {
   description: '',
   capacity: '',
   location: '',
+  latitude: null as number | null,
+  longitude: null as number | null,
+  mapAddress: '',
 };
 
 export default function AdminPlacesPage() {
@@ -45,18 +53,23 @@ export default function AdminPlacesPage() {
       apiFetch<Place[]>('/places', { token: getAccessToken() }),
   });
 
+  const payload = () => ({
+    name: form.name.trim(),
+    code: form.code.trim() || undefined,
+    description: form.description.trim() || undefined,
+    capacity: form.capacity ? Number(form.capacity) : undefined,
+    location: form.location.trim() || undefined,
+    latitude: form.latitude,
+    longitude: form.longitude,
+    mapAddress: form.mapAddress.trim() || null,
+  });
+
   const create = useMutation({
     mutationFn: () =>
       apiFetch<Place>('/places', {
         method: 'POST',
         token: getAccessToken(),
-        body: JSON.stringify({
-          name: form.name.trim(),
-          code: form.code.trim() || undefined,
-          description: form.description.trim() || undefined,
-          capacity: form.capacity ? Number(form.capacity) : undefined,
-          location: form.location.trim() || undefined,
-        }),
+        body: JSON.stringify(payload()),
       }),
     onSuccess: () => {
       setCreating(false);
@@ -80,6 +93,9 @@ export default function AdminPlacesPage() {
           description: form.description.trim() || null,
           capacity: form.capacity ? Number(form.capacity) : null,
           location: form.location.trim() || null,
+          latitude: form.latitude,
+          longitude: form.longitude,
+          mapAddress: form.mapAddress.trim() || null,
         }),
       });
     },
@@ -137,6 +153,9 @@ export default function AdminPlacesPage() {
       description: place.description ?? '',
       capacity: place.capacity != null ? String(place.capacity) : '',
       location: place.location ?? '',
+      latitude: place.latitude ?? null,
+      longitude: place.longitude ?? null,
+      mapAddress: place.mapAddress ?? '',
     });
     setError(null);
   }
@@ -170,13 +189,33 @@ export default function AdminPlacesPage() {
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-sm font-medium">Location</label>
+        <label className="mb-1.5 block text-sm font-medium">
+          On-site label
+        </label>
         <Input
           value={form.location}
           onChange={(e) => setForm({ ...form, location: e.target.value })}
-          placeholder="Hall B"
+          placeholder="Hall B · Booth 12"
         />
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Short label shown on site (hall, booth, table area).
+        </p>
       </div>
+      <LocationMapPicker
+        value={{
+          latitude: form.latitude,
+          longitude: form.longitude,
+          mapAddress: form.mapAddress,
+        }}
+        onChange={(next) =>
+          setForm({
+            ...form,
+            latitude: next.latitude,
+            longitude: next.longitude,
+            mapAddress: next.mapAddress,
+          })
+        }
+      />
       <div>
         <label className="mb-1.5 block text-sm font-medium">Capacity</label>
         <Input
@@ -201,7 +240,7 @@ export default function AdminPlacesPage() {
       <PageHeader
         eyebrow="Match & meet"
         title="Places"
-        description="Meeting tables and rooms. Only free places are offered when parties pick a slot."
+        description="Meeting tables and rooms. Pin each place on the map so guests can navigate there."
         actions={<Button onClick={openCreate}>Add place</Button>}
       />
 
@@ -233,7 +272,9 @@ export default function AdminPlacesPage() {
                 <TR key={place.id}>
                   <TD className="font-medium">{place.name}</TD>
                   <TD>{place.code}</TD>
-                  <TD>{place.location ?? '—'}</TD>
+                  <TD className="min-w-[12rem]">
+                    <MeetingPlaceLink place={place} compact />
+                  </TD>
                   <TD>{place.capacity ?? '—'}</TD>
                   <TD>
                     <Badge variant={place.isActive ? 'success' : 'secondary'}>
@@ -277,7 +318,8 @@ export default function AdminPlacesPage() {
       <Modal
         open={creating}
         title="Add place"
-        description="Places appear when a party proposes a time for a meeting."
+        description="Places appear when a party proposes a time. Search or pin the map so people can navigate."
+        size="lg"
         onClose={() => {
           setCreating(false);
           setError(null);
@@ -309,7 +351,8 @@ export default function AdminPlacesPage() {
       <Modal
         open={Boolean(edit)}
         title="Edit place"
-        description="Update table or room details used for on-site meetings."
+        description="Update table or room details and map pin used for on-site meetings."
+        size="lg"
         onClose={() => {
           setEdit(null);
           setForm(emptyForm);

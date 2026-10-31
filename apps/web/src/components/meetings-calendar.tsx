@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import { cn } from '@/lib/utils';
 import { statusTone } from '@/lib/status';
 
@@ -18,6 +19,9 @@ export type CalendarEvent = {
   endsAt?: string | null;
   status: string;
   location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  mapAddress?: string | null;
   meta?: Record<string, string | null | undefined>;
 };
 
@@ -313,13 +317,22 @@ function EventDetails({
               })}`
             : ''}
         </p>
-        <p className="inline-flex items-start gap-1.5">
+        <div className="inline-flex items-start gap-1.5">
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-          <span>
-            <span className="text-[var(--muted)]">Place: </span>
-            {selected.location || '—'}
-          </span>
-        </p>
+          <div className="min-w-0">
+            <p className="text-[var(--muted)]">Place</p>
+            <MeetingPlaceLink
+              place={{
+                name: selected.location,
+                location: selected.location,
+                latitude: selected.latitude,
+                longitude: selected.longitude,
+                mapAddress: selected.mapAddress,
+              }}
+              fallback={selected.location}
+            />
+          </div>
+        </div>
         {selected.meta
           ? Object.entries(selected.meta)
               .filter(([, value]) => Boolean(value))
@@ -1081,7 +1094,13 @@ export function toCalendarEvents(input: {
     vendorOrg: { name: string };
     location?: string | null;
     venue?: string | null;
-    place?: { name: string } | null;
+    place?: {
+      name: string;
+      location?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
+    } | null;
     invitedByLabel?: string | null;
   }>;
   requests?: Array<{
@@ -1091,7 +1110,13 @@ export function toCalendarEvents(input: {
     proposedEndsAt: string | null;
     fromOrg: { name: string };
     toOrg: { name: string };
-    place?: { name: string; location?: string | null } | null;
+    place?: {
+      name: string;
+      location?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
+    } | null;
     meeting?: { id: string } | null;
   }>;
 }): CalendarEvent[] {
@@ -1106,6 +1131,9 @@ export function toCalendarEvents(input: {
       endsAt: m.endsAt ?? null,
       status: m.status,
       location: m.location || m.place?.name || m.venue || null,
+      latitude: m.place?.latitude ?? null,
+      longitude: m.place?.longitude ?? null,
+      mapAddress: m.place?.mapAddress ?? null,
       meta: {
         Client: m.companyOrg.name,
         Guest: m.vendorOrg.name,
@@ -1138,6 +1166,9 @@ export function toCalendarEvents(input: {
           ? `${r.place.name} · ${r.place.location}`
           : r.place.name
         : null,
+      latitude: r.place?.latitude ?? null,
+      longitude: r.place?.longitude ?? null,
+      mapAddress: r.place?.mapAddress ?? null,
       meta: {
         From: r.fromOrg.name,
         To: r.toOrg.name,

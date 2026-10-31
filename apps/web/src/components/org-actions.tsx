@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -176,6 +177,19 @@ export function OrgRowActions({
         <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
           Edit
         </Button>
+        <Link href={`/admin/recommendations?orgId=${org.id}`}>
+          <Button
+            size="sm"
+            variant="outline"
+            title={
+              kind === 'company'
+                ? 'Manage recommended guests for this client'
+                : 'Manage recommended clients for this guest'
+            }
+          >
+            Recs
+          </Button>
+        </Link>
         <Button
           size="sm"
           variant={isFeatured ? 'secondary' : 'outline'}
@@ -209,6 +223,13 @@ export function OrgRowActions({
             <Button variant="outline" onClick={() => setMode(null)}>
               Close
             </Button>
+            <Link href={`/admin/recommendations?orgId=${org.id}`}>
+              <Button variant="outline">
+                {kind === 'company'
+                  ? 'Manage guest recommendations'
+                  : 'Manage client recommendations'}
+              </Button>
+            </Link>
             <Button
               onClick={() => {
                 setMode('edit');

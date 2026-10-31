@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/maps.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ethara_scaffold.dart';
 import '../../core/widgets/status_chip.dart';
@@ -89,6 +90,29 @@ class MeetingsScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
+                      if (mapsNavigateUri(
+                            place: m.place,
+                            fallbackLabel: m.placeLabel,
+                          ) !=
+                          null) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () => openMapsForPlace(
+                              place: m.place,
+                              fallbackLabel: m.placeLabel,
+                            ),
+                            icon: const Icon(Icons.navigation_rounded, size: 16),
+                            label: const Text('Navigate'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.accentDeep,
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 );

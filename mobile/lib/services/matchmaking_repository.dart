@@ -8,21 +8,37 @@ class PlaceBrief {
     required this.name,
     required this.code,
     this.location,
+    this.latitude,
+    this.longitude,
+    this.mapAddress,
   });
 
   final String id;
   final String name;
   final String code;
   final String? location;
+  final double? latitude;
+  final double? longitude;
+  final String? mapAddress;
 
-  String get label =>
-      location == null || location!.isEmpty ? name : '$name · $location';
+  bool get hasMapPin => latitude != null && longitude != null;
+
+  String get label {
+    if (location != null && location!.isNotEmpty) return '$name · $location';
+    if (mapAddress != null && mapAddress!.isNotEmpty) {
+      return '$name · $mapAddress';
+    }
+    return name;
+  }
 
   factory PlaceBrief.fromJson(Map<String, dynamic> json) => PlaceBrief(
         id: json['id'] as String,
         name: json['name'] as String? ?? '',
         code: json['code'] as String? ?? '',
         location: json['location'] as String?,
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        mapAddress: json['mapAddress'] as String?,
       );
 }
 

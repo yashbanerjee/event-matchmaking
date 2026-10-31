@@ -19,6 +19,7 @@ import {
   MeetingsCalendar,
   toCalendarEvents,
 } from '@/components/meetings-calendar';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
   MeetingFeedbackModal,
@@ -35,7 +36,13 @@ type Meeting = {
   companyOrg: { name: string };
   vendorOrg: { name: string };
   location?: string | null;
-  place?: { name: string } | null;
+  place?: {
+    name: string;
+    location?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    mapAddress?: string | null;
+  } | null;
 };
 
 type RequestRow = {
@@ -256,7 +263,13 @@ export default function PortalMeetingsPage() {
                     <TR key={m.id} className="hover:bg-slate-50/80">
                       <TD className="font-medium">{m.vendorOrg.name}</TD>
                       <TD>{new Date(m.startsAt).toLocaleString()}</TD>
-                      <TD>{m.location || m.place?.name || '—'}</TD>
+                      <TD className="min-w-[11rem]">
+                        <MeetingPlaceLink
+                          place={m.place}
+                          fallback={m.location}
+                          compact
+                        />
+                      </TD>
                       <TD>
                         <Badge variant={statusTone(m.status)}>
                           {m.status.replaceAll('_', ' ')}

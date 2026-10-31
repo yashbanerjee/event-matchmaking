@@ -21,6 +21,41 @@ export class PlacesService {
     });
   }
 
+  private normalizeCoords(input: {
+    latitude?: number | null;
+    longitude?: number | null;
+  }) {
+    const hasLat = input.latitude !== undefined;
+    const hasLng = input.longitude !== undefined;
+    if (!hasLat && !hasLng) return {};
+
+    const latitude =
+      input.latitude === null || input.latitude === undefined
+        ? null
+        : Number(input.latitude);
+    const longitude =
+      input.longitude === null || input.longitude === undefined
+        ? null
+        : Number(input.longitude);
+
+    if (latitude === null && longitude === null) {
+      return { latitude: null, longitude: null };
+    }
+    if (
+      latitude == null ||
+      longitude == null ||
+      Number.isNaN(latitude) ||
+      Number.isNaN(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      throw new BadRequestException('Valid latitude and longitude are required');
+    }
+    return { latitude, longitude };
+  }
+
   async create(
     actor: AuthUser,
     input: {
@@ -29,6 +64,9 @@ export class PlacesService {
       description?: string;
       capacity?: number;
       location?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
     },
   ) {
     const name = input.name.trim();
@@ -41,6 +79,7 @@ export class PlacesService {
         .toUpperCase()
         .slice(0, 24) ||
       `PLACE-${Date.now()}`;
+    const coords = this.normalizeCoords(input);
 
     const place = await this.prisma.place.create({
       data: {
@@ -49,6 +88,11 @@ export class PlacesService {
         description: input.description?.trim() || null,
         capacity: input.capacity ?? null,
         location: input.location?.trim() || null,
+        ...coords,
+        mapAddress:
+          input.mapAddress === undefined
+            ? null
+            : input.mapAddress?.trim() || null,
       },
     });
 
@@ -72,6 +116,9 @@ export class PlacesService {
       description?: string | null;
       capacity?: number | null;
       location?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
       isActive?: boolean;
     },
   ) {
@@ -92,6 +139,8 @@ export class PlacesService {
       }
     }
 
+    const coords = this.normalizeCoords(input);
+
     const place = await this.prisma.place.update({
       where: { id },
       data: {
@@ -102,6 +151,10 @@ export class PlacesService {
           : {}),
         ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
         ...(input.location !== undefined ? { location: input.location } : {}),
+        ...coords,
+        ...(input.mapAddress !== undefined
+          ? { mapAddress: input.mapAddress?.trim() || null }
+          : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
     });
@@ -143,6 +196,83 @@ export class PlacesService {
     });
 
     return { id, deleted: true as const };
+  }
+
+  /**
+   * Proxy OpenStreetMap Nominatim so the browser can search locations
+   * without CORS issues and with a proper User-Agent.
+   */
+  async searchMap(query: string) {
+    const q = query.trim();
+    if (q.length < 2) return [];
+    const url = new URL('https://nominatim.openstreetmap.org/search');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('q', q);
+    url.searchParams.set('limit', '8');
+    url.searchParams.set('addressdetails', '0');
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'EtharaMatchmaking/1.0 (places-map-search)',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) {
+      throw new BadRequestException(`Map search failed (${res.status})`);
+    }
+    const rows = (await res.json()) as Array<{
+      display_name?: string;
+      lat?: string;
+      lon?: string;
+    }>;
+    return rows
+      .map((row) => {
+        const latitude = Number(row.lat);
+        const longitude = Number(row.lon);
+        if (Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+        return {
+          label: row.display_name ?? `${latitude}, ${longitude}`,
+          latitude,
+          longitude,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  }
+
+  async reverseGeocode(latitude: number, longitude: number) {
+    if (
+      Number.isNaN(latitude) ||
+      Number.isNaN(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      throw new BadRequestException('Valid latitude and longitude are required');
+    }
+    const url = new URL('https://nominatim.openstreetmap.org/reverse');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('lat', String(latitude));
+    url.searchParams.set('lon', String(longitude));
+    url.searchParams.set('zoom', '18');
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'EtharaMatchmaking/1.0 (places-map-reverse)',
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) {
+      throw new BadRequestException(`Reverse geocode failed (${res.status})`);
+    }
+    const json = (await res.json()) as { display_name?: string };
+    return {
+      label: json.display_name ?? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+      latitude,
+      longitude,
+    };
   }
 
   /**

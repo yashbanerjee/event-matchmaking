@@ -47,6 +47,21 @@ export class PlacesController {
     });
   }
 
+  @Get('map-search')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  mapSearch(@Query('q') q?: string) {
+    return this.places.searchMap(q ?? '');
+  }
+
+  @Get('map-reverse')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  mapReverse(
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+  ) {
+    return this.places.reverseGeocode(Number(lat), Number(lng));
+  }
+
   @Post()
   @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
   create(
@@ -58,6 +73,9 @@ export class PlacesController {
       description?: string;
       capacity?: number;
       location?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
     },
   ) {
     return this.places.create(user, body);
@@ -75,6 +93,9 @@ export class PlacesController {
       description?: string | null;
       capacity?: number | null;
       location?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      mapAddress?: string | null;
       isActive?: boolean;
     },
   ) {

@@ -10,6 +10,7 @@ import {
   MeetingsCalendar,
   toCalendarEvents,
 } from '@/components/meetings-calendar';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -32,7 +33,14 @@ type MeetingRow = {
   vendorOrgId: string;
   companyOrg: { id: string; name: string };
   vendorOrg: { id: string; name: string };
-  place?: { id: string; name: string; location: string | null } | null;
+  place?: {
+    id: string;
+    name: string;
+    location: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    mapAddress?: string | null;
+  } | null;
 };
 
 type OrgOption = { id: string; name: string; code: string };
@@ -518,11 +526,6 @@ export default function AdminMeetingsPage() {
             </THead>
             <TBody>
               {rows.map((m) => {
-                const location =
-                  m.location ||
-                  m.place?.name ||
-                  m.venue ||
-                  '—';
                 const invitedBy = m.invitedByLabel || 'Admin created meeting';
                 const isAdminCreated =
                   invitedBy === 'Admin created meeting';
@@ -531,7 +534,13 @@ export default function AdminMeetingsPage() {
                     <TD className="font-medium">{m.companyOrg.name}</TD>
                     <TD>{m.vendorOrg.name}</TD>
                     <TD>{new Date(m.startsAt).toLocaleString()}</TD>
-                    <TD>{location}</TD>
+                    <TD className="min-w-[11rem]">
+                      <MeetingPlaceLink
+                        place={m.place}
+                        fallback={m.location || m.venue}
+                        compact
+                      />
+                    </TD>
                     <TD>
                       {isAdminCreated ? (
                         <Badge variant="secondary">Admin created meeting</Badge>

@@ -16,6 +16,9 @@ export type SchedulePlace = {
   name: string;
   code: string;
   location: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  mapAddress?: string | null;
 };
 
 export function MeetingSchedulePicker({
@@ -297,8 +300,15 @@ export function MeetingSchedulePicker({
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold">{place.name}</span>
                       <span className="mt-0.5 block text-sm text-[var(--muted)]">
-                        {place.location || 'Location TBA'}
+                        {place.location ||
+                          place.mapAddress ||
+                          'Location TBA'}
                       </span>
+                      {place.latitude != null && place.longitude != null ? (
+                        <span className="mt-1 inline-flex rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-hover)]">
+                          Map pin set
+                        </span>
+                      ) : null}
                     </span>
                     <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
                       {place.code}

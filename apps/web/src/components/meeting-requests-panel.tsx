@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/empty-state';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
+import { MeetingPlaceLink } from '@/components/meeting-place-link';
 
 type OrgBrief = { id: string; name: string; type: string };
 
@@ -26,14 +27,16 @@ type MeetingRequest = {
   toOrgId: string;
   fromOrg: OrgBrief;
   toOrg: OrgBrief;
-  place: { id: string; name: string; location: string | null } | null;
+  place: {
+    id: string;
+    name: string;
+    location: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    mapAddress?: string | null;
+  } | null;
   meeting: { id: string; status: string } | null;
 };
-
-function formatPlace(place: MeetingRequest['place']) {
-  if (!place) return null;
-  return place.location ? `${place.name} · ${place.location}` : place.name;
-}
 
 function hasSchedule(req: MeetingRequest) {
   return Boolean(req.proposedStartsAt && req.proposedEndsAt && req.place);
@@ -252,7 +255,6 @@ export function MeetingRequestsPanel({
                 const direction = canAct.has(req.fromOrgId)
                   ? 'Outgoing'
                   : 'Incoming';
-                const placeLabel = formatPlace(req.place);
                 const actions = renderActions(req, 'mobile');
 
                 return (
@@ -296,11 +298,11 @@ export function MeetingRequestsPanel({
                           ? new Date(req.proposedStartsAt).toLocaleString()
                           : 'Time not proposed yet'}
                       </p>
-                      {placeLabel ? (
-                        <p className="flex items-start gap-1.5 font-medium text-[var(--foreground)]">
+                      {req.place ? (
+                        <div className="flex items-start gap-1.5 font-medium text-[var(--foreground)]">
                           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                          <span>Meeting place: {placeLabel}</span>
-                        </p>
+                          <MeetingPlaceLink place={req.place} compact />
+                        </div>
                       ) : (
                         <p>Meeting place not selected yet</p>
                       )}
@@ -327,8 +329,6 @@ export function MeetingRequestsPanel({
                 </THead>
                 <TBody>
                   {items.map((req) => {
-                    const placeLabel = formatPlace(req.place);
-
                     return (
                       <TR key={req.id}>
                         <TD className="font-medium">{req.fromOrg.name}</TD>
@@ -353,15 +353,8 @@ export function MeetingRequestsPanel({
                             ? new Date(req.proposedStartsAt).toLocaleString()
                             : '—'}
                         </TD>
-                        <TD className="text-sm">
-                          {placeLabel ? (
-                            <span className="inline-flex items-start gap-1.5">
-                              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                              <span>{placeLabel}</span>
-                            </span>
-                          ) : (
-                            '—'
-                          )}
+                        <TD className="min-w-[11rem] text-sm">
+                          <MeetingPlaceLink place={req.place} compact />
                         </TD>
                         <TD className="space-x-2 whitespace-nowrap text-right">
                           {renderActions(req, 'desktop')}

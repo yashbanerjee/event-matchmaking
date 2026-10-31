@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/maps.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/ethara_scaffold.dart';
@@ -196,6 +197,21 @@ class _RequestCardState extends ConsumerState<_RequestCard> {
               ),
             ],
           ),
+          if (mapsNavigateUri(place: req.place) != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => openMapsForPlace(place: req.place),
+                icon: const Icon(Icons.navigation_rounded, size: 16),
+                label: const Text('Navigate'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.accentDeep,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
