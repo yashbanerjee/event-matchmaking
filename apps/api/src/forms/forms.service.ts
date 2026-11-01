@@ -58,6 +58,11 @@ export class FormsService {
     private readonly peerRecs: PeerRecommendationsService,
   ) {}
 
+  /** Public helper so registration can show live Filters tags on forms. */
+  async withLiveFilterOptions(schema: FormSchemaDefinition) {
+    return this.hydrateFilterOptions(schema);
+  }
+
   /** Snapshot filter-dimension tags into field.options for select/radio fields. */
   private async hydrateFilterOptions(
     schema: FormSchemaDefinition,
@@ -1617,7 +1622,9 @@ export class FormsService {
     const responses = submission.responses as Record<string, unknown>;
     const org = submission.organization;
 
-    const industry = firstString(responses.industry);
+    const industry = firstString(
+      responses.industry ?? responses.industry_tag,
+    );
     const region = firstString(
       responses.region ?? responses.regions ?? responses.area,
     );
@@ -1635,9 +1642,15 @@ export class FormsService {
     const about = firstString(
       responses.organization_summary ?? responses.about,
     );
-    const focusEvents = firstString(
-      responses.focus_events ?? responses.focusEvents,
+    const visitPurpose = asStringArray(
+      responses.visit_purpose ?? responses.pv,
     );
+    const roleTags = asStringArray(
+      responses.role_category ?? responses.category,
+    );
+    const focusEvents =
+      firstString(responses.focus_events ?? responses.focusEvents) ??
+      (visitPurpose.length ? visitPurpose.join(', ') : null);
     const regionTags = asStringArray(
       responses.regions ?? responses.operatingRegions ?? responses.area,
     );
@@ -1646,9 +1659,17 @@ export class FormsService {
     const partnershipGoal = firstString(responses.partnership_goal);
     const impactMetrics = firstString(responses.impact_metrics);
     const commercialPrefs = {
-      tags: asStringArray(responses.commercialTags),
+      tags: [
+        ...new Set([
+          ...asStringArray(responses.commercialTags),
+          ...roleTags,
+          ...visitPurpose,
+        ]),
+      ],
       investmentStages,
       ticketSize,
+      roleTags,
+      visitPurpose,
     };
 
     if (org.company) {
@@ -1670,6 +1691,8 @@ export class FormsService {
             ticketSize,
             investmentStages,
             partnershipGoal,
+            roleTags,
+            visitPurpose,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },
@@ -1702,6 +1725,8 @@ export class FormsService {
             investmentStages,
             partnershipGoal,
             impactMetrics,
+            roleTags,
+            visitPurpose,
             responses,
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },

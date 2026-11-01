@@ -114,7 +114,8 @@ export class RegistrationService {
       };
     }
 
-    const schema = this.resolveSchema(version.schemaJson, version.fields);
+    const resolved = this.resolveSchema(version.schemaJson, version.fields);
+    const schema = await this.forms.withLiveFilterOptions(resolved);
 
     return {
       enabled: true as const,

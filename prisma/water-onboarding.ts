@@ -5,20 +5,20 @@ export type TagDef = { value: string; label: string };
 
 /** UN Water / SDG 6 challenge areas used for investor ↔ innovator matching. */
 export const WATER_CHALLENGE_TAGS: TagDef[] = [
-  { value: 'drinking-water', label: 'Drinking water access' },
-  { value: 'sanitation-hygiene', label: 'Sanitation & hygiene (WASH)' },
-  { value: 'wastewater-reuse', label: 'Wastewater treatment & reuse' },
-  { value: 'water-efficiency', label: 'Water efficiency & NRW' },
-  { value: 'desalination', label: 'Desalination' },
-  { value: 'groundwater', label: 'Groundwater management' },
-  { value: 'irrigation-agriculture', label: 'Irrigation & agriculture' },
-  { value: 'industrial-water', label: 'Industrial & commercial water' },
-  { value: 'stormwater-flood', label: 'Stormwater & flood resilience' },
-  { value: 'drought-climate', label: 'Drought & climate adaptation' },
+  { value: 'drinking-water', label: 'Clean drinking water' },
+  { value: 'sanitation-hygiene', label: 'Toilets & hygiene' },
+  { value: 'wastewater-reuse', label: 'Cleaning & reusing wastewater' },
+  { value: 'water-efficiency', label: 'Using less water / fixing leaks' },
+  { value: 'desalination', label: 'Turning seawater into fresh water' },
+  { value: 'groundwater', label: 'Underground water' },
+  { value: 'irrigation-agriculture', label: 'Farming & irrigation' },
+  { value: 'industrial-water', label: 'Water for factories & business' },
+  { value: 'stormwater-flood', label: 'Floods & rainwater' },
+  { value: 'drought-climate', label: 'Drought & climate' },
   { value: 'water-quality', label: 'Water quality & pollution' },
   { value: 'nature-based', label: 'Nature-based solutions' },
-  { value: 'digital-water', label: 'Digital water & utilities' },
-  { value: 'transboundary', label: 'Transboundary cooperation' },
+  { value: 'digital-water', label: 'Smart / digital water tools' },
+  { value: 'transboundary', label: 'Working across countries' },
 ];
 
 export const WATER_REGION_TAGS: TagDef[] = [
@@ -37,39 +37,67 @@ export const WATER_REGION_TAGS: TagDef[] = [
 ];
 
 export const WATER_CAPABILITY_TAGS: TagDef[] = [
-  { value: 'treatment-tech', label: 'Treatment technology' },
+  { value: 'treatment-tech', label: 'Water treatment technology' },
   { value: 'reuse-recycling', label: 'Reuse & recycling' },
   { value: 'desalination-tech', label: 'Desalination systems' },
-  { value: 'leak-detection', label: 'Leak detection & NRW' },
-  { value: 'smart-metering', label: 'Smart metering & IoT' },
-  { value: 'data-ai', label: 'Data, AI & decision support' },
-  { value: 'nature-based-delivery', label: 'Nature-based delivery' },
-  { value: 'utility-ops', label: 'Utility operations' },
-  { value: 'community-wash', label: 'Community WASH delivery' },
-  { value: 'blended-finance', label: 'Blended / project finance' },
-  { value: 'policy-capacity', label: 'Policy & capacity building' },
+  { value: 'leak-detection', label: 'Finding & fixing leaks' },
+  { value: 'smart-metering', label: 'Smart meters & sensors' },
+  { value: 'data-ai', label: 'Data & AI tools' },
+  { value: 'nature-based-delivery', label: 'Nature-based solutions' },
+  { value: 'utility-ops', label: 'Running water utilities' },
+  { value: 'community-wash', label: 'Community water & hygiene' },
+  { value: 'blended-finance', label: 'Project / blended finance' },
+  { value: 'policy-capacity', label: 'Policy & training' },
   { value: 'climate-adaptation', label: 'Climate adaptation' },
 ];
 
 export const WATER_CAPITAL_TAGS: TagDef[] = [
-  { value: 'equity', label: 'Equity' },
-  { value: 'debt', label: 'Debt' },
-  { value: 'grant', label: 'Grant / philanthropy' },
-  { value: 'blended-finance', label: 'Blended finance' },
-  { value: 'concessional', label: 'Concessional capital' },
-  { value: 'pilot-partnership', label: 'Pilot partnership' },
-  { value: 'offtake', label: 'Offtake / commercial contract' },
+  { value: 'equity', label: 'Equity investment' },
+  { value: 'debt', label: 'Loan / debt' },
+  { value: 'grant', label: 'Grant / donation' },
+  { value: 'blended-finance', label: 'Mixed funding (blended)' },
+  { value: 'concessional', label: 'Soft / low-cost capital' },
+  { value: 'pilot-partnership', label: 'Pilot project together' },
+  { value: 'offtake', label: 'Buy / supply contract' },
   { value: 'joint-venture', label: 'Joint venture' },
-  { value: 'technical-assistance', label: 'Technical assistance' },
+  { value: 'technical-assistance', label: 'Technical help' },
   { value: 'corporate-venture', label: 'Corporate venture' },
 ];
 
 export const WATER_STAGE_TAGS: TagDef[] = [
-  { value: 'pilot', label: 'Pilot / proof of concept' },
-  { value: 'early-revenue', label: 'Early revenue' },
-  { value: 'growth', label: 'Growth / scale-up' },
-  { value: 'infrastructure', label: 'Infrastructure / project finance' },
-  { value: 'buyout', label: 'Growth equity / buyout' },
+  { value: 'pilot', label: 'Just testing (pilot)' },
+  { value: 'early-revenue', label: 'Early customers / sales' },
+  { value: 'growth', label: 'Growing / scaling' },
+  { value: 'infrastructure', label: 'Large infrastructure project' },
+  { value: 'buyout', label: 'Mature / buyout stage' },
+];
+
+/** Role tags used when admins schedule meetings manually. */
+export const SCHEDULING_CATEGORY_TAGS: TagDef[] = [
+  { value: 'Investor', label: 'Investor' },
+  { value: 'Founder', label: 'Founder' },
+  { value: 'Developer', label: 'Developer' },
+  { value: 'Inventor', label: 'Inventor' },
+];
+
+export const SCHEDULING_INDUSTRY_TAGS: TagDef[] = [
+  { value: 'Food', label: 'Food' },
+  { value: 'Automation', label: 'Automation' },
+  { value: 'Water', label: 'Water' },
+  { value: 'Energy', label: 'Energy' },
+  { value: 'Agriculture', label: 'Agriculture' },
+  { value: 'Climate', label: 'Climate' },
+  { value: 'Technology', label: 'Technology' },
+  { value: 'Other', label: 'Other' },
+];
+
+export const SCHEDULING_PURPOSE_TAGS: TagDef[] = [
+  { value: 'To meet investors', label: 'To meet investors' },
+  { value: 'To raise funding for my product', label: 'To raise funding for my product' },
+  { value: 'To explore new opportunities', label: 'To explore new opportunities' },
+  { value: 'To find innovators', label: 'To find innovators' },
+  { value: 'To find pilot partners', label: 'To find pilot partners' },
+  { value: 'To co-invest', label: 'To co-invest' },
 ];
 
 export const WATER_DIMENSIONS = [
@@ -186,11 +214,11 @@ function mapFieldType(type: FieldType) {
 }
 
 const TICKET_OPTIONS: TagDef[] = [
-  { value: 'under-250k', label: 'Under USD 250k' },
-  { value: '250k-1m', label: 'USD 250k – 1m' },
-  { value: '1m-5m', label: 'USD 1m – 5m' },
-  { value: '5m-25m', label: 'USD 5m – 25m' },
-  { value: '25m-plus', label: 'USD 25m+' },
+  { value: 'under-250k', label: 'Under $250,000' },
+  { value: '250k-1m', label: '$250,000 – $1 million' },
+  { value: '1m-5m', label: '$1 – $5 million' },
+  { value: '5m-25m', label: '$5 – $25 million' },
+  { value: '25m-plus', label: 'More than $25 million' },
 ];
 
 const COUNTRY_OPTIONS: TagDef[] = [
@@ -212,25 +240,25 @@ function personalDetailFields(sectionId: string, startOrder: number) {
     field(sectionId, startOrder, {
       key: 'contact_name',
       type: 'text',
-      label: `${startOrder}. Full name`,
+      label: `${startOrder}. Your full name`,
       required: true,
-      description: 'Name shown on your meeting profile.',
+      description: 'So people know who they are meeting.',
       placeholder: 'First and last name',
     }),
     field(sectionId, startOrder + 1, {
       key: 'job_title',
       type: 'text',
-      label: `${startOrder + 1}. Job title`,
+      label: `${startOrder + 1}. Your job title`,
       required: true,
-      description: 'Your role at the organization.',
-      placeholder: 'e.g. Partner, CEO, Investment Director',
+      description: 'For example: CEO, Partner, Founder.',
+      placeholder: 'Your role',
     }),
     field(sectionId, startOrder + 2, {
       key: 'phone',
       type: 'text',
-      label: `${startOrder + 2}. Mobile phone`,
+      label: `${startOrder + 2}. Mobile number`,
       required: true,
-      description: 'Include country code for on-site coordination.',
+      description: 'Include country code, e.g. +971…',
       placeholder: '+971 …',
     }),
     field(sectionId, startOrder + 3, {
@@ -238,22 +266,60 @@ function personalDetailFields(sectionId: string, startOrder: number) {
       type: 'text',
       label: `${startOrder + 3}. LinkedIn or website`,
       required: true,
-      description: 'Profile or company URL for introductions.',
+      description: 'A link so others can learn more about you.',
       placeholder: 'https://',
     }),
     field(sectionId, startOrder + 4, {
       key: 'country',
       type: 'select',
-      label: `${startOrder + 4}. Country / base`,
+      label: `${startOrder + 4}. Which country are you based in?`,
       required: true,
-      description: 'Where you are primarily based.',
+      description: 'Where you usually work from.',
       options: COUNTRY_OPTIONS,
     }),
   ];
 }
 
+/** Shared scheduling tags from Admin → Filters (category, industry, purpose). */
+function schedulingTagFields(
+  sectionId: string,
+  startOrder: number,
+  dimensionIds: Record<string, string>,
+  tagOptions: Record<string, TagDef[]>,
+) {
+  return [
+    field(sectionId, startOrder, {
+      key: 'role_category',
+      type: 'multiselect',
+      label: `${startOrder}. Who are you at this event?`,
+      required: true,
+      description: 'Pick all that apply. Used when arranging meetings.',
+      options: tagOptions.category ?? SCHEDULING_CATEGORY_TAGS,
+      filterDimensionId: dimensionIds.category,
+    }),
+    field(sectionId, startOrder + 1, {
+      key: 'industry',
+      type: 'select',
+      label: `${startOrder + 1}. What industry are you in?`,
+      required: true,
+      description: 'Choose the closest match.',
+      options: tagOptions.industry ?? SCHEDULING_INDUSTRY_TAGS,
+      filterDimensionId: dimensionIds.industry,
+    }),
+    field(sectionId, startOrder + 2, {
+      key: 'visit_purpose',
+      type: 'multiselect',
+      label: `${startOrder + 2}. Why are you coming to this event?`,
+      required: true,
+      description: 'This helps the team book the right meetings for you.',
+      options: tagOptions.pv ?? SCHEDULING_PURPOSE_TAGS,
+      filterDimensionId: dimensionIds.pv,
+    }),
+  ];
+}
+
 /**
- * Investor form — personal details + match fields (≥10 questions).
+ * Investor form — plain-language questions + scheduling tags (≥10).
  * Meeting dates/times are collected on the next registration step.
  */
 export function buildInvestorOnboardingFields(
@@ -261,95 +327,71 @@ export function buildInvestorOnboardingFields(
   tagOptions: Record<string, TagDef[]>,
 ) {
   const personal = randomUUID();
-  const profile = randomUUID();
+  const scheduling = randomUUID();
   const match = randomUUID();
   const capital = randomUUID();
 
   const fields = [
     ...personalDetailFields(personal, 1),
-    field(profile, 6, {
-      key: 'industry',
-      type: 'select',
-      label: '6. Investor type',
-      required: true,
-      description: 'Used to pair you with relevant innovator pitches.',
-      options: [
-        { value: 'Development finance institution', label: 'Development finance institution' },
-        { value: 'Impact / climate fund', label: 'Impact / climate fund' },
-        { value: 'Venture capital', label: 'Venture capital' },
-        { value: 'Private equity', label: 'Private equity' },
-        { value: 'Family office', label: 'Family office' },
-        { value: 'Corporate / strategic', label: 'Corporate / strategic' },
-        { value: 'Philanthropy / foundation', label: 'Philanthropy / foundation' },
-        { value: 'Utility / municipality', label: 'Utility / municipality' },
-        { value: 'Government / sovereign', label: 'Government / sovereign' },
-      ],
-    }),
-    field(profile, 7, {
+    ...schedulingTagFields(scheduling, 6, dimensionIds, tagOptions),
+    field(match, 9, {
       key: 'organization_summary',
       type: 'textarea',
-      label: '7. Investment thesis',
+      label: '9. In simple words, what do you invest in?',
       required: true,
-      description: 'What you look for in a pitch — outcomes, sectors, deal style.',
+      description: 'A short note about the kind of projects or companies you like.',
     }),
-    field(profile, 8, {
-      key: 'focus_events',
-      type: 'textarea',
-      label: '8. Goal for this event',
-      required: true,
-      description: 'e.g. shortlist innovators, find pilot partners, co-invest.',
-    }),
-    field(match, 9, {
+    field(match, 10, {
       key: 'categories',
       type: 'multiselect',
-      label: '9. Challenges you want to fund',
+      label: '10. Which water topics do you care about?',
       required: true,
-      description: 'Primary recommendation filter vs innovator challenges.',
+      description: 'Select all that matter for your meetings.',
       options: tagOptions.event_categories,
       filterDimensionId: dimensionIds.event_categories,
     }),
-    field(match, 10, {
+    field(match, 11, {
       key: 'regions',
       type: 'multiselect',
-      label: '10. Priority geographies',
+      label: '11. Which regions are you interested in?',
       required: true,
-      description: 'Geography fit used in recommendations.',
+      description: 'Where you want to work or invest.',
       options: tagOptions.venues,
       filterDimensionId: dimensionIds.venues,
     }),
-    field(match, 11, {
+    field(match, 12, {
       key: 'capabilities',
       type: 'multiselect',
-      label: '11. Solution types of interest',
+      label: '12. What kinds of solutions do you want to see?',
       required: true,
-      description: 'Maps to innovator capabilities for scoring.',
+      description: 'Helps match you with the right innovators.',
       options: tagOptions.capabilities,
       filterDimensionId: dimensionIds.capabilities,
     }),
-    field(capital, 12, {
+    field(capital, 13, {
       key: 'commercialTags',
       type: 'multiselect',
-      label: '12. Instruments you can deploy',
+      label: '13. What kind of funding or partnership can you offer?',
       required: true,
-      description: 'Commercial fit against innovator ask.',
+      description: 'Select all that apply.',
       options: tagOptions.commercial_tags,
       filterDimensionId: dimensionIds.commercial_tags,
     }),
-    field(capital, 13, {
+    field(capital, 14, {
       key: 'investment_stages',
       type: 'multiselect',
-      label: '13. Preferred stages',
+      label: '14. What stage of company do you prefer?',
       required: true,
-      description: 'Stage fit vs innovator maturity.',
+      description: 'Early idea, growing business, or large project.',
       options: tagOptions.investment_stages,
       filterDimensionId: dimensionIds.investment_stages,
     }),
-    field(capital, 14, {
+    field(capital, 15, {
       key: 'ticket_size',
       type: 'select',
-      label: '14. Typical ticket size',
+      label: '15. How much do you usually invest?',
       required: true,
-      description: 'Ticket-size fit against innovator capital ask.',
+      description: 'Your usual check size for one deal.',
       options: TICKET_OPTIONS,
     }),
   ];
@@ -358,26 +400,26 @@ export function buildInvestorOnboardingFields(
     sections: [
       {
         id: personal,
-        title: 'Personal details',
-        description: 'How innovators and the team will reach you.',
+        title: 'About you',
+        description: 'Basic contact details.',
         order: 0,
       },
       {
-        id: profile,
-        title: 'About your firm',
-        description: 'Who sits across the table from innovators.',
+        id: scheduling,
+        title: 'For meeting booking',
+        description: 'These tags help the team schedule the right meetings.',
         order: 1,
       },
       {
         id: match,
-        title: 'Match criteria',
-        description: 'These answers drive investor ↔ innovator recommendations.',
+        title: 'What you are looking for',
+        description: 'Used to match you with innovators.',
         order: 2,
       },
       {
         id: capital,
-        title: 'Capital',
-        description: 'Instruments, stage, and check size.',
+        title: 'Funding',
+        description: 'How you usually invest.',
         order: 3,
       },
     ],
@@ -386,7 +428,7 @@ export function buildInvestorOnboardingFields(
 }
 
 /**
- * Innovator form — personal details + match fields (≥10 questions).
+ * Innovator form — plain-language questions + scheduling tags (≥10).
  * Meeting dates/times are collected on the next registration step.
  */
 export function buildInnovatorOnboardingFields(
@@ -394,92 +436,71 @@ export function buildInnovatorOnboardingFields(
   tagOptions: Record<string, TagDef[]>,
 ) {
   const personal = randomUUID();
-  const profile = randomUUID();
+  const scheduling = randomUUID();
   const match = randomUUID();
   const ask = randomUUID();
 
   const fields = [
     ...personalDetailFields(personal, 1),
-    field(profile, 6, {
-      key: 'industry',
-      type: 'select',
-      label: '6. Organization type',
-      required: true,
-      description: 'Helps investors understand the pitch context.',
-      options: [
-        { value: 'Startup / scale-up', label: 'Startup / scale-up' },
-        { value: 'Technology provider', label: 'Technology provider' },
-        { value: 'Utility / operator', label: 'Utility / operator' },
-        { value: 'NGO / social enterprise', label: 'NGO / social enterprise' },
-        { value: 'Research / university', label: 'Research / university spin-out' },
-        { value: 'Project developer', label: 'Project developer' },
-      ],
-    }),
-    field(profile, 7, {
+    ...schedulingTagFields(scheduling, 6, dimensionIds, tagOptions),
+    field(match, 9, {
       key: 'organization_summary',
       type: 'textarea',
-      label: '7. Your pitch in plain language',
+      label: '9. In simple words, what does your product or project do?',
       required: true,
-      description: 'Problem, solution, and who pays — one-minute story.',
+      description: 'Explain the problem you solve and who it helps.',
     }),
-    field(profile, 8, {
-      key: 'focus_events',
-      type: 'textarea',
-      label: '8. Goal for this event',
-      required: true,
-      description: 'Capital, pilots, offtake, partners, or policy support.',
-    }),
-    field(match, 9, {
+    field(match, 10, {
       key: 'categories',
       type: 'multiselect',
-      label: '9. Challenges you address',
+      label: '10. Which water topics does your work cover?',
       required: true,
-      description: 'Primary recommendation filter vs investor mandates.',
+      description: 'Select all that apply.',
       options: tagOptions.event_categories,
       filterDimensionId: dimensionIds.event_categories,
     }),
-    field(match, 10, {
+    field(match, 11, {
       key: 'regions',
       type: 'multiselect',
-      label: '10. Regions you can deploy in',
+      label: '11. Where can you work or deliver?',
       required: true,
-      description: 'Geography fit for investor interest.',
+      description: 'Regions where you can operate.',
       options: tagOptions.venues,
       filterDimensionId: dimensionIds.venues,
     }),
-    field(match, 11, {
+    field(match, 12, {
       key: 'capabilities',
       type: 'multiselect',
-      label: '11. Your solution capabilities',
+      label: '12. What can you offer?',
       required: true,
-      description: 'Capability overlap used in match scoring.',
+      description: 'Your skills, technology, or services.',
       options: tagOptions.capabilities,
       filterDimensionId: dimensionIds.capabilities,
     }),
-    field(match, 12, {
+    field(ask, 13, {
       key: 'investment_stages',
       type: 'select',
-      label: '12. Solution maturity',
+      label: '13. What stage is your solution at?',
       required: true,
-      description: 'Stage fit against investor preferences.',
+      description: 'Be honest — this helps find the right investors.',
       options: tagOptions.investment_stages,
       filterDimensionId: dimensionIds.investment_stages,
     }),
-    field(ask, 13, {
+    field(ask, 14, {
       key: 'commercialTags',
       type: 'multiselect',
-      label: '13. Partnership or capital you seek',
+      label: '14. What kind of help are you looking for?',
       required: true,
-      description: 'Commercial fit with investor instruments.',
+      description: 'Funding, partners, contracts, or technical help.',
       options: tagOptions.commercial_tags,
       filterDimensionId: dimensionIds.commercial_tags,
     }),
-    field(ask, 14, {
+    field(ask, 15, {
       key: 'ticket_size',
       type: 'select',
-      label: '14. Capital sought',
+      label: '15. How much funding are you looking for?',
       required: true,
-      description: 'Ticket-size fit against investor check size.',
+      description: 'Choose the closest range.',
       options: TICKET_OPTIONS,
     }),
   ];
@@ -488,26 +509,26 @@ export function buildInnovatorOnboardingFields(
     sections: [
       {
         id: personal,
-        title: 'Personal details',
-        description: 'How investors and the team will reach you.',
+        title: 'About you',
+        description: 'Basic contact details.',
         order: 0,
       },
       {
-        id: profile,
-        title: 'About your venture',
-        description: 'Your pitch card for investors.',
+        id: scheduling,
+        title: 'For meeting booking',
+        description: 'These tags help the team schedule the right meetings.',
         order: 1,
       },
       {
         id: match,
-        title: 'Match criteria',
-        description: 'Same fields investors use for recommendations.',
+        title: 'About your solution',
+        description: 'Used to match you with investors.',
         order: 2,
       },
       {
         id: ask,
-        title: 'The ask',
-        description: 'Capital type and check size.',
+        title: 'What you need',
+        description: 'Funding and partnership preferences.',
         order: 3,
       },
     ],
@@ -519,57 +540,123 @@ export const INVESTOR_FORM_CODE = 'WATER_INVESTOR_ONBOARDING';
 export const INNOVATOR_FORM_CODE = 'WATER_INNOVATOR_ONBOARDING';
 export const KEEP_FORM_CODES = [INVESTOR_FORM_CODE, INNOVATOR_FORM_CODE] as const;
 
-export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
-  const dimensionIds: Record<string, string> = {};
-  const tagOptions: Record<string, TagDef[]> = {};
+const SCHEDULING_DIMENSIONS = [
+  {
+    code: 'category',
+    name: 'Category',
+    description: 'Who you are at the event (used for meeting booking)',
+    profileKey: 'categories',
+    sortOrder: 1,
+    tags: SCHEDULING_CATEGORY_TAGS,
+  },
+  {
+    code: 'industry',
+    name: 'Industry',
+    description: 'Industry tags used for meeting booking',
+    profileKey: 'industry',
+    sortOrder: 2,
+    tags: SCHEDULING_INDUSTRY_TAGS,
+  },
+  {
+    code: 'pv',
+    name: 'Purpose of your visit',
+    description: 'Why you are attending (used for meeting booking)',
+    profileKey: 'categories',
+    sortOrder: 3,
+    tags: SCHEDULING_PURPOSE_TAGS,
+  },
+] as const;
 
-  for (const dim of WATER_DIMENSIONS) {
-    const created = await prisma.filterDimension.upsert({
-      where: { code: dim.code },
-      create: {
-        code: dim.code,
-        name: dim.name,
-        description: dim.description,
-        profileKey: dim.profileKey,
-        isActive: true,
-        sortOrder: dim.sortOrder,
-      },
-      update: {
-        name: dim.name,
-        description: dim.description,
-        profileKey: dim.profileKey,
-        isActive: true,
-        sortOrder: dim.sortOrder,
-      },
-    });
-    dimensionIds[dim.code] = created.id;
-    tagOptions[dim.code] = [...dim.tags];
+async function upsertDimensionWithTags(
+  prisma: PrismaClient,
+  dim: {
+    code: string;
+    name: string;
+    description: string;
+    profileKey: string;
+    sortOrder: number;
+    tags: readonly TagDef[];
+  },
+  dimensionIds: Record<string, string>,
+  tagOptions: Record<string, TagDef[]>,
+  deactivateMissing = true,
+) {
+  const created = await prisma.filterDimension.upsert({
+    where: { code: dim.code },
+    create: {
+      code: dim.code,
+      name: dim.name,
+      description: dim.description,
+      profileKey: dim.profileKey,
+      isActive: true,
+      sortOrder: dim.sortOrder,
+    },
+    update: {
+      name: dim.name,
+      description: dim.description,
+      profileKey: dim.profileKey,
+      isActive: true,
+      sortOrder: dim.sortOrder,
+    },
+  });
+  dimensionIds[dim.code] = created.id;
+  tagOptions[dim.code] = [...dim.tags];
 
+  if (deactivateMissing) {
     const keep = dim.tags.map((t) => t.value);
     await prisma.filterTag.updateMany({
       where: { dimensionId: created.id, value: { notIn: keep } },
       data: { isActive: false },
     });
+  }
 
-    for (const [index, tag] of dim.tags.entries()) {
-      await prisma.filterTag.upsert({
-        where: {
-          dimensionId_value: { dimensionId: created.id, value: tag.value },
-        },
-        create: {
-          dimensionId: created.id,
-          value: tag.value,
-          label: tag.label,
-          sortOrder: index,
-          isActive: true,
-        },
-        update: {
-          label: tag.label,
-          sortOrder: index,
-          isActive: true,
-        },
-      });
-    }
+  for (const [index, tag] of dim.tags.entries()) {
+    await prisma.filterTag.upsert({
+      where: {
+        dimensionId_value: { dimensionId: created.id, value: tag.value },
+      },
+      create: {
+        dimensionId: created.id,
+        value: tag.value,
+        label: tag.label,
+        sortOrder: index,
+        isActive: true,
+      },
+      update: {
+        label: tag.label,
+        sortOrder: index,
+        isActive: true,
+      },
+    });
+  }
+}
+
+export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
+  const dimensionIds: Record<string, string> = {};
+  const tagOptions: Record<string, TagDef[]> = {};
+
+  // Keep / refresh tags used for manual meeting scheduling.
+  for (const dim of SCHEDULING_DIMENSIONS) {
+    // Do not deactivate admin-added scheduling tags; only upsert known ones.
+    await upsertDimensionWithTags(prisma, dim, dimensionIds, tagOptions, false);
+  }
+
+  // Reload live scheduling tags (includes any admin-added options).
+  for (const code of ['category', 'industry', 'pv'] as const) {
+    const dimId = dimensionIds[code];
+    if (!dimId) continue;
+    const liveTags = await prisma.filterTag.findMany({
+      where: { dimensionId: dimId, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+    });
+    tagOptions[code] = liveTags.map((t) => ({
+      value: t.value,
+      label: t.label,
+    }));
+  }
+
+  for (const dim of WATER_DIMENSIONS) {
+    await upsertDimensionWithTags(prisma, dim, dimensionIds, tagOptions, true);
   }
 
   for (const tag of WATER_CHALLENGE_TAGS) {
@@ -678,9 +765,9 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     code: INVESTOR_FORM_CODE,
     name: 'Investor form',
     description:
-      'Personal details and match fields for investors (availability on next step).',
+      'Simple questions plus booking tags for investors (availability on next step).',
     targetType: 'COMPANY',
-    hash: 'investor-form-v4',
+    hash: 'investor-form-v5',
     schema: investorBuilt,
   });
 
@@ -688,9 +775,9 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     code: INNOVATOR_FORM_CODE,
     name: 'Innovator form',
     description:
-      'Personal details and match fields for innovators (availability on next step).',
+      'Simple questions plus booking tags for innovators (availability on next step).',
     targetType: 'VENDOR',
-    hash: 'innovator-form-v4',
+    hash: 'innovator-form-v5',
     schema: innovatorBuilt,
   });
 
