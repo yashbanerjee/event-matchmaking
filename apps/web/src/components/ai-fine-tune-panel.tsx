@@ -169,6 +169,14 @@ function buildDraft(
       byKey.get('ops.recommendationScoreThreshold'),
       DEFAULTS['ops.recommendationScoreThreshold'],
     ),
+    'ops.investorRecommendationLimit': fieldToString(
+      byKey.get('ops.investorRecommendationLimit'),
+      DEFAULTS['ops.investorRecommendationLimit'],
+    ),
+    'ops.innovatorRecommendationLimit': fieldToString(
+      byKey.get('ops.innovatorRecommendationLimit'),
+      DEFAULTS['ops.innovatorRecommendationLimit'],
+    ),
     'ai.matchmakingBlendWeight': fieldToString(
       byKey.get('ai.matchmakingBlendWeight'),
       DEFAULTS['ai.matchmakingBlendWeight'],

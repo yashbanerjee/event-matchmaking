@@ -1,12 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/empty-state';
 import { Input } from '@/components/ui/input';
-import { Pagination } from '@/components/ui/pagination';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 import { cn } from '@/lib/utils';
 
@@ -23,14 +17,32 @@ type BrowseItem = {
   name: string;
   type: 'COMPANY' | 'VENDOR';
   industry: string | null;
+  industryLabel?: string | null;
   region: string | null;
   categories: string[];
+  categoryLabels?: string[];
   capabilities: string[];
+  capabilityLabels?: string[];
   regions: string[];
+  regionLabels?: string[];
   commercialTags: string[];
+  commercialTagLabels?: string[];
   featured: boolean;
   logoUrl: string | null;
 };
+
+function displayTags(item: BrowseItem) {
+  return [
+    ...(item.categoryLabels?.length ? item.categoryLabels : item.categories),
+    ...(item.capabilityLabels?.length
+      ? item.capabilityLabels
+      : item.capabilities),
+    ...(item.regionLabels?.length ? item.regionLabels : item.regions),
+    ...(item.commercialTagLabels?.length
+      ? item.commercialTagLabels
+      : item.commercialTags),
+  ];
+}
 
 type FilterDimension = {
   id: string;
@@ -46,8 +58,6 @@ type FilterDimension = {
   }>;
 };
 
-const PAGE_SIZE = 12;
-
 export function InnovatorsBrowsePanel({
   fromOrgId,
 }: {
@@ -56,7 +66,6 @@ export function InnovatorsBrowsePanel({
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
   const [interestOrgId, setInterestOrgId] = useState<string | null>(null);
@@ -70,10 +79,6 @@ export function InnovatorsBrowsePanel({
     return () => window.clearTimeout(handle);
   }, [search]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, selectedTags]);
-
   const dimensions = useQuery({
     queryKey: ['filter-dimensions', 'active'],
     queryFn: () =>
@@ -83,23 +88,31 @@ export function InnovatorsBrowsePanel({
   });
 
   const tagsParam = selectedTags.join(',');
+  const catalog = useQuery({
+    queryKey: ['recommendations-browse-catalog'],
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<{
+        items: BrowseItem[];
+        total: number;
+        counterpartLabel: string;
+      }>('/recommendations/browse', {
+        token: getAccessToken(),
+      }),
+  });
+
   const directory = useQuery({
-    queryKey: ['recommendations-browse', page, debouncedSearch, tagsParam],
-    placeholderData: keepPreviousData,
+    queryKey: ['recommendations-browse', debouncedSearch, tagsParam],
     queryFn: () => {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(PAGE_SIZE),
-      });
+      const params = new URLSearchParams();
       if (debouncedSearch) params.set('q', debouncedSearch);
       if (tagsParam) params.set('tags', tagsParam);
+      const qs = params.toString();
       return apiFetch<{
         items: BrowseItem[];
         total: number;
-        page: number;
-        pageSize: number;
         counterpartLabel: string;
-      }>(`/recommendations/browse?${params.toString()}`, {
+      }>(`/recommendations/browse${qs ? `?${qs}` : ''}`, {
         token: getAccessToken(),
       });
     },
@@ -130,17 +143,50 @@ export function InnovatorsBrowsePanel({
     },
   });
 
-  const activeDimensions = useMemo(
-    () =>
-      (dimensions.data ?? [])
-        .filter((dim) => dim.isActive)
-        .map((dim) => ({
-          ...dim,
-          tags: dim.tags.filter((tag) => tag.isActive),
-        }))
-        .filter((dim) => dim.tags.length > 0),
-    [dimensions.data],
-  );
+  const catalogTagValues = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of catalog.data?.items ?? []) {
+      for (const raw of [
+        item.industry,
+        ...item.categories,
+        ...item.capabilities,
+        ...item.regions,
+        ...item.commercialTags,
+      ]) {
+        if (!raw) continue;
+        values.add(raw.trim().toLowerCase());
+      }
+    }
+    return values;
+  }, [catalog.data?.items]);
+
+  const activeDimensions = useMemo(() => {
+    const hasCatalog = catalogTagValues.size > 0;
+    return (dimensions.data ?? [])
+      .filter((dim) => dim.isActive)
+      .map((dim) => ({
+        ...dim,
+        tags: dim.tags.filter((tag) => {
+          if (!tag.isActive) return false;
+          if (!hasCatalog) return true;
+          const value = tag.value.trim().toLowerCase();
+          const label = tag.label.trim().toLowerCase();
+          return catalogTagValues.has(value) || catalogTagValues.has(label);
+        }),
+      }))
+      .filter((dim) => dim.tags.length > 0);
+  }, [dimensions.data, catalogTagValues]);
+
+  useEffect(() => {
+    if (!activeDimensions.length || !selectedTags.length) return;
+    const allowed = new Set(
+      activeDimensions.flatMap((dim) => dim.tags.map((tag) => tag.value)),
+    );
+    setSelectedTags((prev) => {
+      const next = prev.filter((tag) => allowed.has(tag));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [activeDimensions, selectedTags.length]);
 
   const items = directory.data?.items ?? [];
   const total = directory.data?.total ?? 0;
@@ -250,6 +296,14 @@ export function InnovatorsBrowsePanel({
           <p className="text-sm text-[var(--muted)]">
             Loading {counterpartLabel}…
           </p>
+        ) : directory.isError ? (
+          <EmptyState
+            title={`Could not load ${counterpartLabel}`}
+            description={
+              (directory.error as Error)?.message ||
+              'Refresh the page and try again.'
+            }
+          />
         ) : items.length === 0 ? (
           <EmptyState
             title={`No ${counterpartLabel} match`}
@@ -262,7 +316,7 @@ export function InnovatorsBrowsePanel({
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-[var(--muted)]">
-              Showing {items.length} of {total}
+              {total} {counterpartLabel}
             </p>
             <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((item, index) => (
@@ -296,24 +350,17 @@ export function InnovatorsBrowsePanel({
                         ) : null}
                       </div>
                       <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                        {item.industry || item.region || 'Innovator'}
+                        {item.industryLabel ||
+                          item.industry ||
+                          item.region ||
+                          'Innovator'}
                       </p>
                     </button>
                   </div>
 
-                  {[
-                    ...item.categories,
-                    ...item.capabilities,
-                    ...item.regions,
-                    ...item.commercialTags,
-                  ].length > 0 ? (
+                  {displayTags(item).length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {[
-                        ...item.categories,
-                        ...item.capabilities,
-                        ...item.regions,
-                        ...item.commercialTags,
-                      ]
+                      {displayTags(item)
                         .slice(0, 6)
                         .map((tag) => (
                           <Badge
@@ -356,13 +403,6 @@ export function InnovatorsBrowsePanel({
                 </div>
               ))}
             </div>
-
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={total}
-              onPageChange={setPage}
-            />
           </div>
         )}
       </Card>

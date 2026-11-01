@@ -95,7 +95,8 @@ export class MeetingRequestsController {
     return this.recommendationsService.browsePeers(user, {
       q,
       page: page ? Number(page) : 1,
-      pageSize: pageSize ? Number(pageSize) : 20,
+      // Omit pageSize to return the full directory (no artificial ceiling).
+      pageSize: pageSize ? Number(pageSize) : undefined,
       tags: tagList,
     });
   }
