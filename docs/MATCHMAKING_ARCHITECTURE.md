@@ -5,7 +5,7 @@
 | **Document** | Matchmaking architecture diagram |
 | **Product** | Ethara Event Matchmaking |
 | **Audience** | Investors, product owners, developers |
-| **Related** | [System flows](./SYSTEM_FLOWS.md) · [Architecture](./ARCHITECTURE.md) |
+| **Related** | [System flows](./SYSTEM_FLOWS.md) · [Architecture](./ARCHITECTURE.md) · [Qwen AI matchmaking](./QWEN_AI_MATCHMAKING.md) |
 
 ---
 

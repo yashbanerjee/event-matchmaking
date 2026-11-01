@@ -39,7 +39,7 @@ export class AiService implements OnModuleInit {
     await this.ensureIntegratedJavDefaults();
   }
 
-  /** Wire JAV as the default Ethara matchmaking AI if settings are still unset/off. */
+  /** Wire Qwen (via OpenRouter / jav provider path) as default Ethara matchmaking AI if settings are still unset/off. */
   private async ensureIntegratedJavDefaults() {
     const readCurrent = (raw: unknown) => {
       if (raw && typeof raw === 'object' && 'value' in (raw as object)) {
@@ -151,13 +151,13 @@ export class AiService implements OnModuleInit {
       create: {
         key: 'ai_enabled',
         enabled: true,
-        description: 'Global switch for JAV AI matchmaking / recommendations',
+        description: 'Global switch for Qwen AI matchmaking / recommendations',
       },
       update: {},
     });
 
     this.config.invalidate();
-    this.logger.log('JAV AI integrated as primary matchmaking provider');
+    this.logger.log('Qwen AI integrated as primary matchmaking provider');
   }
 
   async isEnabled() {
@@ -381,7 +381,7 @@ export class AiService implements OnModuleInit {
         return new AnthropicProvider(anthropicKey, timeout);
       }
       if (name === 'jav' && javKey) {
-        // Jev (TypeSafe) on OpenRouter — https://openrouter.ai/~typesafe/jev-latest
+        // Qwen (and other open models) via OpenRouter / self-hosted OpenAI-compatible API
         return new JavAiProvider({
           apiKey: javKey,
           baseUrl: javBaseUrl,
@@ -412,7 +412,7 @@ export class AiService implements OnModuleInit {
       }
     };
 
-    // Always prefer JAV first — it is the integrated Ethara matchmaking model.
+    // Always prefer the Qwen/OpenRouter path first — integrated Ethara matchmaking model.
     push('jav');
     push(primary);
     push(secondary);

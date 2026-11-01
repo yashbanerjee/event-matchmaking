@@ -69,7 +69,7 @@ type RequestRow = {
   meeting?: { id: string } | null;
 };
 
-const PAGE_SIZE = 8;
+const DEFAULT_PAGE_SIZE = 10;
 
 function useNowTick(enabled: boolean, intervalMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
@@ -87,6 +87,7 @@ export default function PortalMeetingsPage() {
   const [ready, setReady] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
   const [pendingStart, setPendingStart] = useState<Meeting | null>(null);
@@ -160,7 +161,7 @@ export default function PortalMeetingsPage() {
   );
 
   const total = filtered.length;
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const liveMeeting = (meetings.data?.items ?? []).find((m) =>
     canEndMeeting(m.status),
@@ -572,9 +573,10 @@ export default function PortalMeetingsPage() {
             </Table>
             <Pagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         ) : null}

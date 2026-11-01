@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { EventDateChips } from '@/components/event-date-chips';
 import { EmptyState } from '@/components/empty-state';
+import { Pagination } from '@/components/ui/pagination';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type Place = {
@@ -63,6 +64,8 @@ export function InvestorTablePanel({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [form, setForm] = useState({
     organizationId: organizationId ?? '',
     placeId: '',
@@ -175,6 +178,7 @@ export function InvestorTablePanel({
   });
 
   const rows = assignments.data ?? [];
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <Card id="table">
@@ -220,7 +224,7 @@ export function InvestorTablePanel({
             </TR>
           </THead>
           <TBody>
-            {rows.map((row) => (
+            {pageRows.map((row) => (
               <TR key={row.id}>
                 {!organizationId ? (
                   <TD className="font-medium">{row.organization.name}</TD>
@@ -259,6 +263,18 @@ export function InvestorTablePanel({
           </TBody>
         </Table>
       )}
+      {rows.length > 0 ? (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={rows.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
+      ) : null}
 
       <Modal
         open={open}

@@ -690,7 +690,9 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
-              <span className="text-[var(--muted)]">Matchmaking model id</span>
+              <span className="text-[var(--muted)]">
+                Matchmaking model id (Qwen)
+              </span>
               <Input
                 value={draft['ai.javChatModel']}
                 disabled={disabled || save.isPending}

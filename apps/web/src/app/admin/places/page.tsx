@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -10,11 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { EmptyState } from '@/components/empty-state';
 import { LocationMapPicker } from '@/components/location-map-picker';
 import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import { InvestorTablePanel } from '@/components/investor-table-panel';
+
+const DEFAULT_PAGE_SIZE = 10;
 
 type Place = {
   id: string;
@@ -42,6 +45,8 @@ const emptyForm = {
 
 export default function AdminPlacesPage() {
   const qc = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [creating, setCreating] = useState(false);
   const [edit, setEdit] = useState<Place | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -139,6 +144,10 @@ export default function AdminPlacesPage() {
   });
 
   const items = places.data ?? [];
+  const pageItems = useMemo(
+    () => items.slice((page - 1) * pageSize, page * pageSize),
+    [items, page, pageSize],
+  );
 
   function openCreate() {
     setForm(emptyForm);
@@ -271,7 +280,7 @@ export default function AdminPlacesPage() {
               </TR>
             </THead>
             <TBody>
-              {items.map((place) => (
+              {pageItems.map((place) => (
                 <TR key={place.id}>
                   <TD className="font-medium">{place.name}</TD>
                   <TD>{place.code}</TD>
@@ -316,6 +325,18 @@ export default function AdminPlacesPage() {
             </TBody>
           </Table>
         )}
+        {items.length > 0 ? (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={items.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        ) : null}
       </Card>
 
       <Modal

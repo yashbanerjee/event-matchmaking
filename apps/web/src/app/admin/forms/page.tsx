@@ -31,12 +31,13 @@ type FormItem = {
   }>;
 };
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 export default function FormsPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -62,7 +63,7 @@ export default function FormsPage() {
   }, [forms.data, search]);
 
   const total = filtered.length;
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const create = useMutation({
     mutationFn: () =>
@@ -190,9 +191,10 @@ export default function FormsPage() {
             </Table>
             <Pagination
               page={page}
-              pageSize={PAGE_SIZE}
+              pageSize={pageSize}
               total={total}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         ) : null}

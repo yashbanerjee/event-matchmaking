@@ -407,7 +407,7 @@ enum PeerRecommendationSource {
   MANUAL
 }
 
-/// Persisted client↔guest recommendation with rule + JAV AI score/description.
+/// Persisted client↔guest recommendation with rule + Qwen AI score/description.
 model OrgPeerRecommendation {
   id                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fromOrgId          String                     @db.Uuid

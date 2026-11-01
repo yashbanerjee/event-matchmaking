@@ -35,8 +35,9 @@ export type JavProviderConfig = {
 };
 
 /**
- * JAV AI — OpenAI-compatible HTTP provider (OpenRouter by default).
- * Fine-tuned models are selected via `chatModel` from Admin → System Settings.
+ * OpenAI-compatible HTTP provider used for Qwen matchmaking (OpenRouter by default).
+ * Provider id remains `jav` for settings compatibility; default chat model is Qwen.
+ * Fine-tuned / override models are selected via `chatModel` from Admin → System Settings.
  */
 export class JavAiProvider implements AiProvider {
   readonly name = 'jav';
@@ -100,7 +101,7 @@ export class JavAiProvider implements AiProvider {
       }),
     });
     if (!res.ok) {
-      throw new Error(`JAV extract failed: ${res.status}`);
+      throw new Error(`Qwen extract failed: ${res.status}`);
     }
     const json = (await res.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
@@ -121,7 +122,7 @@ export class JavAiProvider implements AiProvider {
           input: text.slice(0, 8000),
         }),
       });
-      if (!res.ok) throw new Error(`JAV embed failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Qwen embed failed: ${res.status}`);
       const json = (await res.json()) as {
         data: Array<{ embedding: number[] }>;
       };
@@ -133,8 +134,8 @@ export class JavAiProvider implements AiProvider {
   }
 
   /**
-   * Jev (~typesafe/jev-*) uses OpenRouter Decisions API, not chat/completions.
-   * Score criteria are 0–4; we normalize to 0–1 for the matchmaking pipeline.
+   * Legacy jev_decisions path uses OpenRouter Decisions API (0–4 tiers).
+   * Default Qwen scoring uses chat/completions + structured_json instead.
    */
   private decisionsUrl(): string {
     if (this.baseUrl.includes('openrouter.ai')) {
@@ -193,7 +194,7 @@ export class JavAiProvider implements AiProvider {
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       throw new Error(
-        `JAV pair score failed: ${res.status}${detail ? ` ${detail.slice(0, 200)}` : ''}`,
+        `Qwen pair score failed: ${res.status}${detail ? ` ${detail.slice(0, 200)}` : ''}`,
       );
     }
     const json = (await res.json()) as {
@@ -208,7 +209,7 @@ export class JavAiProvider implements AiProvider {
     };
     const answer = json.answers?.fit;
     if (typeof answer?.score !== 'number') {
-      throw new Error('JAV pair score failed: missing score answer');
+      throw new Error('Qwen pair score failed: missing score answer');
     }
     // Decisions score is 0–4; pipeline expects 0–1.
     const normalized = Math.max(0, Math.min(1, answer.score / 4));

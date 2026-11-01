@@ -74,7 +74,7 @@ type FormListItem = {
   versions: Array<{ id: string; version: number; status: string }>;
 };
 
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
 
 const COUNTRY_CODES = [
   { code: '+971', label: 'AE +971' },
@@ -120,6 +120,7 @@ function parseCsv(text: string) {
 export default function VendorsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateSort, setDateSort] = useState<'createdAt_desc' | 'createdAt_asc'>(
@@ -149,9 +150,9 @@ export default function VendorsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, dateSort]);
+  }, [debouncedSearch, dateSort, pageSize]);
 
-  const queryKey = ['vendors', page, debouncedSearch, dateSort] as const;
+  const queryKey = ['vendors', page, pageSize, debouncedSearch, dateSort] as const;
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey,
@@ -159,7 +160,7 @@ export default function VendorsPage() {
       const params = new URLSearchParams({
         type: 'VENDOR',
         page: String(page),
-        pageSize: String(PAGE_SIZE),
+        pageSize: String(pageSize),
         sort: dateSort,
       });
       if (debouncedSearch) params.set('q', debouncedSearch);
@@ -598,9 +599,10 @@ export default function VendorsPage() {
             </div>
             <Pagination
               page={data?.page ?? page}
-              pageSize={data?.pageSize ?? PAGE_SIZE}
+              pageSize={data?.pageSize ?? pageSize}
               total={data?.total ?? items.length}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         ) : null}

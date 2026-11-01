@@ -212,7 +212,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_PRIMARY_PROVIDER',
     label: 'Primary AI provider',
     description:
-      'Use jav for OpenRouter / self-hosted base URL. openai/anthropic are optional fallbacks.',
+      'Use jav (Qwen / OpenRouter path) as primary. openai/anthropic are optional fallbacks. The default model is Qwen.',
     group: 'ai',
     type: 'select',
     options: ['jav', 'openai', 'anthropic', 'none'],
@@ -230,7 +230,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'JAV_AI_BASE_URL',
     label: 'API base URL',
     description:
-      'OpenRouter: https://openrouter.ai/api/v1 — Self-hosted (vLLM, LiteLLM, etc.): your /v1 endpoint.',
+      'OpenRouter: https://openrouter.ai/api/v1 — Self-hosted (vLLM, LiteLLM, etc.): your /v1 endpoint. Used for Qwen chat scoring.',
     group: 'ai',
     type: 'string',
   },
@@ -239,7 +239,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'OPENROUTER_API_KEY',
     label: 'OpenRouter API key',
     description:
-      'Paste your sk-or-v1-… key here (Admin settings only — not .env).',
+      'Paste your sk-or-v1-… key here (Admin settings only — not .env). Required for Qwen matchmaking.',
     group: 'ai',
     type: 'secret',
     secret: true,
@@ -247,7 +247,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.javChatModel',
     envKey: 'JAV_AI_CHAT_MODEL',
-    label: 'Matchmaking model id',
+    label: 'Matchmaking model id (Qwen)',
     description:
       'Default: qwen/qwen-2.5-72b-instruct on OpenRouter. Or any OpenAI-compatible chat model id for structured JSON scores + match reasons.',
     group: 'ai',
@@ -275,7 +275,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_PAIR_SCORING_METHOD',
     label: 'Pair scoring method',
     description:
-      'structured_json = chat JSON score + custom rationale (open models on OpenRouter or self-hosted). jev_decisions = legacy Jev tier labels only.',
+      'structured_json = Qwen chat JSON score + custom rationale (recommended). jev_decisions = legacy tier labels only.',
     group: 'ai',
     type: 'select',
     options: ['structured_json', 'jev_decisions'],
@@ -385,7 +385,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'JAV_AI_EMBEDDING_MODEL',
     label: 'Embedding model (optional)',
     description:
-      'Only for embedding/hybrid modes. Jev itself is chat/decision — e.g. openai/text-embedding-3-small.',
+      'Only for embedding/hybrid modes. Qwen pair scoring uses chat; embeddings are separate — e.g. openai/text-embedding-3-small.',
     group: 'ai',
     type: 'string',
   },

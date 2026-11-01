@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type FilterTag = {
@@ -54,6 +55,8 @@ function inferProfileKey(name: string, code?: string) {
 export default function AdminFiltersPage() {
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tagPage, setTagPage] = useState(1);
+  const [tagPageSize, setTagPageSize] = useState(10);
   const [dimOpen, setDimOpen] = useState(false);
   const [dimForm, setDimForm] = useState({
     name: '',
@@ -73,6 +76,15 @@ export default function AdminFiltersPage() {
   const items = dimensions.data ?? [];
   const selected =
     items.find((d) => d.id === selectedId) ?? items[0] ?? null;
+
+  useEffect(() => {
+    setTagPage(1);
+  }, [selected?.id, tagPageSize]);
+
+  const tagPageItems = useMemo(() => {
+    const tags = selected?.tags ?? [];
+    return tags.slice((tagPage - 1) * tagPageSize, tagPage * tagPageSize);
+  }, [selected?.tags, tagPage, tagPageSize]);
 
   const createDimension = useMutation({
     mutationFn: () =>
@@ -344,7 +356,7 @@ export default function AdminFiltersPage() {
                       </TR>
                     </THead>
                     <TBody>
-                      {selected.tags.map((tag) => (
+                      {tagPageItems.map((tag) => (
                         <TR key={tag.id}>
                           <TD className="font-medium">{tag.label}</TD>
                           <TD>
@@ -389,6 +401,13 @@ export default function AdminFiltersPage() {
                       ))}
                     </TBody>
                   </Table>
+                  <Pagination
+                    page={tagPage}
+                    pageSize={tagPageSize}
+                    total={selected.tags.length}
+                    onPageChange={setTagPage}
+                    onPageSizeChange={setTagPageSize}
+                  />
                 </div>
               )}
             </div>

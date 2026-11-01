@@ -194,11 +194,11 @@ async function main() {
     create: {
       key: 'ai_enabled',
       enabled: true,
-      description: 'Global switch for JAV AI matchmaking / recommendations',
+      description: 'Global switch for Qwen AI matchmaking / recommendations',
     },
     update: {
       enabled: true,
-      description: 'Global switch for JAV AI matchmaking / recommendations',
+      description: 'Global switch for Qwen AI matchmaking / recommendations',
     },
   });
 
@@ -266,7 +266,7 @@ async function main() {
     }
   }
 
-  // Force-enable integrated JAV AI on every seed (safe to re-run).
+  // Force-enable integrated Qwen AI on every seed (safe to re-run).
   const javAiDefaults: Array<{ key: string; value: unknown }> = [
     { key: 'ai.enabled', value: true },
     { key: 'ai.primaryProvider', value: 'jav' },

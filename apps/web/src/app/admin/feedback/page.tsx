@@ -7,10 +7,13 @@ import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Pagination } from '@/components/ui/pagination';
 import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+
+const DEFAULT_PAGE_SIZE = 10;
 
 type FeedbackRow = {
   id: string;
@@ -63,6 +66,8 @@ function roleLabel(type?: string) {
 }
 
 export default function FeedbackPage() {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [role, setRole] = useState<'ALL' | 'COMPANY' | 'VENDOR'>('ALL');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -74,13 +79,20 @@ export default function FeedbackPage() {
     return () => window.clearTimeout(handle);
   }, [search]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [role, debouncedSearch, pageSize]);
+
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ['feedback', role, debouncedSearch],
+    queryKey: ['feedback', page, pageSize, role, debouncedSearch],
     queryFn: () => {
-      const params = new URLSearchParams({ pageSize: '100' });
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
       if (role !== 'ALL') params.set('role', role);
       if (debouncedSearch) params.set('q', debouncedSearch);
-      return apiFetch<{ items: FeedbackRow[]; total: number }>(
+      return apiFetch<{ items: FeedbackRow[]; total: number; page?: number }>(
         `/feedback?${params}`,
         { token: getAccessToken() },
       );
@@ -290,6 +302,13 @@ export default function FeedbackPage() {
                 </TBody>
               </Table>
             </div>
+            <Pagination
+              page={data?.page ?? page}
+              pageSize={pageSize}
+              total={data?.total ?? items.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </>
         )}
       </Card>

@@ -71,7 +71,7 @@ type CandidatesResponse = {
   items: Array<{ id: string; name: string; industry: string | null }>;
 };
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
 
 export default function AdminRecommendationsPage() {
   return (
@@ -89,6 +89,7 @@ function AdminRecommendationsPageInner() {
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [roleTab, setRoleTab] = useState<'COMPANY' | 'VENDOR'>('COMPANY');
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
@@ -105,12 +106,12 @@ function AdminRecommendationsPageInner() {
   }, [searchParams]);
 
   const overview = useQuery({
-    queryKey: ['admin-peer-recommendations', page, roleTab, search],
+    queryKey: ['admin-peer-recommendations', page, pageSize, roleTab, search],
     placeholderData: keepPreviousData,
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
-        pageSize: String(PAGE_SIZE),
+        pageSize: String(pageSize),
         type: roleTab,
       });
       if (search.trim()) params.set('q', search.trim());
@@ -425,9 +426,10 @@ function AdminRecommendationsPageInner() {
 
         <Pagination
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           total={overview.data?.total ?? 0}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </Card>
 

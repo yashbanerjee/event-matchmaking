@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -19,6 +19,7 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { EventDateChips } from '@/components/event-date-chips';
+import { Pagination } from '@/components/ui/pagination';
 import {
   eventDateTimeToIso,
   isoToEventDateTime,
@@ -26,6 +27,8 @@ import {
   type EventSchedule,
 } from '@/lib/event-schedule';
 import { cn } from '@/lib/utils';
+
+const DEFAULT_PAGE_SIZE = 10;
 
 type MeetingRow = {
   id: string;
@@ -168,6 +171,8 @@ async function fetchAllAdminMeetings() {
 export default function AdminMeetingsPage() {
   const qc = useQueryClient();
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [filters, setFilters] = useState(emptyFilters);
   const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<MeetingRow | null>(null);
@@ -365,6 +370,15 @@ export default function AdminMeetingsPage() {
       );
     });
   }, [activeMeetings, filters]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, pageSize]);
+
+  const pageRows = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
 
   const filtersActive = Boolean(
     filters.date ||
@@ -573,7 +587,7 @@ export default function AdminMeetingsPage() {
         {viewMode === 'list' && !meetings.isLoading && rows.length > 0 ? (
           <>
             <div className="grid gap-3 sm:hidden">
-              {rows.map((m) => {
+              {pageRows.map((m) => {
                 const invitedBy = m.invitedByLabel || 'Admin created meeting';
                 const isAdminCreated = invitedBy === 'Admin created meeting';
                 return (
@@ -655,7 +669,7 @@ export default function AdminMeetingsPage() {
                   </TR>
                 </THead>
                 <TBody>
-                  {rows.map((m) => {
+                  {pageRows.map((m) => {
                     const invitedBy =
                       m.invitedByLabel || 'Admin created meeting';
                     const isAdminCreated =
@@ -720,6 +734,13 @@ export default function AdminMeetingsPage() {
                 </TBody>
               </Table>
             </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={rows.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </>
         ) : null}
       </Card>
