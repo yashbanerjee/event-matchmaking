@@ -19,8 +19,27 @@ import { EnvService } from '../config/env.service';
 import { OutboxService } from '../messaging/outbox.service';
 import { EmailService } from '../integrations/email/email.service';
 import { PeerRecommendationsService } from '../meetings/peer-recommendations.service';
+import { EffectiveConfigService } from '../settings/effective-config.service';
 import { generateSecureToken, hashToken } from '../common/crypto.util';
 import type { AuthUser } from '../common/decorators';
+
+const EVENT_TIME_ZONE = 'Asia/Dubai';
+
+const APPROVED_MEETING_STATUSES = new Set([
+  'CONFIRMED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'PUBLISHED',
+]);
+
+function dubaiEventDate(instant: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: EVENT_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
 
 @Injectable()
 export class OrganizationsService {
@@ -32,6 +51,7 @@ export class OrganizationsService {
     private readonly env: EnvService,
     private readonly outbox: OutboxService,
     private readonly email: EmailService,
+    private readonly config: EffectiveConfigService,
     @Inject(forwardRef(() => PeerRecommendationsService))
     private readonly peerRecs: PeerRecommendationsService,
   ) {}
@@ -717,6 +737,8 @@ export class OrganizationsService {
     };
 
     const now = new Date();
+    const bookingWindow = await this.config.getMeetingBookingWindow();
+    const eventDates = bookingWindow.dates;
     const [items, total] = await Promise.all([
       this.prisma.organization.findMany({
         where,
@@ -829,6 +851,19 @@ export class OrganizationsService {
         const nextMeeting = [...upcoming].sort(
           (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
         )[0];
+        const byEventDate = eventDates.map((date) => {
+          const onDay = mine.filter(
+            (meeting) => dubaiEventDate(meeting.startsAt) === date,
+          );
+          const approved = onDay.filter((meeting) =>
+            APPROVED_MEETING_STATUSES.has(meeting.status),
+          ).length;
+          return {
+            date,
+            approved,
+            total: onDay.length,
+          };
+        });
         const assignment = assignmentByOrg.get(item.id);
         return {
           ...item,
@@ -857,9 +892,11 @@ export class OrganizationsService {
             confirmed: confirmed.length,
             completed: completed.length,
             nextStartsAt: nextMeeting?.startsAt ?? null,
+            byEventDate,
           },
         };
       }),
+      eventDates,
       page,
       pageSize,
       total,

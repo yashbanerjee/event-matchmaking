@@ -24,9 +24,10 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
-  formatNextMeeting,
+  formatDayMeetingRatio,
   type MeetingStats,
 } from '@/lib/org-directory';
+import { formatEventDate } from '@/lib/event-schedule';
 
 type OrgList = {
   items: Array<{
@@ -57,6 +58,7 @@ type OrgList = {
     } | null;
     meetingStats?: MeetingStats;
   }>;
+  eventDates?: string[];
   total: number;
   page: number;
   pageSize: number;
@@ -205,6 +207,7 @@ export default function VendorsPage() {
   }, [publishedForms]);
 
   const items = data?.items ?? [];
+  const eventDates = data?.eventDates ?? [];
 
   useEffect(() => {
     if ((!addOpen && !csvOpen) || form.formId || innovatorForms.length === 0) {
@@ -362,9 +365,14 @@ export default function VendorsPage() {
                 <TR>
                   <TH>Name</TH>
                   <TH>Status</TH>
-                  <TH>Upcoming</TH>
-                  <TH>Confirmed</TH>
-                  <TH>Next meeting</TH>
+                  {eventDates.map((date) => (
+                    <TH key={date} className="whitespace-nowrap text-center">
+                      <span className="block">{formatEventDate(date, 'chip')}</span>
+                      <span className="mt-0.5 block text-[10px] font-medium normal-case tracking-normal text-[#626F86]">
+                        approved / total
+                      </span>
+                    </TH>
+                  ))}
                   <TH className="w-12 text-right"> </TH>
                 </TR>
               </THead>
@@ -416,11 +424,14 @@ export default function VendorsPage() {
                         {formatVendorStatus(status)}
                       </Badge>
                     </TD>
-                    <TD>{stats?.upcoming ?? 0}</TD>
-                    <TD>{stats?.confirmed ?? 0}</TD>
-                    <TD className="text-[#626F86]">
-                      {formatNextMeeting(stats?.nextStartsAt)}
-                    </TD>
+                    {eventDates.map((date) => (
+                      <TD
+                        key={`${org.id}-${date}`}
+                        className="text-center tabular-nums font-medium"
+                      >
+                        {formatDayMeetingRatio(stats, date)}
+                      </TD>
+                    ))}
                     <TD className="text-right">
                       <OrgRowActions
                         org={org}
