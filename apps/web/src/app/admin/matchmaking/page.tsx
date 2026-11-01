@@ -111,36 +111,6 @@ export default function MatchmakingPage() {
       }>('/settings', { token: getAccessToken() }),
   });
 
-  const recommendationThreshold = useMemo(() => {
-    const aiGroup = aiSettings.data?.integration.find((g) => g.id === 'ai');
-    const field = aiGroup?.fields.find(
-      (f) => f.key === 'ops.recommendationScoreThreshold',
-    );
-    const raw =
-      field?.value !== undefined &&
-      field?.value !== null &&
-      field?.value !== ''
-        ? field.value
-        : (field?.envDefault ?? 50);
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 50;
-  }, [aiSettings.data]);
-
-  const blendWeight = useMemo(() => {
-    const aiGroup = aiSettings.data?.integration.find((g) => g.id === 'ai');
-    const field = aiGroup?.fields.find(
-      (f) => f.key === 'ai.matchmakingBlendWeight',
-    );
-    const raw =
-      field?.value !== undefined &&
-      field?.value !== null &&
-      field?.value !== ''
-        ? field.value
-        : (field?.envDefault ?? 0.3);
-    const n = Number(raw);
-    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.3;
-  }, [aiSettings.data]);
-
   const settingsAiEnabled = useMemo(() => {
     const aiGroup = aiSettings.data?.integration.find((g) => g.id === 'ai');
     const field = aiGroup?.fields.find((f) => f.key === 'ai.enabled');
@@ -287,69 +257,6 @@ export default function MatchmakingPage() {
           {resetMessage}
         </p>
       ) : null}
-
-      <Card className="space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">How AI works</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            AI scores fit from match fields only — personal details (name, phone,
-            LinkedIn, job title) are never used. Recommendations appear only when
-            the total score is at or above the threshold set in Settings.
-            {aiMatchmakingOn
-              ? ''
-              : ' AI matchmaking is currently off, so scoring uses rules only.'}
-          </p>
-        </div>
-        <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {[
-            {
-              step: '1',
-              title: 'Collect match fields',
-              body: 'Topics, regions, capabilities, funding stage, ticket size, thesis/solution — not personal contact info.',
-            },
-            {
-              step: '2',
-              title: 'Rule score',
-              body: 'Tag overlap and preferences produce a baseline fit score.',
-            },
-            {
-              step: '3',
-              title: 'AI compare',
-              body: aiMatchmakingOn
-                ? 'The model compares investor and innovator profile cards and returns a 0–100 score with reasons.'
-                : 'Skipped while AI matchmaking is off.',
-            },
-            {
-              step: '4',
-              title: 'Blend',
-              body: aiMatchmakingOn
-                ? `Rules and AI are combined (current AI weight ${(blendWeight * 100).toFixed(0)}%).`
-                : 'Not applied — final score is the rule score only.',
-            },
-            {
-              step: '5',
-              title: 'Threshold',
-              body: `Only pairs scoring ≥ ${recommendationThreshold} become recommendations.`,
-            },
-          ].map((item) => (
-            <li
-              key={item.step}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"
-            >
-              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                Step {item.step}
-              </div>
-              <div className="mt-1 text-sm font-medium">{item.title}</div>
-              <p className="mt-1 text-xs text-[var(--muted)]">{item.body}</p>
-            </li>
-          ))}
-        </ol>
-        <p className="text-xs text-[var(--muted)]">
-          Use Fine-tune AI below to edit overall threshold, per-tag-category
-          floors, weights, blend, model, and prompts. Re-run scoring after
-          saving changes.
-        </p>
-      </Card>
 
       <AiFineTunePanel />
 
