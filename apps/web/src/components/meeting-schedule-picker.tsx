@@ -23,6 +23,7 @@ export type SchedulePlace = {
   latitude?: number | null;
   longitude?: number | null;
   mapAddress?: string | null;
+  assignedToInvestor?: boolean;
 };
 
 export function MeetingSchedulePicker({
@@ -60,7 +61,6 @@ export function MeetingSchedulePicker({
   const [date, setDate] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<ScheduleSlot | null>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
-  const [step, setStep] = useState<'slot' | 'place'>('slot');
 
   const canQuerySlots = Boolean(requestId || (fromOrgId && toOrgId));
 
@@ -84,7 +84,7 @@ export function MeetingSchedulePicker({
 
   const slots = useQuery({
     queryKey: ['meeting-slots', requestId, fromOrgId, toOrgId, date],
-    enabled: open && Boolean(date) && step === 'slot' && canQuerySlots,
+    enabled: open && Boolean(date) && canQuerySlots,
     queryFn: () => {
       const params = new URLSearchParams({ date });
       if (requestId) params.set('requestId', requestId);
@@ -110,7 +110,7 @@ export function MeetingSchedulePicker({
       fromOrgId,
       toOrgId,
     ],
-    enabled: open && Boolean(selectedSlot) && step === 'place',
+    enabled: open && Boolean(selectedSlot),
     queryFn: () => {
       const params = new URLSearchParams({
         startsAt: selectedSlot!.startsAt,
@@ -119,7 +119,7 @@ export function MeetingSchedulePicker({
       if (requestId) params.set('excludeRequestId', requestId);
       if (fromOrgId) params.set('fromOrgId', fromOrgId);
       if (toOrgId) params.set('toOrgId', toOrgId);
-      return apiFetch<Array<SchedulePlace & { assignedToInvestor?: boolean }>>(
+      return apiFetch<SchedulePlace[]>(
         `/places/available?${params.toString()}`,
         { token: getAccessToken() },
       );
@@ -137,7 +137,6 @@ export function MeetingSchedulePicker({
     setDate('');
     setSelectedSlot(null);
     setSelectedPlaceId(null);
-    setStep('slot');
   };
 
   const close = () => {
@@ -147,6 +146,7 @@ export function MeetingSchedulePicker({
 
   const selectedPlace =
     (places.data ?? []).find((place) => place.id === selectedPlaceId) ?? null;
+  const freeTables = places.data ?? [];
 
   return (
     <Modal
@@ -155,200 +155,230 @@ export function MeetingSchedulePicker({
       description={
         description ||
         (counterpartName
-          ? `Only times when both you and ${counterpartName} are free are shown, then only free meeting places.`
-          : 'Only mutual free times and free meeting places are shown.')
+          ? `Pick a free time with ${counterpartName}, then choose a free table for that slot.`
+          : 'Pick a free time, then choose a free table for that slot.')
       }
       onClose={close}
       wide
       footer={
-        step === 'place' ? (
-          <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStep('slot');
-                setSelectedPlaceId(null);
-              }}
-            >
-              Back to times
-            </Button>
-            <Button
-              disabled={!selectedSlot || !selectedPlace || submitting}
-              loading={submitting}
-              onClick={() => {
-                if (!selectedSlot || !selectedPlace) return;
-                onConfirm({
-                  startsAt: selectedSlot.startsAt,
-                  endsAt: selectedSlot.endsAt,
-                  placeId: selectedPlace.id,
-                  place: selectedPlace,
-                });
-              }}
-            >
-              Confirm place
-            </Button>
-          </div>
-        ) : null
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" disabled={submitting} onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!selectedSlot || !selectedPlace || submitting}
+            loading={submitting}
+            onClick={() => {
+              if (!selectedSlot || !selectedPlace) return;
+              onConfirm({
+                startsAt: selectedSlot.startsAt,
+                endsAt: selectedSlot.endsAt,
+                placeId: selectedPlace.id,
+                place: selectedPlace,
+              });
+            }}
+          >
+            Confirm time & table
+          </Button>
+        </div>
       }
     >
-      {step === 'slot' ? (
-        <div className="space-y-4">
-          <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-xs text-[var(--muted)]">
-            Meetings can only be booked on event days, {schedule.activeStart}–
-            {schedule.activeEnd}.
+      <div className="space-y-5">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-xs text-[var(--muted)]">
+          Meetings can only be booked on event days, {schedule.activeStart}–
+          {schedule.activeEnd}. Only mutual free times and free tables are
+          listed.
+        </p>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium">Event date</label>
+          <EventDateChips
+            dates={schedule.dates}
+            value={date}
+            onChange={(next) => {
+              setDate(next);
+              setSelectedSlot(null);
+              setSelectedPlaceId(null);
+            }}
+          />
+        </div>
+
+        {!canQuerySlots ? (
+          <p className="text-sm text-rose-700">
+            Missing organizations for mutual availability.
           </p>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Event date</label>
-            <EventDateChips
-              dates={schedule.dates}
-              value={date}
-              onChange={(next) => {
-                setDate(next);
-                setSelectedSlot(null);
-              }}
-            />
-          </div>
-          {!canQuerySlots ? (
-            <p className="text-sm text-rose-700">
-              Missing organizations for mutual availability.
-            </p>
-          ) : null}
-          {date && canQuerySlots && slots.isLoading ? (
-            <p className="text-sm text-[var(--muted)]">
-              Loading times when both parties are free…
-            </p>
-          ) : null}
-          {date && slots.error ? (
-            <p className="text-sm text-rose-700">
-              {(slots.error as Error).message}
-            </p>
-          ) : null}
-          {date && slots.data ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium">Available times</p>
-                <p className="text-xs text-[var(--muted)]">
-                  {slots.data.slots.length} open
-                </p>
-              </div>
-              <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
-                {slots.data.slots.map((slot) => (
-                  <button
-                    key={slot.startsAt}
-                    type="button"
-                    className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2.5 text-sm font-semibold tabular-nums transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                    onClick={() => {
-                      setSelectedSlot(slot);
-                      setSelectedPlaceId(null);
-                      setStep('place');
-                    }}
-                  >
-                    {new Date(slot.startsAt).toLocaleTimeString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                  </button>
-                ))}
+        ) : null}
+
+        {date && canQuerySlots ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">Available times</p>
+              <p className="text-xs text-[var(--muted)]">
+                {slots.isLoading
+                  ? 'Loading…'
+                  : `${slots.data?.slots.length ?? 0} open`}
+              </p>
+            </div>
+            {slots.isLoading ? (
+              <p className="text-sm text-[var(--muted)]">
+                Loading times when both parties are free…
+              </p>
+            ) : null}
+            {slots.error ? (
+              <p className="text-sm text-rose-700">
+                {(slots.error as Error).message}
+              </p>
+            ) : null}
+            {slots.data ? (
+              <div className="grid max-h-48 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+                {slots.data.slots.map((slot) => {
+                  const active = selectedSlot?.startsAt === slot.startsAt;
+                  return (
+                    <button
+                      key={slot.startsAt}
+                      type="button"
+                      className={cn(
+                        'rounded-xl border px-3 py-2.5 text-sm font-semibold tabular-nums transition',
+                        active
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-hover)]'
+                          : 'border-[var(--border)] bg-[var(--card-elevated)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]',
+                      )}
+                      onClick={() => {
+                        setSelectedSlot(slot);
+                        setSelectedPlaceId(null);
+                      }}
+                    >
+                      {new Date(slot.startsAt).toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </button>
+                  );
+                })}
                 {slots.data.slots.length === 0 ? (
                   <div className="col-span-full rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center">
                     <p className="text-sm font-medium">No free times</p>
                     <p className="mt-1 text-xs text-[var(--muted)]">
-                      Both parties need to be free with an open meeting place.
-                      Try another date.
+                      Both parties need to be free with an open table. Try
+                      another date.
                     </p>
                   </div>
                 ) : null}
               </div>
-            </div>
-          ) : null}
-          {slots.data?.durationMinutes ||
-          bookingWindow.data?.durationMinutes ? (
-            <p className="text-xs text-[var(--muted)]">
-              Each slot is{' '}
-              {slots.data?.durationMinutes ??
-                bookingWindow.data?.durationMinutes}{' '}
-              minutes.
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm">
-            <p className="text-[var(--muted)]">Selected time</p>
-            <p className="font-semibold">
-              {selectedSlot
-                ? new Date(selectedSlot.startsAt).toLocaleString()
-                : '—'}
-            </p>
+            ) : null}
+            {slots.data?.durationMinutes ||
+            bookingWindow.data?.durationMinutes ? (
+              <p className="text-xs text-[var(--muted)]">
+                Each slot is{' '}
+                {slots.data?.durationMinutes ??
+                  bookingWindow.data?.durationMinutes}{' '}
+                minutes.
+              </p>
+            ) : null}
           </div>
-          {places.data?.some((place) => place.assignedToInvestor) ? (
-            <p className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-sm">
-              This investor has a reserved table for this time. The meeting will
-              be marked there.
-            </p>
-          ) : (
-            <p className="text-sm text-[var(--muted)]">
-              Places already booked, held, or reserved for another investor are
-              hidden.
-            </p>
-          )}
-          {places.isLoading ? (
-            <p className="text-sm text-[var(--muted)]">Loading free places…</p>
-          ) : (
-            <div className="max-h-72 space-y-2 overflow-y-auto">
-              {(places.data ?? []).map((place) => {
-                const selected = selectedPlaceId === place.id;
-                return (
-                  <button
-                    key={place.id}
-                    type="button"
-                    className={cn(
-                      'flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
-                      selected
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                        : 'border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]/40',
-                    )}
-                    onClick={() => setSelectedPlaceId(place.id)}
-                  >
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-semibold">{place.name}</span>
-                      <span className="mt-0.5 block text-sm text-[var(--muted)]">
-                        {place.location ||
-                          place.mapAddress ||
-                          'Location TBA'}
-                      </span>
-                      {place.latitude != null && place.longitude != null ? (
-                        <span className="mt-1 inline-flex rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent-hover)]">
-                          Map pin set
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-                      {place.code}
-                    </span>
-                  </button>
-                );
-              })}
-              {(places.data ?? []).length === 0 ? (
-                <p className="text-sm text-[var(--muted)]">
-                  No free places for this slot. Go back and pick another time.
-                </p>
-              ) : null}
+        ) : null}
+
+        {selectedSlot ? (
+          <div className="space-y-3 border-t border-[var(--border)] pt-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm">
+              <p className="text-[var(--muted)]">Selected time</p>
+              <p className="font-semibold">
+                {new Date(selectedSlot.startsAt).toLocaleString()}
+              </p>
             </div>
-          )}
-          {selectedPlace ? (
-            <p className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-3 py-2 text-sm">
-              Meeting place:{' '}
-              <span className="font-semibold">{selectedPlace.name}</span>
-              {selectedPlace.location
-                ? ` · ${selectedPlace.location}`
-                : ''}
-            </p>
-          ) : null}
-          {error ? <p className="text-sm text-rose-700">{error}</p> : null}
-        </div>
-      )}
+
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium">
+                Free tables for this date & time
+              </p>
+              <p className="text-xs text-[var(--muted)]">
+                {places.isLoading
+                  ? 'Loading…'
+                  : `${freeTables.length} available`}
+              </p>
+            </div>
+
+            {freeTables.some((place) => place.assignedToInvestor) ? (
+              <p className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-sm">
+                Your reserved table for this slot is shown below.
+              </p>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">
+                Only tables that are free at the selected time are listed.
+                Booked or held tables stay hidden.
+              </p>
+            )}
+
+            {places.isLoading ? (
+              <p className="text-sm text-[var(--muted)]">Loading free tables…</p>
+            ) : places.error ? (
+              <p className="text-sm text-rose-700">
+                {(places.error as Error).message}
+              </p>
+            ) : (
+              <div className="max-h-64 space-y-2 overflow-y-auto">
+                {freeTables.map((place) => {
+                  const selected = selectedPlaceId === place.id;
+                  return (
+                    <button
+                      key={place.id}
+                      type="button"
+                      className={cn(
+                        'flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+                        selected
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                          : 'border-[var(--border)] hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]/40',
+                      )}
+                      onClick={() => setSelectedPlaceId(place.id)}
+                    >
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold">
+                          {place.name}
+                          {place.assignedToInvestor ? ' · Reserved for you' : ''}
+                        </span>
+                        <span className="mt-0.5 block text-sm text-[var(--muted)]">
+                          {place.location ||
+                            place.mapAddress ||
+                            'Location TBA'}
+                        </span>
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
+                        {place.code}
+                      </span>
+                    </button>
+                  );
+                })}
+                {freeTables.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center">
+                    <p className="text-sm font-medium">No free tables</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Pick another time — every table is booked or held for this
+                      slot.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {selectedPlace ? (
+              <p className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-3 py-2 text-sm">
+                Table:{' '}
+                <span className="font-semibold">{selectedPlace.name}</span>
+                {selectedPlace.location
+                  ? ` · ${selectedPlace.location}`
+                  : ''}
+              </p>
+            ) : null}
+          </div>
+        ) : date ? (
+          <p className="text-sm text-[var(--muted)]">
+            Select a time to see which tables are free.
+          </p>
+        ) : null}
+
+        {error ? <p className="text-sm text-rose-700">{error}</p> : null}
+      </div>
     </Modal>
   );
 }

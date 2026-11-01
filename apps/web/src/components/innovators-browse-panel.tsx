@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/empty-state';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 import { cn } from '@/lib/utils';
 
@@ -71,6 +72,8 @@ export function InnovatorsBrowsePanel({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
   const [interestOrgId, setInterestOrgId] = useState<string | null>(null);
+  const [scheduleFor, setScheduleFor] = useState<BrowseItem | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [interestSent, setInterestSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,27 +124,45 @@ export function InnovatorsBrowsePanel({
   });
 
   const expressInterest = useMutation({
-    mutationFn: (toOrgId: string) => {
+    mutationFn: (input: {
+      toOrgId: string;
+      mode: 'INTEREST' | 'SCHEDULED';
+      startsAt?: string;
+      placeId?: string;
+    }) => {
       if (!fromOrgId) throw new Error('Missing organization');
       return apiFetch('/meeting-requests', {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify({
           fromOrgId,
-          toOrgId,
-          mode: 'INTEREST',
+          toOrgId: input.toOrgId,
+          mode: input.mode,
+          startsAt: input.startsAt,
+          placeId: input.placeId,
+          message:
+            input.mode === 'SCHEDULED'
+              ? 'Would like to meet at the proposed time and place.'
+              : undefined,
         }),
       });
     },
-    onSuccess: async (_data, toOrgId) => {
+    onSuccess: async (_data, variables) => {
       setInterestOrgId(null);
+      setScheduleFor(null);
+      setScheduleError(null);
       setError(null);
-      setInterestSent(toOrgId);
+      setInterestSent(variables.toOrgId);
       await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
     },
     onError: (err) => {
       setInterestOrgId(null);
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      if (scheduleFor) {
+        setScheduleError(message);
+      } else {
+        setError(message);
+      }
     },
   });
 
@@ -202,7 +223,12 @@ export function InnovatorsBrowsePanel({
 
   const items = directory.data?.items ?? [];
   const total = directory.data?.total ?? 0;
-  const counterpartLabel = directory.data?.counterpartLabel ?? 'partners';
+  const counterpartLabel =
+    directory.data?.counterpartLabel ??
+    catalog.data?.counterpartLabel ??
+    'partners';
+  /** Investors browsing innovators propose time/place (same as Recommendations). */
+  const isInvestorBrowse = counterpartLabel === 'innovators';
   const singularLabel =
     counterpartLabel === 'innovators'
       ? 'Innovator'
@@ -231,11 +257,19 @@ export function InnovatorsBrowsePanel({
     setSelectedTags((prev) => prev.filter((tag) => tag !== value));
   };
 
-  const sendInterest = (organizationId: string) => {
+  const sendInterest = (item: BrowseItem) => {
     setError(null);
+    setScheduleError(null);
     setInterestSent(null);
-    setInterestOrgId(organizationId);
-    expressInterest.mutate(organizationId);
+    if (isInvestorBrowse) {
+      setScheduleFor(item);
+      return;
+    }
+    setInterestOrgId(item.organizationId);
+    expressInterest.mutate({
+      toOrgId: item.organizationId,
+      mode: 'INTEREST',
+    });
   };
 
   return (
@@ -322,8 +356,9 @@ export function InnovatorsBrowsePanel({
         ) : null}
         {interestSent ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Interest sent. Open <strong>Requests</strong> after they accept to
-            schedule.
+            {isInvestorBrowse
+              ? 'Meeting request sent with your proposed time. They can accept or decline under Requests.'
+              : 'Interest sent. The investor will propose a meeting time under Requests.'}
           </p>
         ) : null}
 
@@ -419,12 +454,16 @@ export function InnovatorsBrowsePanel({
                       type="button"
                       className="h-8 px-2.5 text-xs"
                       disabled={
-                        interestOrgId === item.organizationId &&
+                        (interestOrgId === item.organizationId ||
+                          scheduleFor?.organizationId ===
+                            item.organizationId) &&
                         expressInterest.isPending
                       }
-                      onClick={() => sendInterest(item.organizationId)}
+                      onClick={() => sendInterest(item)}
                     >
-                      {interestOrgId === item.organizationId &&
+                      {(interestOrgId === item.organizationId ||
+                        scheduleFor?.organizationId ===
+                          item.organizationId) &&
                       expressInterest.isPending
                         ? 'Sending…'
                         : "I'm interested"}
@@ -445,11 +484,37 @@ export function InnovatorsBrowsePanel({
           fromOrgId && profileItem
             ? () => {
                 setProfileOrgId(null);
-                sendInterest(profileItem.organizationId);
+                sendInterest(profileItem);
               }
             : undefined
         }
         requestMeetingLabel="I'm interested"
+      />
+
+      <MeetingSchedulePicker
+        open={Boolean(scheduleFor)}
+        title="Propose meeting time"
+        description="Choose a free day and time, then pick a free table. The innovator can only accept or decline."
+        counterpartName={scheduleFor?.name}
+        fromOrgId={fromOrgId}
+        toOrgId={scheduleFor?.organizationId}
+        submitting={expressInterest.isPending}
+        error={scheduleError}
+        onClose={() => {
+          if (expressInterest.isPending) return;
+          setScheduleFor(null);
+          setScheduleError(null);
+        }}
+        onConfirm={({ startsAt, placeId }) => {
+          if (!scheduleFor) return;
+          setInterestOrgId(scheduleFor.organizationId);
+          expressInterest.mutate({
+            toOrgId: scheduleFor.organizationId,
+            mode: 'SCHEDULED',
+            startsAt,
+            placeId,
+          });
+        }}
       />
     </>
   );

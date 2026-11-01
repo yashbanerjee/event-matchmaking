@@ -464,7 +464,7 @@ export function RecommendationsPanel({
       <MeetingSchedulePicker
         open={Boolean(scheduleFor)}
         title="Propose meeting time"
-        description="Choose a day and time for this innovator. They can only accept or decline — they cannot change the schedule."
+        description="Choose a free day and time, then pick a free table. The innovator can only accept or decline."
         counterpartName={scheduleFor?.name}
         fromOrgId={fromOrgId}
         toOrgId={scheduleFor?.organizationId}
