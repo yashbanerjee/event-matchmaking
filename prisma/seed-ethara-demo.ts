@@ -31,43 +31,31 @@ const DEMO_EMAIL_SUFFIXES = [
 
 type TagDef = { value: string; label: string };
 
-const PLACES = [
-  {
-    code: 'ETIHAD_ARENA',
-    name: 'Blue Zone Dialogue Hall',
-    location: 'UN Water Conference, Abu Dhabi',
-    capacity: 40,
-    description: 'Official dialogue space for investor–innovator meetings.',
-  },
-  {
-    code: 'ETIHAD_LIVE',
-    name: 'Investments for Water Lounge',
-    location: 'UN Water Conference, Abu Dhabi',
-    capacity: 24,
-    description: 'Finance and blended-capital meeting lounge.',
-  },
-  {
-    code: 'YAS_MARINA',
-    name: 'Innovation Pavilion',
-    location: 'Oasis, Abu Dhabi',
-    capacity: 20,
-    description: 'Demo tables for water technology and utility solutions.',
-  },
-  {
-    code: 'YAS_GATEWAY',
-    name: 'WASH Partnership Room',
-    location: 'Oasis, Abu Dhabi',
-    capacity: 16,
-    description: 'Community WASH and philanthropy meetings.',
-  },
-  {
-    code: 'COCA_COLA_ARENA',
-    name: 'Climate Adaptation Suite',
-    location: 'UN Water Conference, Abu Dhabi',
-    capacity: 12,
-    description: 'Drought, flood, and nature-based solution meetings.',
-  },
-] as const;
+const ARENA_LOCATION = 'Coca Cola Arena';
+const TABLE_COUNT = 20;
+
+/** One home table per investor, all on the Coca Cola Arena floor. */
+const PLACES = Array.from({ length: TABLE_COUNT }, (_, index) => {
+  const n = index + 1;
+  const code = `CCA_T${String(n).padStart(2, '0')}`;
+  return {
+    code,
+    name: `Table ${n}`,
+    location: ARENA_LOCATION,
+    capacity: 4,
+    description: `Investor home table ${n} at ${ARENA_LOCATION}.`,
+  };
+});
+
+function tableCodeForInvestor(index: number) {
+  return `CCA_T${String(index + 1).padStart(2, '0')}`;
+}
+
+function allDayWindow(date: string) {
+  const startsAt = new Date(`${date}T00:00:00+04:00`);
+  const endsAt = new Date(startsAt.getTime() + 24 * 60 * 60 * 1000);
+  return { startsAt, endsAt };
+}
 
 const CLIENTS = WATER_DEMO_INVESTORS;
 const GUESTS = WATER_DEMO_INNOVATORS;
@@ -99,8 +87,9 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     fields: water.innovatorForm.fields,
   };
 
-  // ── Places ───────────────────────────────────────────────────────────────
+  // ── Places: 20 tables at Coca Cola Arena ────────────────────────────────
   const placeIds: Record<string, string> = {};
+  const arenaTableCodes = PLACES.map((place) => place.code);
   for (const place of PLACES) {
     const row = await prisma.place.upsert({
       where: { code: place.code },
@@ -122,6 +111,11 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
     placeIds[place.code] = row.id;
   }
+  // Keep older venue rows for history but hide them from booking.
+  await prisma.place.updateMany({
+    where: { code: { notIn: arenaTableCodes } },
+    data: { isActive: false },
+  });
 
   await prisma.systemSetting.upsert({
     where: { key: 'registration.enabled' },
@@ -213,6 +207,18 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         where: { meetingId: { in: meetingIds } },
       });
       await prisma.meetingRequest.deleteMany({
+        where: { meetingId: { in: meetingIds } },
+      });
+      await prisma.meetingConfirmation.deleteMany({
+        where: { meetingId: { in: meetingIds } },
+      });
+      await prisma.meetingParticipant.deleteMany({
+        where: { meetingId: { in: meetingIds } },
+      });
+      await prisma.meetingStatusHistory.deleteMany({
+        where: { meetingId: { in: meetingIds } },
+      });
+      await prisma.meetingReschedule.deleteMany({
         where: { meetingId: { in: meetingIds } },
       });
       await prisma.meetingOccupancy.deleteMany({
@@ -341,6 +347,73 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       }
     }
     return out;
+  }
+
+  function firstOf(value: string | string[] | undefined, fallback: string) {
+    if (Array.isArray(value) && value.length) return value[0]!;
+    if (typeof value === 'string' && value.trim()) return value;
+    return fallback;
+  }
+
+  function normalizeTicket(raw: string): string {
+    const known = [
+      'under-250k',
+      '250k-1m',
+      '1m-5m',
+      '5m-25m',
+      '25m-plus',
+    ] as const;
+    if ((known as readonly string[]).includes(raw)) return raw;
+    const compact = raw.toLowerCase().replace(/\s+/g, '');
+    if (compact.includes('50m') || compact.includes('25m-plus')) return '25m-plus';
+    if (compact.includes('25m') || compact.includes('20m') || compact.includes('15m') || compact.includes('12m') || compact.includes('10m') || compact.includes('8m')) {
+      return compact.startsWith('100k') || compact.startsWith('250k') || compact.startsWith('500k') || compact.startsWith('750k')
+        ? '1m-5m'
+        : '5m-25m';
+    }
+    if (compact.includes('5m') || compact.includes('4m') || compact.includes('3m') || compact.includes('2m') || compact.includes('1.5m') || compact.includes('1m')) {
+      return '1m-5m';
+    }
+    if (compact.includes('750k') || compact.includes('600k') || compact.includes('500k') || compact.includes('400k') || compact.includes('300k') || compact.includes('250k')) {
+      return '250k-1m';
+    }
+    return 'under-250k';
+  }
+
+  function schedulingIndustry(raw: string): string {
+    const text = raw.toLowerCase();
+    if (text.includes('agri') || text.includes('farm') || text.includes('irrig')) return 'agriculture';
+    if (text.includes('energy') || text.includes('solar') || text.includes('renew')) return 'energy';
+    if (text.includes('food')) return 'food';
+    if (text.includes('climate') || text.includes('nature') || text.includes('adapt')) return 'climate';
+    if (text.includes('software') || text.includes('digital') || text.includes('ai') || text.includes('iot')) {
+      return 'technology';
+    }
+    if (text.includes('automat')) return 'automation';
+    if (text.includes('water') || text.includes('wash') || text.includes('desal') || text.includes('utilit') || text.includes('sanit')) {
+      return 'water';
+    }
+    return 'water';
+  }
+
+  function phoneFor(country: string, index: number): string {
+    const prefixes: Record<string, string> = {
+      AE: '+971 50',
+      SA: '+966 55',
+      EG: '+20 10',
+      KE: '+254 7',
+      NG: '+234 80',
+      ZA: '+27 82',
+      IN: '+91 98',
+      GB: '+44 77',
+      US: '+1 415',
+      DE: '+49 170',
+      SN: '+221 77',
+      SG: '+65 8',
+    };
+    const prefix = prefixes[country] ?? '+971 50';
+    const n = String(100000 + (index % 80000)).slice(-6);
+    return `${prefix} ${n}`;
   }
 
   const investorOrgs: Array<{
@@ -481,17 +554,25 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     }).catch(() => undefined);
 
     const responseData = {
-      industry: investor.industry,
+      contact_name: `${investor.firstName} ${investor.lastName}`,
+      job_title: investor.title,
+      phone: phoneFor(investor.country, investorOrgs.length),
+      linkedin_url: investor.website,
+      country: investor.country,
+      role_category: 'investor',
+      industry: schedulingIndustry(investor.industry),
+      visit_purpose: 'to_find_innovators',
       organization_summary: investor.about,
       focus_events: investor.focusEvents,
-      categories: investor.preferredCategories,
-      capabilities: investor.requiredCapabilities,
-      regions: investor.regions,
+      categories: firstOf(investor.preferredCategories, 'digital-water'),
+      capabilities: firstOf(investor.requiredCapabilities, 'data-ai'),
+      regions: firstOf(investor.regions, 'mena'),
+      commercial_tags: firstOf(investor.commercialTags, 'equity'),
       commercialTags: investor.commercialTags,
-      contact_phone: '+971 2 656 9999',
+      contact_phone: phoneFor(investor.country, investorOrgs.length),
       partnership_goal: investor.partnershipGoal,
-      ticket_size: investor.ticketSize,
-      investment_stages: investor.investmentStages,
+      ticket_size: normalizeTicket(investor.ticketSize),
+      investment_stages: firstOf(investor.investmentStages, 'early-revenue'),
     };
 
     await prisma.formSubmission.create({
@@ -511,6 +592,39 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
 
     investorOrgs.push({ orgId: org.id, userId: user.id, def: investor });
+  }
+
+  // ── Home tables: one Coca Cola Arena table per investor ───────────────────
+  const assigner =
+    (await prisma.user.findFirst({
+      where: {
+        roles: { some: { role: { code: { in: ['SUPER_ADMIN', 'ADMIN'] } } } },
+      },
+      select: { id: true },
+    })) ?? { id: investorOrgs[0]!.userId };
+
+  await prisma.investorPlaceAssignment.deleteMany({
+    where: { placeId: { in: Object.values(placeIds) } },
+  });
+
+  for (let i = 0; i < investorOrgs.length; i++) {
+    const investor = investorOrgs[i]!;
+    const placeId = placeIds[tableCodeForInvestor(i)];
+    if (!placeId) continue;
+    for (const date of eventDates) {
+      const { startsAt, endsAt } = allDayWindow(date);
+      await prisma.investorPlaceAssignment.create({
+        data: {
+          organizationId: investor.orgId,
+          placeId,
+          startsAt,
+          endsAt,
+          allDay: true,
+          note: `Home table at ${ARENA_LOCATION}`,
+          createdById: assigner.id,
+        },
+      });
+    }
   }
 
   // ── Innovators ───────────────────────────────────────────────────────────────
@@ -648,14 +762,22 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
 
     const responseData = {
-      industry: innovator.industry,
+      contact_name: `${innovator.firstName} ${innovator.lastName}`,
+      job_title: innovator.title,
+      phone: phoneFor(innovator.country, innovatorOrgs.length + 20),
+      linkedin_url: innovator.website,
+      country: innovator.country,
+      role_category: 'founder',
+      industry: schedulingIndustry(innovator.industry),
+      visit_purpose: 'to_meet_investors',
       organization_summary: innovator.about,
       focus_events: innovator.focusEvents,
-      categories: innovator.categories,
-      capabilities: innovator.capabilities,
-      regions: innovator.operatingRegions,
+      categories: firstOf(innovator.categories, 'digital-water'),
+      capabilities: firstOf(innovator.capabilities, 'data-ai'),
+      regions: firstOf(innovator.operatingRegions, 'global'),
+      commercial_tags: firstOf(innovator.commercialTags, 'equity'),
       commercialTags: innovator.commercialTags,
-      ticket_size: innovator.ticketSize,
+      ticket_size: normalizeTicket(innovator.ticketSize),
       investment_stages: innovator.stage,
       impact_metrics: innovator.impactMetrics,
       partnership_goal: innovator.partnershipGoal,
@@ -727,7 +849,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
   }
 
-  // 1) Confirmed meeting: Yasalam ↔ Zimmer @ Etihad Arena (Hans Zimmer track)
+  // 1) Confirmed meeting @ investor 1 home table (Coca Cola Arena)
   {
     const startsAt = daysFromNow(5, 11, 0);
     const meeting = await createMeeting({
@@ -735,7 +857,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       vendorOrgId: innovatorOrgs[0]!.orgId,
       startsAt,
       durationMinutes: 45,
-      placeId: placeIds.ETIHAD_ARENA!,
+      placeId: placeIds[tableCodeForInvestor(0)]!,
       status: 'CONFIRMED',
       objectives:
         'Discuss NRW reduction pilots and utility offtake for leak-detection systems.',
@@ -752,7 +874,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         proposedStartsAt: startsAt,
         proposedEndsAt: meeting.endsAt,
         proposedByOrgId: investorOrgs[0]!.orgId,
-        placeId: placeIds.ETIHAD_ARENA!,
+        placeId: placeIds[tableCodeForInvestor(0)]!,
         meetingId: meeting.id,
       },
     });
@@ -774,7 +896,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
   }
 
-  // 2) Completed meeting + feedback: Gulf GP ↔ Marina Circuit
+  // 2) Completed meeting + feedback @ investor 2 home table
   {
     const startsAt = daysFromNow(-2, 10, 0);
     const meeting = await createMeeting({
@@ -782,7 +904,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       vendorOrgId: innovatorOrgs[1]!.orgId,
       startsAt,
       durationMinutes: 30,
-      placeId: placeIds.YAS_MARINA!,
+      placeId: placeIds[tableCodeForInvestor(1)]!,
       status: 'COMPLETED',
       objectives:
         'Review wastewater reuse economics for irrigation projects in the Sahel.',
@@ -798,7 +920,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         proposedStartsAt: startsAt,
         proposedEndsAt: meeting.endsAt,
         proposedByOrgId: innovatorOrgs[1]!.orgId,
-        placeId: placeIds.YAS_MARINA!,
+        placeId: placeIds[tableCodeForInvestor(1)]!,
         meetingId: meeting.id,
       },
     });
@@ -822,7 +944,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
   }
 
-  // 3) Awaiting confirmation: Family Moments ↔ RAF @ Etihad Arena
+  // 3) Awaiting confirmation @ investor 3 home table
   {
     const startsAt = daysFromNow(8, 14, 30);
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
@@ -831,7 +953,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       vendorOrgId: innovatorOrgs[2]!.orgId,
       startsAt,
       durationMinutes: 30,
-      placeId: placeIds.ETIHAD_ARENA!,
+      placeId: placeIds[tableCodeForInvestor(2)]!,
       status: 'AWAITING_CONFIRMATION',
       objectives:
         'Discuss modular desal deployment for remote communities in Jordan and UAE.',
@@ -848,13 +970,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
         proposedByOrgId: investorOrgs[2]!.orgId,
-        placeId: placeIds.ETIHAD_ARENA!,
+        placeId: placeIds[tableCodeForInvestor(2)]!,
         meetingId: meeting.id,
       },
     });
   }
 
-  // 4) Awaiting confirmation: Yasalam → Marina Circuit @ Etihad Live
+  // 4) Awaiting confirmation @ investor 1 home table
   {
     const startsAt = daysFromNow(9, 17, 0);
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
@@ -869,12 +991,12 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
         proposedByOrgId: investorOrgs[0]!.orgId,
-        placeId: placeIds.ETIHAD_LIVE!,
+        placeId: placeIds[tableCodeForInvestor(0)]!,
       },
     });
   }
 
-  // 5) Awaiting confirmation: Gulf GP → Zimmer @ Etihad Arena
+  // 5) Awaiting confirmation @ investor 2 home table
   {
     const startsAt = daysFromNow(12, 15, 0);
     const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
@@ -889,32 +1011,31 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         proposedStartsAt: startsAt,
         proposedEndsAt: endsAt,
         proposedByOrgId: investorOrgs[1]!.orgId,
-        placeId: placeIds.ETIHAD_ARENA!,
+        placeId: placeIds[tableCodeForInvestor(1)]!,
       },
     });
   }
 
-  // 6) Extra confirmed calendar meeting: Family ↔ Zimmer (optional collab)
+  // 6) Extra confirmed calendar meeting @ investor 3 home table
   await createMeeting({
     companyOrgId: investorOrgs[2]!.orgId,
     vendorOrgId: innovatorOrgs[0]!.orgId,
     startsAt: daysFromNow(3, 13, 0),
     durationMinutes: 30,
-    placeId: placeIds.COCA_COLA_ARENA!,
+    placeId: placeIds[tableCodeForInvestor(2)]!,
     status: 'CONFIRMED',
     objectives:
       'Explore nature-based watershed program co-investment in West Africa.',
     score: 74,
   });
 
-  // 7–12) Today's floor pulse: mixed live / done / missed / remaining
+  // 7–12) Today's floor pulse: each meeting on that investor's home table
   const todayMeetings: Array<{
     investor: number;
     innovator: number;
     hour: number;
     minute: number;
     status: 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_SHOW';
-    place: string;
     score: number;
     quality?: number;
     outcome?: 'SUCCESSFUL_DISCUSSION' | 'INTERESTED_IN_PARTNERSHIP' | 'NOT_A_FIT';
@@ -925,7 +1046,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 9,
       minute: 0,
       status: 'COMPLETED',
-      place: 'ETIHAD_ARENA',
       score: 86,
       quality: 5,
       outcome: 'SUCCESSFUL_DISCUSSION',
@@ -936,7 +1056,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 10,
       minute: 0,
       status: 'COMPLETED',
-      place: 'YAS_MARINA',
       score: 79,
       quality: 4,
       outcome: 'INTERESTED_IN_PARTNERSHIP',
@@ -947,7 +1066,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 11,
       minute: 0,
       status: 'NO_SHOW',
-      place: 'COCA_COLA_ARENA',
       score: 68,
     },
     {
@@ -956,7 +1074,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 12,
       minute: 0,
       status: 'IN_PROGRESS',
-      place: 'ETIHAD_LIVE',
       score: 91,
     },
     {
@@ -965,7 +1082,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 15,
       minute: 0,
       status: 'CONFIRMED',
-      place: 'ETIHAD_ARENA',
       score: 77,
     },
     {
@@ -974,7 +1090,6 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       hour: 16,
       minute: 30,
       status: 'CONFIRMED',
-      place: 'YAS_MARINA',
       score: 73,
     },
   ];
@@ -986,7 +1101,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       vendorOrgId: innovatorOrgs[row.innovator]!.orgId,
       startsAt,
       durationMinutes: 30,
-      placeId: placeIds[row.place]!,
+      placeId: placeIds[tableCodeForInvestor(row.investor)]!,
       status: row.status,
       objectives: 'On-site investor / innovator session.',
       score: row.score,
@@ -1017,14 +1132,18 @@ UN Water demo roster seeded (${CLIENTS.length} investors, ${GUESTS.length} innov
 
 Password for all demo users: ${SAMPLE_PASSWORD}
 
+Venue: ${ARENA_LOCATION} — ${TABLE_COUNT} tables (CCA_T01…CCA_T${String(TABLE_COUNT).padStart(2, '0')}), one per investor.
+
 Suggested strong match pair (NRW / digital water):
   Investor: ${CLIENTS[1]!.email}  /  ${SAMPLE_PASSWORD}
   Innovator:  ${GUESTS[0]!.email}  /  ${SAMPLE_PASSWORD}
 
-Investors (${CLIENTS.length} total, recommendations capped at 10):
-${CLIENTS.map((c, i) => `  ${i + 1}) ${c.email}  — ${c.name}`).join('\n')}
+All accounts are verified with completed onboarding forms.
 
-Innovators (${GUESTS.length} total, recommendations capped at 10):
+Investors (${CLIENTS.length}):
+${CLIENTS.map((c, i) => `  ${i + 1}) ${c.email}  — ${c.name}  @ Table ${i + 1}`).join('\n')}
+
+Innovators (${GUESTS.length}):
 ${GUESTS.map((g, i) => `  ${i + 1}) ${g.email}  — ${g.name}`).join('\n')}
 `);
 }

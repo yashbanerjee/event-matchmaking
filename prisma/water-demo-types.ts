@@ -1,0 +1,47 @@
+export type WaterDemoInvestor = {
+  code: string;
+  name: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  title: string;
+  industry: string;
+  country: string;
+  region: string;
+  website: string;
+  preferredCategories: string[];
+  requiredCapabilities: string[];
+  regions: string[];
+  commercialTags: string[];
+  featured: boolean;
+  about: string;
+  focusEvents: string;
+  partnershipGoal: string;
+  ticketSize: string;
+  investmentStages: string[];
+};
+
+export type WaterDemoInnovator = {
+  code: string;
+  name: string;
+  displayName: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  title: string;
+  industry: string;
+  country: string;
+  region: string;
+  website: string;
+  categories: string[];
+  capabilities: string[];
+  operatingRegions: string[];
+  commercialTags: string[];
+  featured: boolean;
+  about: string;
+  focusEvents: string;
+  partnershipGoal: string;
+  ticketSize: string;
+  stage: string;
+  impactMetrics: string;
+};

@@ -141,6 +141,16 @@ class MeetingItem {
   }
 }
 
+class RecommendationsResult {
+  const RecommendationsResult({
+    required this.items,
+    this.computing = false,
+  });
+
+  final List<RecommendationItem> items;
+  final bool computing;
+}
+
 class RecommendationItem {
   const RecommendationItem({
     required this.organizationId,
@@ -150,6 +160,7 @@ class RecommendationItem {
     this.reasons = const [],
     this.industry,
     this.type,
+    this.matchSource,
   });
 
   final String organizationId;
@@ -159,6 +170,7 @@ class RecommendationItem {
   final List<String> reasons;
   final String? industry;
   final String? type;
+  final String? matchSource;
 
   factory RecommendationItem.fromJson(Map<String, dynamic> json) {
     final rawReasons = json['reasons'];
@@ -185,6 +197,7 @@ class RecommendationItem {
       reasons: fallbackReasons,
       industry: json['industry'] as String?,
       type: json['type'] as String?,
+      matchSource: json['matchSource'] as String?,
     );
   }
 }
@@ -324,7 +337,7 @@ class MatchmakingRepository {
         .toList();
   }
 
-  Future<List<RecommendationItem>> recommendations({int limit = 12}) async {
+  Future<RecommendationsResult> recommendations({int limit = 12}) async {
     final data = await _api.get<Map<String, dynamic>>(
       '/recommendations',
       query: {'limit': limit},
@@ -341,7 +354,7 @@ class MatchmakingRepository {
     final items = (data['items'] as List? ?? const []);
     final merged = [...featured, ...items];
     final seen = <String>{};
-    return merged
+    final parsed = merged
         .map((e) => RecommendationItem.fromJson(e as Map<String, dynamic>))
         .where((e) => seen.add(e.organizationId))
         .where(
@@ -350,7 +363,12 @@ class MatchmakingRepository {
               e.type == null ||
               e.type == allowedPeerType,
         )
+        .where((e) => e.matchSource == 'admin' || (e.score ?? 0) > 0)
         .toList();
+    return RecommendationsResult(
+      items: parsed,
+      computing: data['computing'] == true,
+    );
   }
 
   Future<OrgPublicProfile> publicProfile(String organizationId) {

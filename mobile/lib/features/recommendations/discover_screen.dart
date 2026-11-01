@@ -28,10 +28,16 @@ class DiscoverScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
-        data: (items) {
+        data: (result) {
+          final items = result.items;
           if (items.isEmpty) {
-            return const Center(
-              child: Text('No recommendations yet. Complete your profile filters.'),
+            return Center(
+              child: Text(
+                result.computing
+                    ? 'Finding your matches with AI and tags…'
+                    : 'No strong matches yet. We only show partners above the score threshold.',
+                textAlign: TextAlign.center,
+              ),
             );
           }
           return RefreshIndicator(
@@ -77,9 +83,9 @@ class DiscoverScreen extends ConsumerWidget {
                                     fontSize: 16,
                                   ),
                                 ),
-                                if (item.score != null)
+                                if (item.score != null && item.score! > 0)
                                   Text(
-                                    'Match ${item.score!.toStringAsFixed(0)}%',
+                                    'Match ${item.score!.toStringAsFixed(0)}% · ${item.matchSource == 'ai' ? 'AI' : item.matchSource == 'admin' ? 'Admin' : 'Tags'}',
                                     style: const TextStyle(
                                       color: AppColors.accentDeep,
                                       fontWeight: FontWeight.w700,

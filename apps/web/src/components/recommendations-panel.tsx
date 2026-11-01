@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/empty-state';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 
+type MatchSource = 'ai' | 'tags' | 'admin';
+
 type Recommendation = {
   organizationId: string;
   name: string;
@@ -23,7 +25,23 @@ type Recommendation = {
   explanation: string;
   aiDescription?: string | null;
   featured?: boolean;
+  matchSource?: MatchSource;
 };
+
+function isQualifiedMatch(item: Recommendation): boolean {
+  if (item.matchSource === 'admin') return true;
+  return Number.isFinite(item.score) && item.score > 0;
+}
+
+function sourceLabel(item: Recommendation): { text: string; title: string } {
+  if (item.matchSource === 'admin') {
+    return { text: 'Admin pick', title: 'Pinned by an administrator' };
+  }
+  if (item.matchSource === 'ai') {
+    return { text: 'AI match', title: 'Scored by the AI recommendation model' };
+  }
+  return { text: 'Tag match', title: 'Scored from shared profile tags' };
+}
 
 function matchReasons(item: Recommendation): string[] {
   if (item.aiDescription?.trim()) {
@@ -78,17 +96,23 @@ function SuggestionGrid({
                 >
                   {item.name}
                 </p>
-                {featured ? (
-                  <Badge variant="accent" className="shrink-0">
-                    Admin pick
-                  </Badge>
-                ) : null}
+                <Badge
+                  variant={
+                    item.matchSource === 'ai' || featured
+                      ? 'accent'
+                      : 'secondary'
+                  }
+                  className="shrink-0"
+                  title={sourceLabel(item).title}
+                >
+                  {sourceLabel(item).text}
+                </Badge>
               </div>
               <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
                 {item.industry || item.type}
               </p>
             </button>
-            {!featured ? (
+            {item.score > 0 ? (
               <Badge variant="secondary" className="shrink-0">
                 {Math.round(item.score)}%
               </Badge>
@@ -178,11 +202,14 @@ export function RecommendationsPanel({
     queryKey: ['recommendations'],
     staleTime: 0,
     refetchOnWindowFocus: true,
+    refetchInterval: (query) =>
+      query.state.data?.computing ? 3000 : false,
     queryFn: () =>
       apiFetch<{
         items: Recommendation[];
         featured: Recommendation[];
         perspective: 'COMPANY' | 'VENDOR' | null;
+        computing?: boolean;
       }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_MAX_PER_ORG}`, {
         token: getAccessToken(),
       }),
@@ -222,11 +249,16 @@ export function RecommendationsPanel({
         ? 'COMPANY'
         : null;
   const featured = (recs.data?.featured ?? []).filter(
-    (item) => !allowedPeerType || item.type === allowedPeerType,
+    (item) =>
+      isQualifiedMatch(item) &&
+      (!allowedPeerType || item.type === allowedPeerType),
   );
   const items = (recs.data?.items ?? []).filter(
-    (item) => !allowedPeerType || item.type === allowedPeerType,
+    (item) =>
+      isQualifiedMatch(item) &&
+      (!allowedPeerType || item.type === allowedPeerType),
   );
+  const computing = Boolean(recs.data?.computing);
   const empty = featured.length === 0 && items.length === 0;
   const profileItem = profileOrgId
     ? (featured.find((r) => r.organizationId === profileOrgId) ??
@@ -261,6 +293,12 @@ export function RecommendationsPanel({
           </p>
         </div>
 
+        {computing && !empty ? (
+          <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm text-[var(--muted)]">
+            Refreshing AI and tag scores — only matches above the threshold stay
+            visible.
+          </p>
+        ) : null}
         {error ? (
           <p className="mb-3 text-sm text-rose-700" role="alert">
             {error}
@@ -275,10 +313,15 @@ export function RecommendationsPanel({
 
         {recs.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
+        ) : computing && empty ? (
+          <EmptyState
+            title="Finding your matches"
+            description="We are running AI and tag scoring against verified partners. This page will update when real matches are ready."
+          />
         ) : empty ? (
           <EmptyState
-            title="No recommendations yet"
-            description="Complete your profile preferences, or ask an admin to feature matching partners."
+            title="No strong matches yet"
+            description="We only show partners that score above the match threshold. Update your topics and capabilities, or ask an admin to pin a partner."
           />
         ) : (
           <div className="space-y-4">

@@ -1,59 +1,18 @@
 /**
- * UN Water event demo roster — 10 investors, 20 innovators.
+ * UN Water event demo roster — 20 investors, 100 innovators.
  * Emails use @unwater.ethara.demo; password EtharaEvents26! (see seed-ethara-demo).
  */
+import {
+  EXTRA_INNOVATORS,
+  EXTRA_INVESTORS,
+} from './water-demo-extra';
+import type { WaterDemoInnovator, WaterDemoInvestor } from './water-demo-types';
 
-export type WaterDemoInvestor = {
-  code: string;
-  name: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  title: string;
-  industry: string;
-  country: string;
-  region: string;
-  website: string;
-  preferredCategories: string[];
-  requiredCapabilities: string[];
-  regions: string[];
-  commercialTags: string[];
-  featured: boolean;
-  about: string;
-  focusEvents: string;
-  partnershipGoal: string;
-  ticketSize: string;
-  investmentStages: string[];
-};
-
-export type WaterDemoInnovator = {
-  code: string;
-  name: string;
-  displayName: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  title: string;
-  industry: string;
-  country: string;
-  region: string;
-  website: string;
-  categories: string[];
-  capabilities: string[];
-  operatingRegions: string[];
-  commercialTags: string[];
-  featured: boolean;
-  about: string;
-  focusEvents: string;
-  partnershipGoal: string;
-  ticketSize: string;
-  stage: string;
-  impactMetrics: string;
-};
+export type { WaterDemoInnovator, WaterDemoInvestor } from './water-demo-types';
 
 const EMAIL_DOMAIN = 'unwater.ethara.demo';
 
-export const WATER_DEMO_INVESTORS: WaterDemoInvestor[] = [
+const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-NILE',
     name: 'Nile Basin Climate Facility',
@@ -292,12 +251,12 @@ export const WATER_DEMO_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Prefer founders with working prototypes and letters of intent from utilities, hotels, or industrial parks.',
     partnershipGoal: 'Fast-track pilots and follow-on with our LP corporates and family offices.',
-    ticketSize: '100k-750k',
+    ticketSize: '250k-1m',
     investmentStages: ['pilot', 'early-revenue'],
   },
 ];
 
-export const WATER_DEMO_INNOVATORS: WaterDemoInnovator[] = [
+const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
   {
     code: 'INN-AQUALIS',
     name: 'Aqualis Leak Intelligence',
@@ -814,8 +773,18 @@ export const WATER_DEMO_INNOVATORS: WaterDemoInnovator[] = [
     focusEvents:
       'First VCS project registered; seeking buyers and DFI guarantee for scale.',
     partnershipGoal: 'Impact investors for USD 10M mangrove water security fund.',
-    ticketSize: '2m-10m',
+    ticketSize: '1m-5m',
     stage: 'early-revenue',
     impactMetrics: '620 ha restored; 1.2M tCO2e credits issued over project life (projected).',
   },
+];
+
+export const WATER_DEMO_INVESTORS: WaterDemoInvestor[] = [
+  ...HANDCRAFTED_INVESTORS,
+  ...EXTRA_INVESTORS,
+];
+
+export const WATER_DEMO_INNOVATORS: WaterDemoInnovator[] = [
+  ...HANDCRAFTED_INNOVATORS,
+  ...EXTRA_INNOVATORS,
 ];

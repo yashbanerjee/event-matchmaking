@@ -5,13 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  calculateMatchScore,
-  companyToProfileFeatures,
-  vendorToProfileFeatures,
-} from '@em/domain';
-import {
   collectPublicProfileFields,
-  defaultMatchingWeights,
   meetsTagCategoryThresholds,
   PEER_RECOMMENDATIONS_MAX_PER_ORG,
   formSchemaDefinition,
@@ -22,7 +16,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
+import { PeerRecommendationsService } from './peer-recommendations.service';
 import type { AuthUser } from '../common/decorators';
+
+type MatchSource = 'ai' | 'tags' | 'admin';
 
 type RecommendationItem = {
   organizationId: string;
@@ -39,6 +36,7 @@ type RecommendationItem = {
   aiDescription?: string | null;
   logoUrl: string | null;
   featured: boolean;
+  matchSource: MatchSource;
 };
 
 @Injectable()
@@ -47,6 +45,7 @@ export class RecommendationsService {
     private readonly prisma: PrismaService,
     private readonly filters: FiltersService,
     private readonly config: EffectiveConfigService,
+    private readonly peers: PeerRecommendationsService,
   ) {}
 
   private async getRecommendationThreshold(): Promise<number> {
@@ -64,12 +63,11 @@ export class RecommendationsService {
       PEER_RECOMMENDATIONS_MAX_PER_ORG,
     );
     const orgIds = actor.organizationIds ?? [];
-    if (!orgIds.length) return { items: [], featured: [], perspective: null };
+    if (!orgIds.length) {
+      return { items: [], featured: [], perspective: null, computing: false };
+    }
 
-    const [equivalences, tagLabels] = await Promise.all([
-      this.filters.listEquivalences(),
-      this.filters.listTagLabelIndex(),
-    ]);
+    const tagLabels = await this.filters.listTagLabelIndex();
 
     const myOrgs = await this.prisma.organization.findMany({
       where: { id: { in: orgIds } },
@@ -80,15 +78,14 @@ export class RecommendationsService {
     const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR' && o.vendor);
 
     // Hard rule: investors only see innovators; innovators only see investors.
-    // Prefer the actor's primary org type (company first only if they have one).
     const perspectiveOrg = companyOrg ?? vendorOrg;
     if (!perspectiveOrg) {
-      return { items: [], featured: [], perspective: null };
+      return { items: [], featured: [], perspective: null, computing: false };
     }
 
     const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
-    // COMPANY (investor) → VENDOR (innovator); VENDOR (innovator) → COMPANY (investor)
     const peerType = perspective === 'COMPANY' ? 'VENDOR' : 'COMPANY';
+    const { computing } = await this.peers.ensureComputed(perspectiveOrg.id);
 
     const stored = await this.fromStored({
       fromOrgId: perspectiveOrg.id,
@@ -99,155 +96,15 @@ export class RecommendationsService {
       excludeOrgIds: orgIds,
     });
     if (stored) {
-      return { ...stored, perspective };
+      return { ...stored, perspective, computing };
     }
 
-    if (perspective === 'COMPANY' && companyOrg?.company) {
-      const vendors = await this.prisma.vendor.findMany({
-        where: {
-          matchingEligible: true,
-          approvalStatus: 'VERIFIED',
-          verificationStatus: 'VERIFIED',
-          onboardingComplete: true,
-          organizationId: { notIn: orgIds },
-          organization: {
-            status: { not: 'ARCHIVED' },
-            type: 'VENDOR',
-          },
-        },
-        include: { organization: true },
-        take: 200,
-      });
-      const companyFeatures = companyToProfileFeatures({
-        organizationId: companyOrg.company.organizationId,
-        preferredCategories: companyOrg.company.preferredCategories,
-        requiredCapabilities: companyOrg.company.requiredCapabilities,
-        commercialPrefs: companyOrg.company.commercialPrefs,
-        normalizedProfile: companyOrg.company.normalizedProfile,
-        organization: companyOrg,
-      });
-      const scored: RecommendationItem[] = vendors
-        .filter((vendor) => vendor.organization.type === 'VENDOR')
-        .map((vendor) => {
-          const score = calculateMatchScore(
-            companyFeatures,
-            vendorToProfileFeatures({
-              organizationId: vendor.organizationId,
-              capabilities: vendor.capabilities,
-              categories: vendor.categories,
-              operatingRegions: vendor.operatingRegions,
-              commercialPrefs: vendor.commercialPrefs,
-              normalizedProfile: vendor.normalizedProfile,
-              organization: vendor.organization,
-            }),
-            defaultMatchingWeights,
-            equivalences,
-            tagLabels,
-          );
-          return {
-            organizationId: vendor.organizationId,
-            name: vendor.organization.name,
-            type: 'VENDOR' as const,
-            industry: this.labelOf(
-              vendor.organization.industry,
-              tagLabels,
-            ),
-            categories: this.labelsOf(vendor.categories, tagLabels),
-            capabilities: this.labelsOf(vendor.capabilities, tagLabels),
-            score: score.totalScore,
-            reasons: score.reasons,
-            explanation: score.explanation,
-            logoUrl: this.logoOf(vendor.organization.customAttrs),
-            featured: vendor.featured,
-          };
-        })
-        .sort((a, b) => {
-          if (a.featured !== b.featured) return a.featured ? -1 : 1;
-          return b.score - a.score;
-        });
-
-      return {
-        ...this.splitRecommendations(scored, max),
-        perspective: 'COMPANY' as const,
-      };
-    }
-
-    if (perspective === 'VENDOR' && vendorOrg?.vendor) {
-      const companies = await this.prisma.company.findMany({
-        where: {
-          matchingEligible: true,
-          approvalStatus: 'VERIFIED',
-          verificationStatus: 'VERIFIED',
-          organizationId: { notIn: orgIds },
-          organization: {
-            status: { not: 'ARCHIVED' },
-            type: 'COMPANY',
-          },
-        },
-        include: { organization: true },
-        take: 200,
-      });
-      const vendorFeatures = vendorToProfileFeatures({
-        organizationId: vendorOrg.vendor.organizationId,
-        capabilities: vendorOrg.vendor.capabilities,
-        categories: vendorOrg.vendor.categories,
-        operatingRegions: vendorOrg.vendor.operatingRegions,
-        commercialPrefs: vendorOrg.vendor.commercialPrefs,
-        normalizedProfile: vendorOrg.vendor.normalizedProfile,
-        organization: vendorOrg,
-      });
-      const scored: RecommendationItem[] = companies
-        .filter((company) => company.organization.type === 'COMPANY')
-        .map((company) => {
-          const score = calculateMatchScore(
-            companyToProfileFeatures({
-              organizationId: company.organizationId,
-              preferredCategories: company.preferredCategories,
-              requiredCapabilities: company.requiredCapabilities,
-              commercialPrefs: company.commercialPrefs,
-              normalizedProfile: company.normalizedProfile,
-              organization: company.organization,
-            }),
-            vendorFeatures,
-            defaultMatchingWeights,
-            equivalences,
-            tagLabels,
-          );
-          return {
-            organizationId: company.organizationId,
-            name: company.organization.name,
-            type: 'COMPANY' as const,
-            industry: this.labelOf(
-              company.organization.industry,
-              tagLabels,
-            ),
-            categories: this.labelsOf(
-              company.preferredCategories,
-              tagLabels,
-            ),
-            capabilities: this.labelsOf(
-              company.requiredCapabilities,
-              tagLabels,
-            ),
-            score: score.totalScore,
-            reasons: score.reasons,
-            explanation: score.explanation,
-            logoUrl: this.logoOf(company.organization.customAttrs),
-            featured: company.featured,
-          };
-        })
-        .sort((a, b) => {
-          if (a.featured !== b.featured) return a.featured ? -1 : 1;
-          return b.score - a.score;
-        });
-
-      return {
-        ...this.splitRecommendations(scored, max),
-        perspective: 'VENDOR' as const,
-      };
-    }
-
-    return { items: [], featured: [], perspective: null };
+    return {
+      items: [],
+      featured: [],
+      perspective,
+      computing,
+    };
   }
 
   /**
@@ -353,11 +210,16 @@ export class RecommendationsService {
     return parsed.success ? parsed.data : null;
   }
 
-  /** Featured first, then category matches — hard cap of `max` total (max 5). */
+  /** Featured first, then scored matches — hard cap of `max` total. */
   private splitRecommendations(scored: RecommendationItem[], max: number) {
-    const featured = scored.filter((item) => item.featured).slice(0, max);
+    const qualified = scored.filter(
+      (item) =>
+        item.matchSource === 'admin' ||
+        (Number.isFinite(item.score) && item.score > 0),
+    );
+    const featured = qualified.filter((item) => item.featured).slice(0, max);
     const remaining = Math.max(0, max - featured.length);
-    const items = scored
+    const items = qualified
       .filter((item) => !item.featured)
       .slice(0, remaining);
     return { items, featured };
@@ -458,6 +320,12 @@ export class RecommendationsService {
           aiDescription: row.aiDescription,
           logoUrl: this.logoOf(peer.customAttrs),
           featured,
+          matchSource:
+            row.source === 'MANUAL'
+              ? ('admin' as const)
+              : row.aiScore != null
+                ? ('ai' as const)
+                : ('tags' as const),
         };
       });
 

@@ -15,29 +15,44 @@ import { WorkspaceBottomNav } from './workspace-bottom-nav';
 
 const NAV_ITEMS = [
   { href: '/portal', label: 'Home', exact: true },
+  { href: '/portal/onboarding', label: 'Forms' },
   { href: '/portal/recommendations', label: 'Recommendations' },
   { href: '/portal/requests', label: 'Requests' },
   { href: '/portal/meetings', label: 'Meetings' },
-  { href: '/portal/qr', label: 'QR' },
 ];
 
 function SidebarNav({
   pathname,
+  pendingForms,
   openRequests,
 }: {
   pathname: string;
+  pendingForms: number;
   openRequests: number;
 }) {
+  const items =
+    pendingForms > 0
+      ? NAV_ITEMS.filter(
+          (item) =>
+            item.href === '/portal' || item.href === '/portal/onboarding',
+        )
+      : NAV_ITEMS.filter((item) => item.href !== '/portal/onboarding');
+
   return (
     <nav className="sidebar-nav flex flex-col gap-1 pb-4">
       <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--sidebar-muted)]">
-        Workspace
+        {pendingForms > 0 ? 'Finish setup' : 'Workspace'}
       </p>
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const badge = item.href === '/portal/requests' ? openRequests : 0;
+        const badge =
+          item.href === '/portal/onboarding'
+            ? pendingForms
+            : item.href === '/portal/requests'
+              ? openRequests
+              : 0;
         return (
           <Link
             key={item.href}
@@ -66,11 +81,10 @@ function SidebarNav({
 
 export function PortalShell({
   email,
-  pendingForms: _pendingForms = 0,
+  pendingForms = 0,
   children,
 }: {
   email?: string;
-  /** Kept for callers; forms are no longer in primary nav. */
   pendingForms?: number;
   children: React.ReactNode;
 }) {
@@ -79,6 +93,7 @@ export function PortalShell({
 
   const requests = useQuery({
     queryKey: ['meeting-requests'],
+    enabled: pendingForms <= 0,
     queryFn: () =>
       apiFetch<{ items: Array<{ status: string }> }>('/meeting-requests', {
         token: getAccessToken(),
@@ -90,6 +105,33 @@ export function PortalShell({
       r.status,
     ),
   ).length;
+
+  const bottomItems =
+    pendingForms > 0
+      ? [
+          { href: '/portal', label: 'Home', exact: true, icon: 'home' as const },
+          {
+            href: '/portal/onboarding',
+            label: 'Forms',
+            icon: 'forms' as const,
+            badge: pendingForms,
+          },
+        ]
+      : [
+          { href: '/portal', label: 'Home', exact: true, icon: 'home' as const },
+          {
+            href: '/portal/recommendations',
+            label: 'Matches',
+            icon: 'recommendations' as const,
+          },
+          {
+            href: '/portal/requests',
+            label: 'Requests',
+            icon: 'requests' as const,
+            badge: openRequests,
+          },
+          { href: '/portal/meetings', label: 'Meetings', icon: 'meetings' as const },
+        ];
 
   return (
     <div className="admin-shell workspace-shell has-mobile-tabs">
@@ -143,7 +185,11 @@ export function PortalShell({
           ) : null}
         </div>
 
-        <SidebarNav pathname={pathname} openRequests={openRequests} />
+        <SidebarNav
+          pathname={pathname}
+          pendingForms={pendingForms}
+          openRequests={openRequests}
+        />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">
           <DemoNotice tone="dark" className="px-1 lg:hidden" />
@@ -166,24 +212,7 @@ export function PortalShell({
         </div>
       </main>
 
-      <WorkspaceBottomNav
-        items={[
-          { href: '/portal', label: 'Home', exact: true, icon: 'home' },
-          {
-            href: '/portal/recommendations',
-            label: 'Matches',
-            icon: 'recommendations',
-          },
-          {
-            href: '/portal/requests',
-            label: 'Requests',
-            icon: 'requests',
-            badge: openRequests,
-          },
-          { href: '/portal/meetings', label: 'Meetings', icon: 'meetings' },
-          { href: '/portal/qr', label: 'QR', icon: 'qr' },
-        ]}
-      />
+      <WorkspaceBottomNav items={bottomItems} />
     </div>
   );
 }

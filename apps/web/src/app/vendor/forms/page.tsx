@@ -1,26 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { OnboardingFormWorkspace } from '@/components/onboarding-form-workspace';
 import { EmptyState } from '@/components/empty-state';
-import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
-import {
-  badgeToneForStatus,
-  formatFilledDate,
-  labelForFormItem,
-  statusForFormItem,
-} from '@/lib/vendor-forms';
 
-export default function VendorFormsPage() {
+function VendorFormsContent() {
   const router = useRouter();
-  const [search, setSearch] = useState('');
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get('focus');
+  const [selectedId, setSelectedId] = useState<string | null>(focusId);
 
   const onboarding = useQuery({
     queryKey: ['portal-onboarding'],
@@ -30,104 +21,59 @@ export default function VendorFormsPage() {
   const items = onboarding.data?.items ?? [];
 
   useEffect(() => {
-    if (!onboarding.data) return;
-    const pending = onboarding.data.items.find(
-      (item) => item.action === 'submit' || item.action === 'correct',
-    );
-    if (pending) {
-      router.replace(`/vendor/forms/${pending.assignmentId}`);
+    if (!items.length) return;
+    if (focusId && items.some((item) => item.assignmentId === focusId)) {
+      setSelectedId(focusId);
+      return;
     }
-  }, [onboarding.data, router]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => {
-      const label = labelForFormItem(item).toLowerCase();
-      const status = statusForFormItem(item).toLowerCase();
-      return (
-        item.formName.toLowerCase().includes(q) ||
-        item.organizationName.toLowerCase().includes(q) ||
-        label.includes(q) ||
-        status.includes(q)
-      );
-    });
-  }, [items, search]);
+    if (selectedId && items.some((item) => item.assignmentId === selectedId)) {
+      return;
+    }
+    const pending =
+      items.find((item) => item.action === 'submit' || item.action === 'correct') ??
+      items[0];
+    if (pending) setSelectedId(pending.assignmentId);
+  }, [items, selectedId, focusId]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Forms"
-        title="Complete your profile"
-        description="Finish your assigned form to unlock the innovator dashboard. After submit you are verified automatically."
-        actions={
-          <Input
-            className="max-w-xs"
-            placeholder="Search form, org, status…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        }
-      />
+    <>
+      {onboarding.isLoading ? (
+        <p className="text-sm text-[var(--muted)]">Loading your form…</p>
+      ) : null}
 
-      <Card>
-        {onboarding.isLoading ? (
-          <p className="text-sm text-[var(--muted)]">Loading…</p>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            title="No forms assigned"
-            description="When an admin assigns an innovator form, it will show here as a row with status."
-          />
-        ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Form</TH>
-                <TH>Status</TH>
-                <TH>Workflow</TH>
-                <TH>Filled on</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
-              {filtered.map((item) => {
-                const status = statusForFormItem(item);
-                return (
-                  <TR key={item.assignmentId}>
-                    <TD>
-                      <p className="font-medium">{item.formName}</p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {item.organizationName}
-                      </p>
-                    </TD>
-                    <TD>
-                      <Badge variant={badgeToneForStatus(status)}>
-                        {labelForFormItem(item)}
-                      </Badge>
-                    </TD>
-                    <TD>{item.workflowStatus.replaceAll('_', ' ')}</TD>
-                    <TD>{formatFilledDate(item.submission?.submittedAt)}</TD>
-                    <TD className="text-right">
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          router.push(`/vendor/forms/${item.assignmentId}`)
-                        }
-                      >
-                        {item.action === 'view'
-                          ? 'View'
-                          : item.action === 'correct'
-                            ? 'Update'
-                            : 'Fill'}
-                      </Button>
-                    </TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-          </Table>
-        )}
-      </Card>
-    </div>
+      {onboarding.error ? (
+        <p className="text-sm text-[var(--danger)]">
+          {(onboarding.error as Error).message}
+        </p>
+      ) : null}
+
+      {!onboarding.isLoading && items.length === 0 ? (
+        <EmptyState
+          title="No forms assigned"
+          description="When an admin invites you with a form, it will appear here with the sidebar so you can finish onboarding."
+        />
+      ) : null}
+
+      {items.length > 0 ? (
+        <OnboardingFormWorkspace
+          items={items}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          roleLabel="innovator"
+          dashboardHref="/vendor"
+          onVerified={() => router.replace('/vendor')}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export default function VendorFormsPage() {
+  return (
+    <Suspense
+      fallback={<p className="text-sm text-[var(--muted)]">Loading your form…</p>}
+    >
+      <VendorFormsContent />
+    </Suspense>
   );
 }

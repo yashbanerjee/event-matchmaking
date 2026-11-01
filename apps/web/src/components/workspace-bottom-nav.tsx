@@ -40,7 +40,12 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
       }}
       aria-label="Primary"
     >
-      <ul className="mx-auto grid max-w-lg grid-cols-5 gap-1">
+      <ul
+        className={cn(
+          'mx-auto grid max-w-lg gap-1',
+          items.length <= 2 ? 'grid-cols-2' : 'grid-cols-5',
+        )}
+      >
         {items.map((item) => {
           const Icon = ICONS[item.icon];
           const active = item.exact

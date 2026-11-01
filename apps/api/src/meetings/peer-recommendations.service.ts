@@ -78,6 +78,7 @@ function localTextSimilarity(left: string, right: string): number {
 export class PeerRecommendationsService {
   private readonly logger = new Logger(PeerRecommendationsService.name);
   private readonly inflight = new Set<string>();
+  private readonly rerun = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -87,12 +88,21 @@ export class PeerRecommendationsService {
     private readonly audit: AuditService,
   ) {}
 
+  isRecomputing(organizationId: string) {
+    return this.inflight.has(organizationId);
+  }
+
   /**
    * Fire-and-forget recompute for a newly eligible investor/innovator.
    * Scores this org against all opposite peers (both directions).
+   * If a run is already in flight, queue one more pass so a later profile
+   * update is not dropped.
    */
   scheduleRecompute(organizationId: string, reason = 'eligibility') {
-    if (this.inflight.has(organizationId)) return;
+    if (this.inflight.has(organizationId)) {
+      this.rerun.add(organizationId);
+      return;
+    }
     this.inflight.add(organizationId);
     void this.recomputeForOrganization(organizationId)
       .then((result) => {
@@ -105,7 +115,36 @@ export class PeerRecommendationsService {
           `Peer recommendation recompute failed for ${organizationId}: ${(err as Error).message}`,
         );
       })
-      .finally(() => this.inflight.delete(organizationId));
+      .finally(() => {
+        this.inflight.delete(organizationId);
+        if (this.rerun.has(organizationId)) {
+          this.rerun.delete(organizationId);
+          this.scheduleRecompute(organizationId, 'queued-rerun');
+        }
+      });
+  }
+
+  /**
+   * Start AI/tag scoring when the viewer opens recommendations and nothing
+   * has been computed for the current profile yet.
+   */
+  async ensureComputed(organizationId: string) {
+    if (this.inflight.has(organizationId)) {
+      return { computing: true as const };
+    }
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { company: true, vendor: true },
+    });
+    if (!org || !this.hasMatchableProfile(org)) {
+      return { computing: false as const };
+    }
+    const computed = await this.hasFreshComputation(organizationId);
+    if (computed) {
+      return { computing: false as const };
+    }
+    this.scheduleRecompute(organizationId, 'recommendations.view');
+    return { computing: true as const };
   }
 
   async listForOrganization(
@@ -540,6 +579,13 @@ export class PeerRecommendationsService {
       return { upserted: 0 };
     }
 
+    if (!this.hasMatchableProfile(org)) {
+      this.logger.log(
+        `Skip peer recompute for ${organizationId}: profile tags are empty`,
+      );
+      return { upserted: 0 };
+    }
+
     const [equivalences, tagLabels] = await Promise.all([
       this.filters.listEquivalences(),
       this.filters.listTagLabelIndex(),
@@ -719,11 +765,72 @@ export class PeerRecommendationsService {
       });
     }
 
+    await this.markComputed(organizationId);
+
     const durationMs = Date.now() - started;
     this.logger.log(
       `Peer recompute for ${organizationId}: upserted ${upserted}, ${durationMs}ms (LLM on top ${llmCandidateLimit} at concurrency ${llmConcurrency})`,
     );
     return { upserted, durationMs, llmCandidateLimit, llmConcurrency };
+  }
+
+  private hasMatchableProfile(org: {
+    company: {
+      preferredCategories: string[];
+      requiredCapabilities: string[];
+    } | null;
+    vendor: { categories: string[]; capabilities: string[] } | null;
+  }) {
+    const companyTags =
+      (org.company?.preferredCategories.length ?? 0) +
+      (org.company?.requiredCapabilities.length ?? 0);
+    const vendorTags =
+      (org.vendor?.categories.length ?? 0) +
+      (org.vendor?.capabilities.length ?? 0);
+    return companyTags > 0 || vendorTags > 0;
+  }
+
+  private attrsRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return { ...(value as Record<string, unknown>) };
+  }
+
+  private async markComputed(organizationId: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { customAttrs: true },
+    });
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        customAttrs: {
+          ...this.attrsRecord(org?.customAttrs),
+          peerRecsComputedAt: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  async hasFreshComputation(organizationId: string): Promise<boolean> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        customAttrs: true,
+        company: { select: { updatedAt: true, profileVersion: true } },
+        vendor: { select: { updatedAt: true, profileVersion: true } },
+      },
+    });
+    if (!org) return false;
+    const raw = this.attrsRecord(org.customAttrs).peerRecsComputedAt;
+    if (typeof raw !== 'string' || !raw) return false;
+    const computedAt = new Date(raw).getTime();
+    if (!Number.isFinite(computedAt)) return false;
+    const profileUpdated = Math.max(
+      org.company?.updatedAt.getTime() ?? 0,
+      org.vendor?.updatedAt.getTime() ?? 0,
+    );
+    // Allow a few seconds of slack so the compute stamp can land after profile write.
+    return computedAt + 2000 >= profileUpdated;
   }
 
   /**
