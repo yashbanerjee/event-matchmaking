@@ -659,14 +659,69 @@ export class RegistrationService {
     if (parsed.success) {
       return normalizeFormSchemaKeys(parsed.data);
     }
+
+    // Retry after normalizing legacy camelCase keys (e.g. commercialTags).
+    if (schemaJson && typeof schemaJson === 'object') {
+      const coerced = normalizeFormSchemaKeys(
+        schemaJson as FormSchemaDefinition,
+      );
+      const retry = formSchemaDefinition.safeParse(coerced);
+      if (retry.success) {
+        return normalizeFormSchemaKeys(retry.data);
+      }
+    }
+
+    // schemaJson may fail validation. Rebuild from FormField rows and map
+    // Prisma enums → builder field types so selects/multiselects render.
+    const reverse: Record<string, FormSchemaDefinition['fields'][number]['type']> =
+      {
+        SHORT_TEXT: 'text',
+        LONG_TEXT: 'textarea',
+        EMAIL: 'email',
+        PHONE: 'tel',
+        NUMBER: 'number',
+        CURRENCY: 'currency',
+        DATE: 'date',
+        TIME: 'time',
+        SINGLE_SELECT: 'select',
+        MULTI_SELECT: 'multiselect',
+        RADIO: 'radio',
+        CHECKBOX: 'checkbox',
+        BOOLEAN: 'toggle',
+        FILE: 'file',
+        MULTI_FILE: 'files',
+        IMAGE: 'image',
+        WEBSITE: 'url',
+        COUNTRY_REGION: 'country',
+        READ_ONLY: 'info',
+        REPEATABLE_GROUP: 'repeater',
+        TAGS: 'multiselect',
+      };
+
+    const rawFields =
+      schemaJson &&
+      typeof schemaJson === 'object' &&
+      Array.isArray((schemaJson as { fields?: unknown }).fields)
+        ? ((schemaJson as { fields: Array<Record<string, unknown>> }).fields)
+        : [];
+    const dimByKey = new Map<string, string>();
+    for (const raw of rawFields) {
+      if (
+        typeof raw.key === 'string' &&
+        typeof raw.filterDimensionId === 'string' &&
+        raw.filterDimensionId
+      ) {
+        dimByKey.set(raw.key, raw.filterDimensionId);
+      }
+    }
+
     const sectionId = randomUUID();
     return normalizeFormSchemaKeys({
       sections: [{ id: sectionId, title: 'Registration', order: 0 }],
       fields: fields.map((f, index) => ({
         id: randomUUID(),
         key: f.fieldKey,
-        type: (f.fieldType as FormSchemaDefinition['fields'][number]['type']) ||
-          'text',
+        type: reverse[f.fieldType] ?? 'text',
         label: f.label,
         description: f.description ?? undefined,
         required: f.required,
@@ -675,6 +730,7 @@ export class RegistrationService {
         options: Array.isArray(f.options)
           ? (f.options as { value: string; label: string }[])
           : undefined,
+        filterDimensionId: dimByKey.get(f.fieldKey) ?? null,
       })),
     });
   }

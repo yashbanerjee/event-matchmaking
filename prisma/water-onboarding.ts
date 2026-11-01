@@ -369,7 +369,7 @@ export function buildInvestorOnboardingFields(
       filterDimensionId: dimensionIds.capabilities,
     }),
     field(capital, 13, {
-      key: 'commercialTags',
+      key: 'commercial_tags',
       type: 'multiselect',
       label: '13. What kind of funding or partnership can you offer?',
       required: true,
@@ -487,7 +487,7 @@ export function buildInnovatorOnboardingFields(
       filterDimensionId: dimensionIds.investment_stages,
     }),
     field(ask, 14, {
-      key: 'commercialTags',
+      key: 'commercial_tags',
       type: 'multiselect',
       label: '14. What kind of help are you looking for?',
       required: true,
@@ -767,7 +767,7 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     description:
       'Simple questions plus booking tags for investors (availability on next step).',
     targetType: 'COMPANY',
-    hash: 'investor-form-v5',
+    hash: 'investor-form-v6',
     schema: investorBuilt,
   });
 
@@ -777,7 +777,7 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     description:
       'Simple questions plus booking tags for innovators (availability on next step).',
     targetType: 'VENDOR',
-    hash: 'innovator-form-v5',
+    hash: 'innovator-form-v6',
     schema: innovatorBuilt,
   });
 

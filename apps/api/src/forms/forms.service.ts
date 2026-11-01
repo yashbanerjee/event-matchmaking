@@ -1689,7 +1689,9 @@ export class FormsService {
     const commercialPrefs = {
       tags: [
         ...new Set([
-          ...asStringArray(responses.commercialTags),
+          ...asStringArray(
+            responses.commercial_tags ?? responses.commercialTags,
+          ),
           ...roleTags,
           ...visitPurpose,
         ]),
