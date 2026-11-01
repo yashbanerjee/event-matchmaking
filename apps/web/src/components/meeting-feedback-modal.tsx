@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -68,6 +68,25 @@ function RatingSelect({
   );
 }
 
+/** Pick the meeting-party org the signed-in user belongs to. */
+export function resolveFeedbackOrganizationId(
+  meeting: {
+    companyOrgId?: string | null;
+    vendorOrgId?: string | null;
+    companyOrg?: { id?: string | null } | null;
+    vendorOrg?: { id?: string | null } | null;
+  },
+  organizationIds: string[] | undefined | null,
+): string {
+  const company = meeting.companyOrgId || meeting.companyOrg?.id || '';
+  const vendor = meeting.vendorOrgId || meeting.vendorOrg?.id || '';
+  const ids = organizationIds ?? [];
+  const match = ids.find((id) => id && (id === company || id === vendor));
+  if (match) return match;
+  if (ids[0]) return ids[0];
+  return company || vendor || '';
+}
+
 export function MeetingFeedbackModal({
   open,
   meetingId,
@@ -81,13 +100,21 @@ export function MeetingFeedbackModal({
   organizationId: string;
   counterpartName: string;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState<FeedbackFormState>(defaultForm);
 
+  useEffect(() => {
+    if (!open) return;
+    setForm(defaultForm());
+  }, [open, meetingId]);
+
   const submit = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!meetingId) throw new Error('Missing meeting');
+      if (!organizationId) {
+        throw new Error('Missing organization. Reload the page and try again.');
+      }
       return apiFetch(`/meetings/${meetingId}/feedback`, {
         method: 'POST',
         token: getAccessToken(),
@@ -102,33 +129,44 @@ export function MeetingFeedbackModal({
           followUpRequired: false,
           outcome: form.outcome,
           comments: form.comments.trim() || undefined,
-          isConfidential: true,
+          isConfidential: false,
         }),
       });
     },
     onSuccess: () => {
       setForm(defaultForm());
-      onSubmitted();
+      // Close immediately so mobile users don't stay stuck on a stacked modal.
       onClose();
+      void Promise.resolve(onSubmitted()).catch(() => undefined);
     },
   });
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      layer="overlay"
+      onClose={() => {
+        if (submit.isPending) return;
+        onClose();
+      }}
       title="Meeting feedback & review"
       description={`Share feedback on the meeting and review ${counterpartName}.`}
-      wide
+      size="lg"
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submit.isPending}
+            onClick={onClose}
+          >
             Cancel
           </Button>
           <Button
+            type="button"
             onClick={() => submit.mutate()}
             loading={submit.isPending}
-            disabled={!meetingId}
+            disabled={!meetingId || !organizationId || submit.isPending}
           >
             {submit.isPending ? 'Submitting…' : 'Submit feedback'}
           </Button>
@@ -136,6 +174,13 @@ export function MeetingFeedbackModal({
       }
     >
       <div className="space-y-5">
+        {!organizationId ? (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            Your organization could not be loaded. Refresh the page, then try
+            again.
+          </p>
+        ) : null}
+
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -223,7 +268,7 @@ export function MeetingFeedbackModal({
         </label>
 
         {submit.error ? (
-          <p className="text-sm text-rose-700">
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {(submit.error as Error).message}
           </p>
         ) : null}

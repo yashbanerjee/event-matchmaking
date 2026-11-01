@@ -25,6 +25,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
   MeetingFeedbackModal,
   meetingHasEnded,
+  resolveFeedbackOrganizationId,
 } from '@/components/meeting-feedback-modal';
 import {
   canEndMeeting,
@@ -43,8 +44,10 @@ type Meeting = {
   actualEndedAt?: string | null;
   actualDurationMinutes?: number | null;
   hasSubmittedFeedback?: boolean;
-  companyOrg: { name: string };
-  vendorOrg: { name: string };
+  companyOrgId: string;
+  vendorOrgId: string;
+  companyOrg: { id?: string; name: string };
+  vendorOrg: { id?: string; name: string };
   location?: string | null;
   place?: {
     name: string;
@@ -219,6 +222,8 @@ export default function PortalMeetingsPage() {
               status: 'IN_PROGRESS',
               startsAt: new Date().toISOString(),
               actualStartedAt: details.actualStartedAt ?? null,
+              companyOrgId: me.data?.organizationIds?.[0] ?? '',
+              vendorOrgId: '',
               companyOrg: { name: 'Investor' },
               vendorOrg: {
                 name: details.activeCounterpart ?? 'previous partner',
@@ -397,26 +402,62 @@ export default function PortalMeetingsPage() {
         {viewMode === 'calendar' && !meetings.isLoading ? (
           <MeetingsCalendar
             events={calendarEvents}
-            onSelectEvent={(event) => {
-              if (event.kind !== 'meeting') return;
+            suppressDetails={Boolean(feedbackFor)}
+            renderEventActions={(event) => {
+              if (event.kind !== 'meeting') return null;
               const meetingId = event.id.replace(/^meeting:/, '');
               const meeting = filtered.find((row) => row.id === meetingId);
-              if (!meeting) return;
-              if (canEndMeeting(meeting.status)) {
-                endMeeting.mutate(meeting);
-                return;
-              }
-              if (canStartMeeting(meeting.status)) {
-                requestStart(meeting);
-                return;
-              }
-              if (
-                meetingHasEnded(meeting) &&
-                orgId &&
-                !meeting.hasSubmittedFeedback
-              ) {
-                setFeedbackFor(meeting);
-              }
+              if (!meeting) return null;
+              const ended = meetingHasEnded(meeting);
+              const submitted = Boolean(meeting.hasSubmittedFeedback);
+              const feedbackOrgId = resolveFeedbackOrganizationId(
+                meeting,
+                me.data?.organizationIds,
+              );
+              return (
+                <>
+                  {canStartMeeting(meeting.status) ? (
+                    <Button
+                      size="sm"
+                      loading={
+                        startMeeting.isPending &&
+                        startMeeting.variables === meeting.id
+                      }
+                      onClick={() => requestStart(meeting)}
+                    >
+                      Start meeting
+                    </Button>
+                  ) : null}
+                  {canEndMeeting(meeting.status) ? (
+                    <Button
+                      size="sm"
+                      loading={
+                        endMeeting.isPending &&
+                        endMeeting.variables?.id === meeting.id
+                      }
+                      onClick={() => endMeeting.mutate(meeting)}
+                    >
+                      Stop meeting
+                    </Button>
+                  ) : null}
+                  {ended &&
+                  feedbackOrgId &&
+                  !submitted &&
+                  !canStartMeeting(meeting.status) &&
+                  !canEndMeeting(meeting.status) ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setFeedbackFor(meeting)}
+                    >
+                      Feedback & review
+                    </Button>
+                  ) : null}
+                  {ended && submitted ? (
+                    <Badge variant="success">Feedback sent</Badge>
+                  ) : null}
+                </>
+              );
             }}
           />
         ) : null}
@@ -608,12 +649,22 @@ export default function PortalMeetingsPage() {
       <MeetingFeedbackModal
         open={Boolean(feedbackFor)}
         meetingId={feedbackFor?.id ?? null}
-        organizationId={orgId}
+        organizationId={
+          feedbackFor
+            ? resolveFeedbackOrganizationId(
+                feedbackFor,
+                me.data?.organizationIds,
+              )
+            : orgId
+        }
         counterpartName={feedbackFor?.vendorOrg.name ?? 'counterpart'}
         onClose={() => setFeedbackFor(null)}
-        onSubmitted={() =>
-          void qc.invalidateQueries({ queryKey: ['portal-meetings'] })
-        }
+        onSubmitted={async () => {
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
+            qc.invalidateQueries({ queryKey: ['feedback'] }),
+          ]);
+        }}
       />
     </PortalShell>
   );

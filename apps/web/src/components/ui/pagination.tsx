@@ -19,26 +19,28 @@ export function Pagination({
 
   return (
     <div className="flex flex-col gap-3 pt-4 pb-1 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-[var(--muted)]">
+      <p className="text-center text-sm text-[var(--muted)] sm:text-left">
         Showing <span className="font-semibold text-[var(--foreground)]">{from}</span>
         –<span className="font-semibold text-[var(--foreground)]">{to}</span> of{' '}
         <span className="font-semibold text-[var(--foreground)]">{total}</span>
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <Button
           size="sm"
           variant="outline"
+          className="w-full"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
           Previous
         </Button>
-        <span className="min-w-24 text-center text-sm font-medium">
-          Page {page} / {totalPages}
+        <span className="min-w-20 text-center text-sm font-medium tabular-nums">
+          {page} / {totalPages}
         </span>
         <Button
           size="sm"
           variant="outline"
+          className="w-full"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >

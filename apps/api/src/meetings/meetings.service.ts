@@ -441,7 +441,7 @@ export class MeetingsService {
     user: AuthUser,
     input: {
       meetingId: string;
-      organizationId: string;
+      organizationId?: string;
       attendanceConfirmed: boolean;
       meetingQuality?: number;
       relevance?: number;
@@ -456,23 +456,32 @@ export class MeetingsService {
       isConfidential?: boolean;
     },
   ) {
-    if (!user.organizationIds.includes(input.organizationId)) {
-      throw new ForbiddenException('Organization access denied');
-    }
-
     const meeting = await this.requireMeetingAccess(user, input.meetingId);
-    if (
-      meeting.companyOrgId !== input.organizationId &&
-      meeting.vendorOrgId !== input.organizationId
-    ) {
-      throw new ForbiddenException('Organization is not a meeting party');
+
+    // Prefer the client org when valid; otherwise pick the meeting party the
+    // user belongs to (avoids Forbidden when membership order ≠ companyOrgId).
+    const partyOrgIds = [meeting.companyOrgId, meeting.vendorOrgId];
+    const requested = (input.organizationId ?? '').trim();
+    const organizationId =
+      (requested &&
+      user.organizationIds.includes(requested) &&
+      partyOrgIds.includes(requested)
+        ? requested
+        : null) ??
+      user.organizationIds.find((id) => partyOrgIds.includes(id)) ??
+      null;
+
+    if (!organizationId) {
+      throw new ForbiddenException(
+        'Organization access denied for this meeting',
+      );
     }
 
     const existing = await this.prisma.meetingFeedback.findUnique({
       where: {
         meetingId_organizationId: {
           meetingId: input.meetingId,
-          organizationId: input.organizationId,
+          organizationId,
         },
       },
     });
@@ -486,7 +495,7 @@ export class MeetingsService {
       const created = await tx.meetingFeedback.create({
         data: {
           meetingId: input.meetingId,
-          organizationId: input.organizationId,
+          organizationId,
           reviewerUserId: user.id,
           attendanceConfirmed: input.attendanceConfirmed,
           meetingQuality: input.meetingQuality,
@@ -501,7 +510,9 @@ export class MeetingsService {
           outcome: input.outcome,
           outcomeCustom: input.outcomeCustom,
           comments: input.comments,
-          isConfidential: input.isConfidential ?? true,
+          // Visible to admins on /feedback; counterparts still get redaction
+          // in meeting payloads when true.
+          isConfidential: input.isConfidential ?? false,
         },
       });
 
@@ -509,7 +520,7 @@ export class MeetingsService {
         await tx.followUpAction.create({
           data: {
             meetingId: input.meetingId,
-            organizationId: input.organizationId,
+            organizationId,
             title: 'Post-meeting follow-up',
             description: input.comments,
             dueAt: input.followUpDate ? new Date(input.followUpDate) : null,

@@ -697,11 +697,24 @@ export class OrganizationsService {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(Math.max(1, params.pageSize ?? 20), 100);
     const q = params.q?.trim().replace(/\s+/g, ' ') ?? '';
-    const sortKey = (params.sort ?? '').trim().toLowerCase();
-    const orderBy =
-      sortKey === 'createdat_asc' || sortKey === 'date_asc'
-        ? ({ createdAt: 'asc' } as const)
-        : ({ createdAt: 'desc' } as const);
+    const sortKey = (params.sort ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, '_');
+    // Date high→low / low→high sorts by meeting bookings on event days
+    // (approved + total), not by table allotment.
+    const bookingsHighFirst =
+      sortKey === 'createdat_desc' ||
+      sortKey === 'date_desc' ||
+      sortKey === 'bookings_desc' ||
+      sortKey === 'high_to_low' ||
+      sortKey === '';
+    const bookingsLowFirst =
+      sortKey === 'createdat_asc' ||
+      sortKey === 'date_asc' ||
+      sortKey === 'bookings_asc' ||
+      sortKey === 'low_to_high' ||
+      sortKey === 'oldest';
     const where = {
       ...(params.type ? { type: params.type } : {}),
       status: { not: 'ARCHIVED' as const },
@@ -746,48 +759,46 @@ export class OrganizationsService {
     const now = new Date();
     const bookingWindow = await this.config.getMeetingBookingWindow();
     const eventDates = bookingWindow.dates;
-    const [items, total] = await Promise.all([
-      this.prisma.organization.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          company: true,
-          vendor: true,
-          invitations: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: { email: true, status: true },
-          },
-          members: {
-            take: 1,
-            orderBy: { joinedAt: 'asc' },
-            include: {
-              user: { select: { email: true } },
-            },
-          },
-          formSubmissions: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: {
-              id: true,
-              status: true,
-              submittedAt: true,
-              formVersionId: true,
-            },
+
+    // Load the full filtered set first so booking totals can drive sort + page.
+    const allOrgs = await this.prisma.organization.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { name: 'asc' }],
+      include: {
+        company: true,
+        vendor: true,
+        invitations: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { email: true, status: true },
+        },
+        members: {
+          take: 1,
+          orderBy: { joinedAt: 'asc' },
+          include: {
+            user: { select: { email: true } },
           },
         },
-      }),
-      this.prisma.organization.count({ where }),
-    ]);
+        formSubmissions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            submittedAt: true,
+            formVersionId: true,
+          },
+        },
+      },
+    });
+    const total = allOrgs.length;
+    const allOrgIds = allOrgs.map((item) => item.id);
 
-    const orgIds = items.map((item) => item.id);
-    const [assignments, meetings] = orgIds.length
+    const [assignments, meetings] = allOrgIds.length
       ? await Promise.all([
           this.prisma.investorPlaceAssignment.findMany({
             where: {
-              organizationId: { in: orgIds },
+              organizationId: { in: allOrgIds },
               endsAt: { gt: now },
             },
             include: {
@@ -800,8 +811,8 @@ export class OrganizationsService {
           this.prisma.meeting.findMany({
             where: {
               OR: [
-                { companyOrgId: { in: orgIds } },
-                { vendorOrgId: { in: orgIds } },
+                { companyOrgId: { in: allOrgIds } },
+                { vendorOrgId: { in: allOrgIds } },
               ],
               status: { not: 'CANCELLED' },
             },
@@ -822,86 +833,126 @@ export class OrganizationsService {
       }
     }
 
-    return {
-      items: items.map((item) => {
-        const attrs =
-          item.customAttrs && typeof item.customAttrs === 'object'
-            ? (item.customAttrs as Record<string, unknown>)
-            : {};
-        const attrEmail =
-          typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null;
-        const logoUrl =
-          typeof attrs.logoUrl === 'string' ? attrs.logoUrl : null;
-        const mine = meetings.filter(
-          (meeting) =>
-            meeting.companyOrgId === item.id || meeting.vendorOrgId === item.id,
+    const enriched = allOrgs.map((item) => {
+      const attrs =
+        item.customAttrs && typeof item.customAttrs === 'object'
+          ? (item.customAttrs as Record<string, unknown>)
+          : {};
+      const attrEmail =
+        typeof attrs.contactEmail === 'string' ? attrs.contactEmail : null;
+      const logoUrl =
+        typeof attrs.logoUrl === 'string' ? attrs.logoUrl : null;
+      const mine = meetings.filter(
+        (meeting) =>
+          meeting.companyOrgId === item.id || meeting.vendorOrgId === item.id,
+      );
+      const upcoming = mine.filter(
+        (meeting) =>
+          meeting.startsAt >= now &&
+          !['COMPLETED', 'NO_SHOW'].includes(meeting.status),
+      );
+      const confirmed = mine.filter((meeting) =>
+        [
+          'CONFIRMED',
+          'IN_PROGRESS',
+          'PUBLISHED',
+          'AWAITING_CONFIRMATION',
+          'RESCHEDULED',
+          'RESCHEDULE_REQUESTED',
+        ].includes(meeting.status),
+      );
+      const completed = mine.filter(
+        (meeting) => meeting.status === 'COMPLETED',
+      );
+      const nextMeeting = [...upcoming].sort(
+        (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+      )[0];
+      const byEventDate = eventDates.map((date) => {
+        const onDay = mine.filter(
+          (meeting) => dubaiEventDate(meeting.startsAt) === date,
         );
-        const upcoming = mine.filter(
-          (meeting) =>
-            meeting.startsAt >= now &&
-            !['COMPLETED', 'NO_SHOW'].includes(meeting.status),
-        );
-        const confirmed = mine.filter((meeting) =>
-          [
-            'CONFIRMED',
-            'IN_PROGRESS',
-            'PUBLISHED',
-            'AWAITING_CONFIRMATION',
-            'RESCHEDULED',
-            'RESCHEDULE_REQUESTED',
-          ].includes(meeting.status),
-        );
-        const completed = mine.filter(
-          (meeting) => meeting.status === 'COMPLETED',
-        );
-        const nextMeeting = [...upcoming].sort(
-          (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
-        )[0];
-        const byEventDate = eventDates.map((date) => {
-          const onDay = mine.filter(
-            (meeting) => dubaiEventDate(meeting.startsAt) === date,
-          );
-          const approved = onDay.filter((meeting) =>
-            APPROVED_MEETING_STATUSES.has(meeting.status),
-          ).length;
-          return {
-            date,
-            approved,
-            total: onDay.length,
-          };
-        });
-        const assignment = assignmentByOrg.get(item.id);
+        const approved = onDay.filter((meeting) =>
+          APPROVED_MEETING_STATUSES.has(meeting.status),
+        ).length;
         return {
-          ...item,
-          contactEmail:
-            item.invitations[0]?.email ??
-            attrEmail ??
-            item.members[0]?.user.email ??
-            null,
-          logoUrl,
-          latestSubmission: item.formSubmissions[0] ?? null,
-          workflowStatus:
-            item.vendor?.approvalStatus ??
-            item.company?.approvalStatus ??
-            item.status,
-          tableAssignment: assignment
-            ? {
-                placeName: assignment.place.name,
-                location: assignment.place.location,
-                startsAt: assignment.startsAt,
-                endsAt: assignment.endsAt,
-                allDay: assignment.allDay,
-              }
-            : null,
-          meetingStats: {
-            upcoming: upcoming.length,
-            confirmed: confirmed.length,
-            completed: completed.length,
-            nextStartsAt: nextMeeting?.startsAt ?? null,
-            byEventDate,
-          },
+          date,
+          approved,
+          total: onDay.length,
         };
-      }),
+      });
+      const bookingTotal = byEventDate.reduce((sum, day) => sum + day.total, 0);
+      const bookingApproved = byEventDate.reduce(
+        (sum, day) => sum + day.approved,
+        0,
+      );
+      const assignment = assignmentByOrg.get(item.id);
+      return {
+        ...item,
+        contactEmail:
+          item.invitations[0]?.email ??
+          attrEmail ??
+          item.members[0]?.user.email ??
+          null,
+        logoUrl,
+        latestSubmission: item.formSubmissions[0] ?? null,
+        workflowStatus:
+          item.vendor?.approvalStatus ??
+          item.company?.approvalStatus ??
+          item.status,
+        tableAssignment: assignment
+          ? {
+              placeName: assignment.place.name,
+              location: assignment.place.location,
+              startsAt: assignment.startsAt,
+              endsAt: assignment.endsAt,
+              allDay: assignment.allDay,
+            }
+          : null,
+        meetingStats: {
+          upcoming: upcoming.length,
+          confirmed: confirmed.length,
+          completed: completed.length,
+          nextStartsAt: nextMeeting?.startsAt ?? null,
+          byEventDate,
+          bookingTotal,
+          bookingApproved,
+        },
+        _bookingTotal: bookingTotal,
+        _bookingApproved: bookingApproved,
+        _createdAtMs: item.createdAt.getTime(),
+      };
+    });
+
+    enriched.sort((a, b) => {
+      if (bookingsHighFirst || bookingsLowFirst) {
+        const dir = bookingsLowFirst ? 1 : -1;
+        if (a._bookingTotal !== b._bookingTotal) {
+          return (a._bookingTotal - b._bookingTotal) * dir;
+        }
+        if (a._bookingApproved !== b._bookingApproved) {
+          return (a._bookingApproved - b._bookingApproved) * dir;
+        }
+      }
+      // Tie-breaker: created date (not table allotment).
+      if (a._createdAtMs !== b._createdAtMs) {
+        return bookingsLowFirst
+          ? a._createdAtMs - b._createdAtMs
+          : b._createdAtMs - a._createdAtMs;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    const pageItems = enriched
+      .slice((page - 1) * pageSize, page * pageSize)
+      .map(({ _bookingTotal, _bookingApproved, _createdAtMs, ...item }) => {
+        void _bookingTotal;
+        void _bookingApproved;
+        void _createdAtMs;
+        return item;
+      });
+
+    return {
+      items: pageItems,
       eventDates,
       page,
       pageSize,

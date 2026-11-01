@@ -32,6 +32,7 @@ import {
   type TableAssignment,
 } from '@/lib/org-directory';
 import { formatEventDate } from '@/lib/event-schedule';
+import { formatNearDate } from '@/lib/utils';
 
 type OrgList = {
   items: Array<{
@@ -39,6 +40,7 @@ type OrgList = {
     code: string;
     name: string;
     status: string;
+    createdAt?: string;
     workflowStatus?: string;
     contactEmail?: string | null;
     logoUrl?: string | null;
@@ -450,12 +452,12 @@ export default function CompaniesPage() {
         }
       />
 
-      <Card>
+      <Card className="overflow-hidden p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">Directory</h2>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Select
-              className="sm:w-52"
+              className="w-full sm:w-56"
               value={dateSort}
               onChange={(e) =>
                 setDateSort(
@@ -464,13 +466,17 @@ export default function CompaniesPage() {
                     : 'createdAt_desc',
                 )
               }
-              aria-label="Sort by date"
+              aria-label="Sort by meeting bookings"
             >
-              <option value="createdAt_desc">Date: high to low</option>
-              <option value="createdAt_asc">Date: low to high</option>
+              <option value="createdAt_desc">
+                Bookings: high → low
+              </option>
+              <option value="createdAt_asc">
+                Bookings: low → high
+              </option>
             </Select>
             <Input
-              className="max-w-xs"
+              className="w-full sm:max-w-xs"
               placeholder="Search name or email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -494,52 +500,40 @@ export default function CompaniesPage() {
           />
         ) : (
           <>
-            <Table
-              className={
-                isFetching ? 'opacity-70 transition-opacity' : undefined
-              }
+            <div
+              className={`grid gap-3 sm:hidden ${
+                isFetching ? 'opacity-70 transition-opacity' : ''
+              }`}
             >
-              <THead>
-                <TR>
-                  <TH>Name</TH>
-                  <TH>Status</TH>
-                  <TH>Table allotted</TH>
-                  {eventDates.map((date) => (
-                    <TH key={date} className="whitespace-nowrap text-center">
-                      <span className="block">{formatEventDate(date, 'chip')}</span>
-                      <span className="mt-0.5 block text-[10px] font-medium normal-case tracking-normal text-[#626F86]">
-                        approved / total
-                      </span>
-                    </TH>
-                  ))}
-                  <TH className="w-12 text-right"> </TH>
-                </TR>
-              </THead>
-              <TBody>
-                {items.map((org) => {
-                  const status =
-                    org.workflowStatus ??
-                    org.company?.approvalStatus ??
-                    org.status;
-                  const stats = org.meetingStats;
-                  const table = org.tableAssignment;
-                  return (
-                    <TR key={org.id}>
-                      <TD className="whitespace-normal">
-                        <div className="flex min-w-[16rem] items-start gap-2.5">
-                          {org.logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={org.logoUrl}
-                              alt=""
-                              className="mt-0.5 h-8 w-8 rounded-md object-cover"
-                            />
-                          ) : null}
-                          <div>
+              {items.map((org) => {
+                const status =
+                  org.workflowStatus ??
+                  org.company?.approvalStatus ??
+                  org.status;
+                const stats = org.meetingStats;
+                const table = org.tableAssignment;
+                const near = formatNearDate(org.createdAt);
+                return (
+                  <div
+                    key={org.id}
+                    className="min-w-0 rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      {org.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={org.logoUrl}
+                          alt=""
+                          className="mt-0.5 h-10 w-10 shrink-0 rounded-md object-cover"
+                        />
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <Link
                                 href={`/admin/companies/${org.id}`}
-                                className="font-semibold text-[#172B4D] hover:text-[var(--accent)] hover:underline"
+                                className="break-words font-semibold text-[#172B4D] hover:text-[var(--accent)] hover:underline"
                               >
                                 {org.name}
                               </Link>
@@ -547,49 +541,191 @@ export default function CompaniesPage() {
                                 <Badge variant="accent">Featured</Badge>
                               ) : null}
                             </div>
-                            <p className="text-xs text-[#626F86]">
+                            <p className="mt-0.5 break-all text-xs text-[#626F86]">
                               {org.contactEmail ?? 'No email'} · {org.code}
                             </p>
                           </div>
+                          <div className="shrink-0">
+                            <OrgRowActions
+                              org={org}
+                              kind="company"
+                              queryKey={[...queryKey]}
+                            />
+                          </div>
                         </div>
-                      </TD>
-                      <TD>
-                        <Badge variant={statusTone(status)}>
-                          {formatVendorStatus(status)}
-                        </Badge>
-                      </TD>
-                      <TD className="whitespace-normal">
-                        {table ? (
-                          <div>
-                            <p className="font-medium">{table.placeName}</p>
-                            <p className="text-xs text-[#626F86]">
-                              {formatTableWindow(table)}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Badge variant={statusTone(status)}>
+                            {formatVendorStatus(status)}
+                          </Badge>
+                          <span
+                            title={near.title}
+                            className="text-xs text-[#626F86]"
+                          >
+                            Created {near.label}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl bg-white/70 px-3 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#626F86]">
+                        Table allotted
+                      </p>
+                      {table ? (
+                        <div className="mt-1">
+                          <p className="font-medium text-[#172B4D]">
+                            {table.placeName}
+                          </p>
+                          <p className="text-xs text-[#626F86]">
+                            {formatTableWindow(table)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm text-[#626F86]">Unassigned</p>
+                      )}
+                    </div>
+
+                    {eventDates.length > 0 ? (
+                      <div
+                        className="mt-3 grid gap-2"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.min(eventDates.length, 3)}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {eventDates.map((date) => (
+                          <div
+                            key={`${org.id}-m-${date}`}
+                            className="rounded-xl border border-[#DFE1E6] bg-white px-2 py-2 text-center"
+                          >
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#626F86]">
+                              {formatEventDate(date, 'chip')}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold tabular-nums text-[#172B4D]">
+                              {formatDayMeetingRatio(stats, date)}
                             </p>
                           </div>
-                        ) : (
-                          <span className="text-[#626F86]">Unassigned</span>
-                        )}
-                      </TD>
-                      {eventDates.map((date) => (
-                        <TD
-                          key={`${org.id}-${date}`}
-                          className="text-center tabular-nums font-medium"
-                        >
-                          {formatDayMeetingRatio(stats, date)}
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden min-w-0 sm:block">
+              <Table
+                className={
+                  isFetching ? 'opacity-70 transition-opacity' : undefined
+                }
+              >
+                <THead>
+                  <TR>
+                    <TH>Name</TH>
+                    <TH>Status</TH>
+                    <TH>Created</TH>
+                    <TH>Table allotted</TH>
+                    {eventDates.map((date) => (
+                      <TH key={date} className="whitespace-nowrap text-center">
+                        <span className="block">
+                          {formatEventDate(date, 'chip')}
+                        </span>
+                        <span className="mt-0.5 block text-[10px] font-medium normal-case tracking-normal text-[#626F86]">
+                          approved / total
+                        </span>
+                      </TH>
+                    ))}
+                    <TH className="w-12 text-right"> </TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {items.map((org) => {
+                    const status =
+                      org.workflowStatus ??
+                      org.company?.approvalStatus ??
+                      org.status;
+                    const stats = org.meetingStats;
+                    const table = org.tableAssignment;
+                    return (
+                      <TR key={org.id}>
+                        <TD className="whitespace-normal">
+                          <div className="flex min-w-[16rem] items-start gap-2.5">
+                            {org.logoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={org.logoUrl}
+                                alt=""
+                                className="mt-0.5 h-8 w-8 rounded-md object-cover"
+                              />
+                            ) : null}
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link
+                                  href={`/admin/companies/${org.id}`}
+                                  className="font-semibold text-[#172B4D] hover:text-[var(--accent)] hover:underline"
+                                >
+                                  {org.name}
+                                </Link>
+                                {org.company?.featured ? (
+                                  <Badge variant="accent">Featured</Badge>
+                                ) : null}
+                              </div>
+                              <p className="text-xs text-[#626F86]">
+                                {org.contactEmail ?? 'No email'} · {org.code}
+                              </p>
+                            </div>
+                          </div>
                         </TD>
-                      ))}
-                      <TD className="text-right">
-                        <OrgRowActions
-                          org={org}
-                          kind="company"
-                          queryKey={[...queryKey]}
-                        />
-                      </TD>
-                    </TR>
-                  );
-                })}
-              </TBody>
-            </Table>
+                        <TD>
+                          <Badge variant={statusTone(status)}>
+                            {formatVendorStatus(status)}
+                          </Badge>
+                        </TD>
+                        <TD className="whitespace-nowrap text-sm">
+                          {(() => {
+                            const near = formatNearDate(org.createdAt);
+                            return (
+                              <span
+                                title={near.title}
+                                className="text-[#172B4D]"
+                              >
+                                {near.label}
+                              </span>
+                            );
+                          })()}
+                        </TD>
+                        <TD className="whitespace-normal">
+                          {table ? (
+                            <div>
+                              <p className="font-medium">{table.placeName}</p>
+                              <p className="text-xs text-[#626F86]">
+                                {formatTableWindow(table)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-[#626F86]">Unassigned</span>
+                          )}
+                        </TD>
+                        {eventDates.map((date) => (
+                          <TD
+                            key={`${org.id}-${date}`}
+                            className="text-center tabular-nums font-medium"
+                          >
+                            {formatDayMeetingRatio(stats, date)}
+                          </TD>
+                        ))}
+                        <TD className="text-right">
+                          <OrgRowActions
+                            org={org}
+                            kind="company"
+                            queryKey={[...queryKey]}
+                          />
+                        </TD>
+                      </TR>
+                    );
+                  })}
+                </TBody>
+              </Table>
+            </div>
             <Pagination
               page={data?.page ?? page}
               pageSize={data?.pageSize ?? PAGE_SIZE}

@@ -106,9 +106,15 @@ export function OrgRowActions({
       const rect = buttonRef.current?.getBoundingClientRect();
       if (!rect) return;
       const width = 196;
+      const estimatedHeight = 280;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < estimatedHeight && rect.top > spaceBelow;
+      const top = openUp
+        ? Math.max(8, rect.top - estimatedHeight - 6)
+        : Math.min(rect.bottom + 6, window.innerHeight - estimatedHeight - 8);
       setMenuPos({
-        top: rect.bottom + 6,
-        left: Math.max(8, rect.right - width),
+        top,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)),
       });
     };
     update();

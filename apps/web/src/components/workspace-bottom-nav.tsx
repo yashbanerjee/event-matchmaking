@@ -43,15 +43,15 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_94%,transparent)] px-2 pt-1 backdrop-blur-md sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_96%,transparent)] px-1.5 pt-1.5 shadow-[0_-8px_24px_rgba(10,10,10,0.06)] backdrop-blur-xl sm:hidden"
       style={{
-        paddingBottom: 'max(0.35rem, env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'max(0.45rem, env(safe-area-inset-bottom, 0px))',
       }}
       aria-label="Primary"
     >
       <ul
         className={cn(
-          'mx-auto grid max-w-lg gap-1',
+          'mx-auto grid max-w-lg gap-0.5',
           items.length <= 2
             ? 'grid-cols-2'
             : items.length === 4
@@ -71,18 +71,21 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
               <Link
                 href={item.href}
                 className={cn(
-                  'relative flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold tracking-wide transition-colors',
+                  'relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-[10px] font-semibold tracking-wide transition-colors active:scale-[0.97]',
                   active
                     ? 'bg-[var(--accent-soft)] text-[var(--accent-hover)]'
                     : 'text-[var(--muted)] hover:bg-[var(--card-elevated)] hover:text-[var(--foreground)]',
                 )}
               >
-                <Icon className="h-5 w-5" aria-hidden />
-                <span>{item.label}</span>
+                <Icon
+                  className={cn('h-5 w-5', active && 'stroke-[2.25]')}
+                  aria-hidden
+                />
+                <span className="truncate">{item.label}</span>
                 {(item.badge ?? 0) > 0 ? (
                   <span
                     className={cn(
-                      'absolute right-2 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white',
+                      'absolute right-1.5 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white',
                       item.icon === 'recommendations'
                         ? 'bg-red-600'
                         : 'bg-[var(--accent)] text-[var(--accent-foreground)]',

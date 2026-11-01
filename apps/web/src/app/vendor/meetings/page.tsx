@@ -12,6 +12,7 @@ import { MeetingPlaceLink } from '@/components/meeting-place-link';
 import {
   MeetingFeedbackModal,
   meetingHasEnded,
+  resolveFeedbackOrganizationId,
 } from '@/components/meeting-feedback-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,8 +35,10 @@ type Meeting = {
   location?: string | null;
   timeZone?: string | null;
   hasSubmittedFeedback?: boolean;
-  companyOrg: { name: string };
-  vendorOrg: { name: string };
+  companyOrgId: string;
+  vendorOrgId: string;
+  companyOrg: { id?: string; name: string };
+  vendorOrg: { id?: string; name: string };
   place?: {
     name: string;
     location?: string | null;
@@ -175,18 +178,45 @@ export default function VendorMeetingsPage() {
         {viewMode === 'calendar' && !meetings.isLoading ? (
           <MeetingsCalendar
             events={calendarEvents}
-            onSelectEvent={(event) => {
-              if (event.kind !== 'meeting') return;
+            suppressDetails={Boolean(feedbackFor)}
+            renderEventActions={(event) => {
+              if (event.kind !== 'meeting') return null;
               const meetingId = event.id.replace(/^meeting:/, '');
               const meeting = filtered.find((row) => row.id === meetingId);
-              if (!meeting) return;
-              if (
-                meetingHasEnded(meeting) &&
-                orgId &&
-                !meeting.hasSubmittedFeedback
-              ) {
-                setFeedbackFor(meeting);
-              }
+              if (!meeting) return null;
+              const ended = meetingHasEnded(meeting);
+              const submitted = Boolean(meeting.hasSubmittedFeedback);
+              const feedbackOrgId = resolveFeedbackOrganizationId(
+                meeting,
+                me.data?.organizationIds,
+              );
+              return (
+                <>
+                  {meeting.status === 'AWAITING_CONFIRMATION' ? (
+                    <Button
+                      size="sm"
+                      loading={
+                        confirm.isPending && confirm.variables === meeting.id
+                      }
+                      onClick={() => confirm.mutate(meeting.id)}
+                    >
+                      Confirm
+                    </Button>
+                  ) : null}
+                  {ended && feedbackOrgId && !submitted ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setFeedbackFor(meeting)}
+                    >
+                      Feedback & review
+                    </Button>
+                  ) : null}
+                  {ended && submitted ? (
+                    <Badge variant="success">Feedback sent</Badge>
+                  ) : null}
+                </>
+              );
             }}
           />
         ) : null}
@@ -277,12 +307,22 @@ export default function VendorMeetingsPage() {
       <MeetingFeedbackModal
         open={Boolean(feedbackFor)}
         meetingId={feedbackFor?.id ?? null}
-        organizationId={orgId}
+        organizationId={
+          feedbackFor
+            ? resolveFeedbackOrganizationId(
+                feedbackFor,
+                me.data?.organizationIds,
+              )
+            : orgId
+        }
         counterpartName={feedbackFor?.companyOrg.name ?? 'counterpart'}
         onClose={() => setFeedbackFor(null)}
-        onSubmitted={() =>
-          void qc.invalidateQueries({ queryKey: ['vendor-meetings'] })
-        }
+        onSubmitted={async () => {
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ['vendor-meetings'] }),
+            qc.invalidateQueries({ queryKey: ['feedback'] }),
+          ]);
+        }}
       />
     </>
   );

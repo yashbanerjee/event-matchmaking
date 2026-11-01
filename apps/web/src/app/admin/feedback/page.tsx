@@ -108,9 +108,9 @@ export default function FeedbackPage() {
               </span>
             ) : null}
           </h2>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Select
-              className="sm:w-44"
+              className="w-full sm:w-44"
               value={role}
               onChange={(e) =>
                 setRole(
@@ -126,7 +126,7 @@ export default function FeedbackPage() {
               <option value="VENDOR">Innovator</option>
             </Select>
             <Input
-              className="max-w-xs"
+              className="w-full sm:max-w-xs"
               placeholder="Search by name…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -152,74 +152,145 @@ export default function FeedbackPage() {
             }
           />
         ) : (
-          <div
-            className={
-              isFetching
-                ? 'overflow-x-auto opacity-70 transition-opacity'
-                : 'overflow-x-auto'
-            }
-          >
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Reviewer</TH>
-                  <TH>Reviewed</TH>
-                  <TH>Meeting</TH>
-                  <TH>Outcome</TH>
-                  <TH>Meeting</TH>
-                  <TH>Peer review</TH>
-                  <TH>Comments</TH>
-                  <TH>Submitted</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {items.map((f) => (
-                  <TR key={f.id}>
-                    <TD>
-                      <div className="font-medium">{reviewerName(f)}</div>
-                      <div className="text-xs text-[var(--muted)]">
+          <>
+            <div
+              className={`grid gap-3 sm:hidden ${
+                isFetching ? 'opacity-70 transition-opacity' : ''
+              }`}
+            >
+              {items.map((f) => (
+                <div
+                  key={f.id}
+                  className="min-w-0 rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[#172B4D]">
+                        {reviewerName(f)}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
                         {f.organization.name}
-                        {roleLabel(f.organization.type) ? (
-                          <> · {roleLabel(f.organization.type)}</>
-                        ) : null}
-                      </div>
-                    </TD>
-                    <TD>{counterpart(f)}</TD>
-                    <TD className="text-sm">
-                      {f.meeting.companyOrg.name} ↔ {f.meeting.vendorOrg.name}
-                      <div className="text-xs text-[var(--muted)]">
-                        {new Date(f.meeting.startsAt).toLocaleString()}
-                      </div>
-                    </TD>
-                    <TD>
-                      <Badge variant="secondary">
-                        {f.outcome.replaceAll('_', ' ')}
-                      </Badge>
-                    </TD>
-                    <TD className="text-sm">
-                      Q {f.meetingQuality ?? '—'} · Rel {f.relevance ?? '—'}
-                    </TD>
-                    <TD className="text-sm">
-                      Comm {f.communicationQuality ?? '—'} · Int{' '}
-                      {f.interestLevel ?? '—'} · Biz{' '}
-                      {f.businessPotential ?? '—'}
-                    </TD>
-                    <TD className="max-w-[220px] truncate text-sm">
-                      {f.comments || '—'}
-                      {f.isConfidential ? (
-                        <Badge variant="warning" className="ml-2">
-                          Confidential
-                        </Badge>
-                      ) : null}
-                    </TD>
-                    <TD className="text-sm text-[var(--muted)]">
-                      {new Date(f.createdAt).toLocaleString()}
-                    </TD>
+                        {roleLabel(f.organization.type)
+                          ? ` · ${roleLabel(f.organization.type)}`
+                          : ''}
+                      </p>
+                    </div>
+                    <Badge variant="secondary">
+                      {f.outcome.replaceAll('_', ' ')}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm">
+                    Reviewed <span className="font-medium">{counterpart(f)}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {f.meeting.companyOrg.name} ↔ {f.meeting.vendorOrg.name}
+                    <br />
+                    {new Date(f.meeting.startsAt).toLocaleString()}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl bg-white/80 px-2.5 py-2">
+                      <p className="font-semibold uppercase tracking-wide text-[var(--muted)]">
+                        Meeting
+                      </p>
+                      <p className="mt-1">
+                        Q {f.meetingQuality ?? '—'} · Rel {f.relevance ?? '—'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white/80 px-2.5 py-2">
+                      <p className="font-semibold uppercase tracking-wide text-[var(--muted)]">
+                        Peer
+                      </p>
+                      <p className="mt-1">
+                        Comm {f.communicationQuality ?? '—'} · Int{' '}
+                        {f.interestLevel ?? '—'} · Biz{' '}
+                        {f.businessPotential ?? '—'}
+                      </p>
+                    </div>
+                  </div>
+                  {f.comments ? (
+                    <p className="mt-3 line-clamp-3 text-sm text-[#172B4D]">
+                      {f.comments}
+                    </p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                    <span>{new Date(f.createdAt).toLocaleString()}</span>
+                    {f.isConfidential ? (
+                      <Badge variant="warning">Confidential</Badge>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              className={`hidden sm:block ${
+                isFetching
+                  ? 'overflow-x-auto opacity-70 transition-opacity'
+                  : 'overflow-x-auto'
+              }`}
+            >
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Reviewer</TH>
+                    <TH>Reviewed</TH>
+                    <TH>Meeting</TH>
+                    <TH>Outcome</TH>
+                    <TH>Meeting</TH>
+                    <TH>Peer review</TH>
+                    <TH>Comments</TH>
+                    <TH>Submitted</TH>
                   </TR>
-                ))}
-              </TBody>
-            </Table>
-          </div>
+                </THead>
+                <TBody>
+                  {items.map((f) => (
+                    <TR key={f.id}>
+                      <TD>
+                        <div className="font-medium">{reviewerName(f)}</div>
+                        <div className="text-xs text-[var(--muted)]">
+                          {f.organization.name}
+                          {roleLabel(f.organization.type) ? (
+                            <> · {roleLabel(f.organization.type)}</>
+                          ) : null}
+                        </div>
+                      </TD>
+                      <TD>{counterpart(f)}</TD>
+                      <TD className="text-sm">
+                        {f.meeting.companyOrg.name} ↔ {f.meeting.vendorOrg.name}
+                        <div className="text-xs text-[var(--muted)]">
+                          {new Date(f.meeting.startsAt).toLocaleString()}
+                        </div>
+                      </TD>
+                      <TD>
+                        <Badge variant="secondary">
+                          {f.outcome.replaceAll('_', ' ')}
+                        </Badge>
+                      </TD>
+                      <TD className="text-sm">
+                        Q {f.meetingQuality ?? '—'} · Rel {f.relevance ?? '—'}
+                      </TD>
+                      <TD className="text-sm">
+                        Comm {f.communicationQuality ?? '—'} · Int{' '}
+                        {f.interestLevel ?? '—'} · Biz{' '}
+                        {f.businessPotential ?? '—'}
+                      </TD>
+                      <TD className="max-w-[220px] truncate text-sm">
+                        {f.comments || '—'}
+                        {f.isConfidential ? (
+                          <Badge variant="warning" className="ml-2">
+                            Confidential
+                          </Badge>
+                        ) : null}
+                      </TD>
+                      <TD className="text-sm text-[var(--muted)]">
+                        {new Date(f.createdAt).toLocaleString()}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          </>
         )}
       </Card>
     </div>

@@ -121,14 +121,26 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
+  const pageTitle =
+    NAV_GROUPS.flatMap((group) => group.items)
+      .filter((item) =>
+        item.href === '/admin'
+          ? pathname === '/admin'
+          : pathname === item.href || pathname.startsWith(`${item.href}/`),
+      )
+      .sort((a, b) => b.href.length - a.href.length)[0]?.label ?? 'Admin';
+
   return (
     <div className="admin-shell">
-      <header className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden">
-        <div className="flex items-center gap-3 px-4 py-3">
+      <header
+        className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
+        <div className="flex items-center gap-3 px-4 py-2.5">
           <Button
             type="button"
             variant="outline"
-            className="h-10 w-10 shrink-0 px-0"
+            className="h-11 w-11 shrink-0 px-0"
             aria-expanded={navOpen}
             aria-controls="admin-sidebar"
             aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
@@ -136,12 +148,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           >
             {navOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </Button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-              Admin
+              {BRAND.name}
             </p>
             <div className="h-display truncate text-base font-bold tracking-tight">
-              {BRAND.name}
+              {pageTitle}
             </div>
           </div>
         </div>
@@ -216,8 +228,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="page-pad min-h-dvh min-w-0">
-        <div className="w-full max-w-full">{children}</div>
+      <main className="page-pad min-h-dvh min-w-0 overflow-x-hidden">
+        <div className="page-shell w-full max-w-full min-w-0 space-y-5 sm:space-y-6">
+          {children}
+        </div>
       </main>
     </div>
   );

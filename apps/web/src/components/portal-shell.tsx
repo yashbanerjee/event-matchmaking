@@ -222,11 +222,14 @@ export function PortalShell({
 
   return (
     <div className="admin-shell workspace-shell has-mobile-tabs">
-      <header className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden">
-        <div className="flex items-center gap-3 px-4 py-3">
+      <header
+        className="glass-panel sticky top-0 z-30 rounded-none border-x-0 border-t-0 sm:hidden"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
+        <div className="flex items-center gap-3 px-4 py-2.5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
-              Investor panel
+              Investor
             </p>
             <div className="h-display truncate text-base font-bold tracking-tight">
               {BRAND.name}
@@ -235,7 +238,7 @@ export function PortalShell({
           <Button
             type="button"
             variant="outline"
-            className="h-10 shrink-0 gap-1.5 px-3"
+            className="h-11 shrink-0 gap-1.5 px-3"
             aria-label="Sign out"
             onClick={() => {
               clearTokens();

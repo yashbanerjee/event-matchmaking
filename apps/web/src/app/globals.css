@@ -216,7 +216,27 @@ h2,
 }
 
 .modal-footer-pad {
+  /* Modal sits above bottom nav; only clear the home indicator. */
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 639px) {
+  .modal-footer-pad {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  /* App-like touch targets and less browser chrome chrome */
+  button,
+  a,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* avoid iOS zoom on focus */
+  }
 }
 
 .auth-pad {

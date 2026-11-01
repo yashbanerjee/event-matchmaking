@@ -78,7 +78,7 @@ export class MeetingsController {
     @Param('id') id: string,
     @Body()
     body: {
-      organizationId: string;
+      organizationId?: string;
       attendanceConfirmed: boolean;
       meetingQuality?: number;
       relevance?: number;

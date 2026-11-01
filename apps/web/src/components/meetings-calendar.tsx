@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EventDateChips } from '@/components/event-date-chips';
 import { MeetingPlaceLink } from '@/components/meeting-place-link';
+import { Modal } from '@/components/ui/modal';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import {
@@ -239,29 +240,15 @@ function nowOffsetPercent(day: Date, hourStart: number, hourEnd: number) {
   );
 }
 
-function EventDetails({
+function EventDetailsBody({
   selected,
-  onClose,
+  actions,
 }: {
-  selected: CalendarEvent | null;
-  onClose?: () => void;
+  selected: CalendarEvent;
+  actions?: ReactNode;
 }) {
-  if (!selected) {
-    return (
-      <div className="hidden rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-elevated)]/50 px-4 py-6 text-center md:block">
-        <p className="text-sm font-medium text-[var(--foreground)]">
-          Pick an event
-        </p>
-        <p className="mt-1 text-xs text-[var(--muted)]">
-          Click any meeting or request on the calendar to see who, when, and
-          where.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[0_8px_30px_rgba(10,10,10,0.06)]">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p
@@ -283,18 +270,11 @@ function EventDetails({
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={statusTone(selected.status)}>
-            {selected.status.replaceAll('_', ' ')}
-          </Badge>
-          {onClose ? (
-            <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-              Close
-            </Button>
-          ) : null}
-        </div>
+        <Badge variant={statusTone(selected.status)}>
+          {selected.status.replaceAll('_', ' ')}
+        </Badge>
       </div>
-      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+      <div className="grid gap-2 text-sm sm:grid-cols-2">
         <p>
           <span className="text-[var(--muted)]">When: </span>
           {new Date(selected.startsAt).toLocaleString()}
@@ -332,6 +312,65 @@ function EventDetails({
               ))
           : null}
       </div>
+      {actions ? (
+        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
+          {actions}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EventDetails({
+  selected,
+  onClose,
+  actions,
+  asModal = false,
+}: {
+  selected: CalendarEvent | null;
+  onClose?: () => void;
+  actions?: ReactNode;
+  asModal?: boolean;
+}) {
+  if (!selected) {
+    if (asModal) return null;
+    return (
+      <div className="hidden rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-elevated)]/50 px-4 py-6 text-center md:block">
+        <p className="text-sm font-medium text-[var(--foreground)]">
+          Pick an event
+        </p>
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          Click any meeting or request on the calendar to see who, when, and
+          where.
+        </p>
+      </div>
+    );
+  }
+
+  if (asModal) {
+    return (
+      <Modal
+        open
+        onClose={onClose ?? (() => undefined)}
+        title={selected.kind === 'meeting' ? 'Meeting' : 'Meeting request'}
+        description={selected.title}
+        size="lg"
+      >
+        <EventDetailsBody selected={selected} actions={actions} />
+      </Modal>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-[0_8px_30px_rgba(10,10,10,0.06)]">
+      <div className="mb-1 flex justify-end">
+        {onClose ? (
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        ) : null}
+      </div>
+      <EventDetailsBody selected={selected} actions={actions} />
     </div>
   );
 }
@@ -645,20 +684,30 @@ function TimeGrid({
 export function MeetingsCalendar({
   events,
   onSelectEvent,
+  renderEventActions,
   className,
   variant = 'default',
+  suppressDetails = false,
 }: {
   events: CalendarEvent[];
   onSelectEvent?: (event: CalendarEvent) => void;
+  /** Optional action buttons inside the meeting detail popup / panel. */
+  renderEventActions?: (event: CalendarEvent) => ReactNode;
   className?: string;
   /** Admin: leaner chrome — no empty details pane */
   variant?: 'default' | 'admin';
+  /** Hide the detail popup (e.g. while feedback form is open on top). */
+  suppressDetails?: boolean;
 }) {
   const lean = variant === 'admin';
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [selectedYmd, setSelectedYmd] = useState<string>('');
   const today = useMemo(() => startOfDay(new Date()), []);
+
+  useEffect(() => {
+    if (suppressDetails) setSelectedId(null);
+  }, [suppressDetails]);
 
   const scheduleQuery = useQuery({
     queryKey: ['meeting-booking-window'],
@@ -778,9 +827,16 @@ export function MeetingsCalendar({
         />
       ) : null}
 
-      {(lean ? Boolean(selected) : selected || !isMobile) ? (
+      {!suppressDetails &&
+      (lean ? Boolean(selected) : selected || !isMobile) ? (
         <EventDetails
           selected={selected}
+          asModal={isMobile && Boolean(selected)}
+          actions={
+            selected && renderEventActions
+              ? renderEventActions(selected)
+              : undefined
+          }
           onClose={
             (isMobile || lean) && selected
               ? () => setSelectedId(null)

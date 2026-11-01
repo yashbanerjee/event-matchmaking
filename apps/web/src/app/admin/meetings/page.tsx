@@ -541,51 +541,47 @@ export default function AdminMeetingsPage() {
         ) : null}
 
         {viewMode === 'list' && !meetings.isLoading && rows.length > 0 ? (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Investor</TH>
-                <TH>Innovator</TH>
-                <TH>Starts</TH>
-                <TH>Meeting place</TH>
-                <TH>Invited by</TH>
-                <TH>Status</TH>
-                <TH />
-              </TR>
-            </THead>
-            <TBody>
+          <>
+            <div className="grid gap-3 sm:hidden">
               {rows.map((m) => {
                 const invitedBy = m.invitedByLabel || 'Admin created meeting';
-                const isAdminCreated =
-                  invitedBy === 'Admin created meeting';
+                const isAdminCreated = invitedBy === 'Admin created meeting';
                 return (
-                  <TR key={m.id}>
-                    <TD className="font-medium">{m.companyOrg.name}</TD>
-                    <TD>{m.vendorOrg.name}</TD>
-                    <TD>{new Date(m.startsAt).toLocaleString()}</TD>
-                    <TD className="min-w-[11rem]">
+                  <div
+                    key={m.id}
+                    className="min-w-0 rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,#ffffff_0%,#f7fbfd_100%)] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-[#172B4D]">
+                          {m.companyOrg.name}
+                        </p>
+                        <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
+                          ↔ {m.vendorOrg.name}
+                        </p>
+                      </div>
+                      <Badge variant={statusTone(m.status)}>
+                        {m.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 space-y-1.5 text-sm">
+                      <p>{new Date(m.startsAt).toLocaleString()}</p>
                       <MeetingPlaceLink
                         place={m.place}
                         fallback={m.location || m.venue}
                         compact
                       />
-                    </TD>
-                    <TD>
                       {isAdminCreated ? (
                         <Badge variant="secondary">Admin created meeting</Badge>
                       ) : (
-                        <span className="text-sm">{invitedBy}</span>
+                        <p className="text-xs text-[var(--muted)]">{invitedBy}</p>
                       )}
-                    </TD>
-                    <TD>
-                      <Badge variant={statusTone(m.status)}>
-                        {m.status.replaceAll('_', ' ')}
-                      </Badge>
-                    </TD>
-                    <TD className="space-x-2 text-right">
+                    </div>
+                    <div className="mt-3 flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
+                        className="flex-1"
                         onClick={() => openEdit(m)}
                         disabled={['COMPLETED', 'NO_SHOW'].includes(m.status)}
                       >
@@ -594,20 +590,100 @@ export default function AdminMeetingsPage() {
                       <Button
                         size="sm"
                         variant="danger"
+                        className="flex-1"
                         onClick={() => confirmDelete(m)}
                         loading={deletingId === m.id}
-                        disabled={['COMPLETED', 'NO_SHOW', 'IN_PROGRESS'].includes(
-                          m.status,
-                        )}
+                        disabled={[
+                          'COMPLETED',
+                          'NO_SHOW',
+                          'IN_PROGRESS',
+                        ].includes(m.status)}
                       >
                         {deletingId === m.id ? 'Deleting…' : 'Delete'}
                       </Button>
-                    </TD>
-                  </TR>
+                    </div>
+                  </div>
                 );
               })}
-            </TBody>
-          </Table>
+            </div>
+
+            <div className="hidden sm:block">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Investor</TH>
+                    <TH>Innovator</TH>
+                    <TH>Starts</TH>
+                    <TH>Meeting place</TH>
+                    <TH>Invited by</TH>
+                    <TH>Status</TH>
+                    <TH />
+                  </TR>
+                </THead>
+                <TBody>
+                  {rows.map((m) => {
+                    const invitedBy =
+                      m.invitedByLabel || 'Admin created meeting';
+                    const isAdminCreated =
+                      invitedBy === 'Admin created meeting';
+                    return (
+                      <TR key={m.id}>
+                        <TD className="font-medium">{m.companyOrg.name}</TD>
+                        <TD>{m.vendorOrg.name}</TD>
+                        <TD>{new Date(m.startsAt).toLocaleString()}</TD>
+                        <TD className="min-w-[11rem]">
+                          <MeetingPlaceLink
+                            place={m.place}
+                            fallback={m.location || m.venue}
+                            compact
+                          />
+                        </TD>
+                        <TD>
+                          {isAdminCreated ? (
+                            <Badge variant="secondary">
+                              Admin created meeting
+                            </Badge>
+                          ) : (
+                            <span className="text-sm">{invitedBy}</span>
+                          )}
+                        </TD>
+                        <TD>
+                          <Badge variant={statusTone(m.status)}>
+                            {m.status.replaceAll('_', ' ')}
+                          </Badge>
+                        </TD>
+                        <TD className="space-x-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEdit(m)}
+                            disabled={['COMPLETED', 'NO_SHOW'].includes(
+                              m.status,
+                            )}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => confirmDelete(m)}
+                            loading={deletingId === m.id}
+                            disabled={[
+                              'COMPLETED',
+                              'NO_SHOW',
+                              'IN_PROGRESS',
+                            ].includes(m.status)}
+                          >
+                            {deletingId === m.id ? 'Deleting…' : 'Delete'}
+                          </Button>
+                        </TD>
+                      </TR>
+                    );
+                  })}
+                </TBody>
+              </Table>
+            </div>
+          </>
         ) : null}
       </Card>
 
