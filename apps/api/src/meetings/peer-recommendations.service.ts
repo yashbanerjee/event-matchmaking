@@ -13,7 +13,12 @@ import {
 } from '@em/domain';
 import {
   defaultMatchingWeights,
+  meetsTagCategoryThresholds,
   PEER_RECOMMENDATIONS_MAX_PER_ORG,
+  resolveMatchingWeights,
+  resolveTagCategoryThresholds,
+  type MatchingWeights,
+  type TagCategoryThresholds,
 } from '@em/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -132,11 +137,24 @@ export class PeerRecommendationsService {
       take: Math.max(max * 3, 30),
     });
 
-    // Admin pins first, then by score. COMPUTED rows must meet the threshold.
+    const tagCategoryThresholds = resolveTagCategoryThresholds(
+      await this.config.getRaw('ops.tagCategoryThresholds'),
+    );
+
+    // Admin pins first, then by score. COMPUTED rows must meet score + tag floors.
     const visible = items
-      .filter(
-        (row) => row.source === 'MANUAL' || row.totalScore >= threshold,
-      )
+      .filter((row) => {
+        if (row.source === 'MANUAL') return true;
+        if (row.totalScore < threshold) return false;
+        const breakdown =
+          row.scoreBreakdown &&
+          typeof row.scoreBreakdown === 'object' &&
+          !Array.isArray(row.scoreBreakdown)
+            ? (row.scoreBreakdown as Record<string, unknown>)
+            : {};
+        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
+          .ok;
+      })
       .sort((a, b) => {
         if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
         return b.totalScore - a.totalScore;
@@ -548,6 +566,10 @@ export class PeerRecommendationsService {
       ? await this.config.getString('ai.matchmakingPrompt', '')
       : '';
     const temperature = await this.config.getNumber('ai.javTemperature', 0.2);
+    const tagCategoryThresholds = resolveTagCategoryThresholds(
+      await this.config.getRaw('ops.tagCategoryThresholds'),
+    );
+    const matchingWeights = await this.loadMatchingWeights();
 
     const llmCandidateLimit = Math.min(
       30,
@@ -624,12 +646,14 @@ export class PeerRecommendationsService {
         llmCandidateLimit,
         llmConcurrency,
         skipEmbedding: true,
+        matchingWeights,
       });
 
       upserted += await this.syncComputedRecommendations({
         fromOrgId: org.id,
         perspective: 'COMPANY',
         scored,
+        tagCategoryThresholds,
       });
     }
 
@@ -684,12 +708,14 @@ export class PeerRecommendationsService {
         llmCandidateLimit,
         llmConcurrency,
         skipEmbedding: true,
+        matchingWeights,
       });
 
       upserted += await this.syncComputedRecommendations({
         fromOrgId: org.id,
         perspective: 'VENDOR',
         scored,
+        tagCategoryThresholds,
       });
     }
 
@@ -704,6 +730,18 @@ export class PeerRecommendationsService {
    * Rule-score every counterpart (fast), then LLM-score only the top candidates
    * (plus any admin MANUAL pins) in parallel — we only persist 5 recommendations.
    */
+  private async loadMatchingWeights(): Promise<MatchingWeights> {
+    const rule = await this.prisma.matchingRule.findUnique({
+      where: { code: 'DEFAULT' },
+      include: {
+        versions: { orderBy: { version: 'desc' }, take: 1 },
+      },
+    });
+    return resolveMatchingWeights(
+      rule?.versions[0]?.weights ?? defaultMatchingWeights,
+    );
+  }
+
   private async scoreCounterpartsForRecompute(input: {
     fromOrgId: string;
     fromProfileVersion: number;
@@ -726,6 +764,7 @@ export class PeerRecommendationsService {
     llmCandidateLimit: number;
     llmConcurrency: number;
     skipEmbedding?: boolean;
+    matchingWeights: MatchingWeights;
   }) {
     type ScoredRow = {
       toOrgId: string;
@@ -749,7 +788,7 @@ export class PeerRecommendationsService {
         const rule = calculateMatchScore(
           row.companyFeatures,
           row.vendorFeatures,
-          defaultMatchingWeights,
+          input.matchingWeights,
           input.equivalences,
           input.tagLabels,
         );
@@ -787,6 +826,7 @@ export class PeerRecommendationsService {
           temperature: input.temperature,
           includeOnboarding: input.includeOnboarding,
           skipEmbedding: input.skipEmbedding,
+          matchingWeights: input.matchingWeights,
         });
         return {
           toOrgId: row.toOrgId,
@@ -814,11 +854,12 @@ export class PeerRecommendationsService {
     includeOnboarding: boolean;
     /** Skip embedding calls during bulk recompute (LLM-only is much faster). */
     skipEmbedding?: boolean;
+    matchingWeights?: MatchingWeights;
   }) {
     const score = calculateMatchScore(
       input.companyFeatures,
       input.vendorFeatures,
-      defaultMatchingWeights,
+      input.matchingWeights ?? defaultMatchingWeights,
       input.equivalences,
       input.tagLabels,
     );
@@ -956,6 +997,7 @@ export class PeerRecommendationsService {
   private async syncComputedRecommendations(input: {
     fromOrgId: string;
     perspective: 'COMPANY' | 'VENDOR';
+    tagCategoryThresholds: TagCategoryThresholds;
     scored: Array<{
       toOrgId: string;
       fromProfileVersion: number;
@@ -984,10 +1026,14 @@ export class PeerRecommendationsService {
 
     const rankedComputed = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
-      .filter(
-        (row) =>
-          !manualToIds.has(row.toOrgId) && row.pair.totalScore >= threshold,
-      );
+      .filter((row) => {
+        if (manualToIds.has(row.toOrgId)) return false;
+        if (row.pair.totalScore < threshold) return false;
+        return meetsTagCategoryThresholds(
+          row.pair.scoreBreakdown,
+          input.tagCategoryThresholds,
+        ).ok;
+      });
     const topComputed = selectDiverseTop(
       rankedComputed,
       computedSlots,

@@ -12,8 +12,10 @@ import {
 import {
   collectPublicProfileFields,
   defaultMatchingWeights,
+  meetsTagCategoryThresholds,
   PEER_RECOMMENDATIONS_MAX_PER_ORG,
   formSchemaDefinition,
+  resolveTagCategoryThresholds,
   type FormSchemaDefinition,
   type PublicProfileField,
 } from '@em/shared';
@@ -400,12 +402,23 @@ export class RecommendationsService {
     if (!rows.length) return null;
 
     const threshold = await this.getRecommendationThreshold();
+    const tagCategoryThresholds = resolveTagCategoryThresholds(
+      await this.config.getRaw('ops.tagCategoryThresholds'),
+    );
     const scored: RecommendationItem[] = rows
-      .filter(
-        (row) =>
-          row.toOrg.type === input.peerType &&
-          (row.source === 'MANUAL' || row.totalScore >= threshold),
-      )
+      .filter((row) => {
+        if (row.toOrg.type !== input.peerType) return false;
+        if (row.source === 'MANUAL') return true;
+        if (row.totalScore < threshold) return false;
+        const breakdown =
+          row.scoreBreakdown &&
+          typeof row.scoreBreakdown === 'object' &&
+          !Array.isArray(row.scoreBreakdown)
+            ? (row.scoreBreakdown as Record<string, unknown>)
+            : {};
+        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
+          .ok;
+      })
       .map((row) => {
         const peer = row.toOrg;
         const featured = Boolean(

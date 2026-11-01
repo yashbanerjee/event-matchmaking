@@ -345,8 +345,9 @@ export default function MatchmakingPage() {
           ))}
         </ol>
         <p className="text-xs text-[var(--muted)]">
-          Use Fine-tune AI below to edit threshold, blend, model, and prompts.
-          Re-run scoring after saving changes.
+          Use Fine-tune AI below to edit overall threshold, per-tag-category
+          floors, weights, blend, model, and prompts. Re-run scoring after
+          saving changes.
         </p>
       </Card>
 

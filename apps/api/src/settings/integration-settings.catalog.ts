@@ -300,6 +300,15 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'number',
   },
   {
+    key: 'ops.tagCategoryThresholds',
+    envKey: 'TAG_CATEGORY_THRESHOLDS',
+    label: 'Tag category thresholds (JSON)',
+    description:
+      'Minimum 0–100 scores per tag category before a pair can be recommended. Keys: challenge, solution, geography, commercial, stage, ticket. 0 = no minimum. Prefer editing these on the Matchmaking Fine-tune panel.',
+    group: 'ai',
+    type: 'textarea',
+  },
+  {
     key: 'ai.matchmakingBlendWeight',
     envKey: 'AI_MATCHMAKING_BLEND_WEIGHT',
     label: 'AI blend weight',

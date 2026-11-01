@@ -12,7 +12,9 @@ import {
 import {
   defaultMatchingWeights,
   matchingWeightsSchema,
+  meetsTagCategoryThresholds,
   resolveMatchingWeights,
+  resolveTagCategoryThresholds,
   renderMeetingEmail,
   scheduleConfigSchema,
   type MatchingWeights,
@@ -96,6 +98,22 @@ export class MatchmakingService {
         },
       },
     });
+  }
+
+  async getDefaultRuleConfig() {
+    const rule = await this.ensureDefaultRule();
+    const latest = await this.prisma.matchingRuleVersion.findFirst({
+      where: { ruleId: rule.id },
+      orderBy: { version: 'desc' },
+    });
+    return {
+      ruleId: rule.id,
+      version: latest?.version ?? 1,
+      weights: resolveMatchingWeights(
+        latest?.weights ?? defaultMatchingWeights,
+      ),
+      minScore: latest?.minScore ?? 40,
+    };
   }
 
   async updateWeights(actor: AuthUser, weights: MatchingWeights) {
@@ -309,6 +327,9 @@ export class MatchmakingService {
           await this.config.getNumber('ops.recommendationScoreThreshold', 50),
         ),
       );
+      const tagCategoryThresholds = resolveTagCategoryThresholds(
+        await this.config.getRaw('ops.tagCategoryThresholds'),
+      );
       const aiBlendWeight = useAi
         ? Math.max(
             0,
@@ -459,8 +480,12 @@ export class MatchmakingService {
             aiPairsScored += 1;
           }
 
-          // Eligible for recommendations when score meets admin threshold.
+          // Eligible when total score and per-tag-category floors are met.
           const scoreFloor = Math.max(recommendationThreshold, Math.min(minScore, 20));
+          const tagGate = meetsTagCategoryThresholds(
+            breakdown,
+            tagCategoryThresholds,
+          );
           candidates.push({
             runId,
             companyOrgId: company.organizationId,
@@ -468,10 +493,14 @@ export class MatchmakingService {
             totalScore,
             scoreBreakdown: breakdown as unknown as Prisma.InputJsonValue,
             explanation,
-            eligible: eligibility.eligible && totalScore >= scoreFloor,
+            eligible:
+              eligibility.eligible &&
+              totalScore >= scoreFloor &&
+              tagGate.ok,
             ineligibilityReasons: [
               ...eligibility.reasons,
               ...(totalScore < scoreFloor ? ['BELOW_SCORE_THRESHOLD'] : []),
+              ...tagGate.failed.map((key) => `BELOW_TAG_THRESHOLD_${key.toUpperCase()}`),
             ],
             companyProfileVersion: company.profileVersion,
             vendorProfileVersion: vendor.profileVersion,

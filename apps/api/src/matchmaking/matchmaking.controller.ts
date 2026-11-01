@@ -27,6 +27,12 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 export class MatchmakingController {
   constructor(private readonly matchmaking: MatchmakingService) {}
 
+  @Get('rules/default')
+  @RequirePermissions(PERMISSIONS.MATCHING_CONFIGURE)
+  getDefaultRule() {
+    return this.matchmaking.getDefaultRuleConfig();
+  }
+
   @Put('rules/default/weights')
   @RequirePermissions(PERMISSIONS.MATCHING_CONFIGURE)
   updateWeights(
