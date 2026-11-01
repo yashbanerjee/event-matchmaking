@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { assertTransition, type MeetingStatus } from '@em/domain';
@@ -10,6 +11,7 @@ import { FeedbackOutcome, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../messaging/outbox.service';
+import { EffectiveConfigService } from '../settings/effective-config.service';
 import type { AuthUser } from '../common/decorators';
 
 /** Admin roster views may load full event schedules (5k+ rows). */
@@ -17,10 +19,13 @@ const MEETINGS_ADMIN_MAX_PAGE_SIZE = 50_000;
 
 @Injectable()
 export class MeetingsService {
+  private readonly logger = new Logger(MeetingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly config: EffectiveConfigService,
   ) {}
 
   async listForUser(user: AuthUser, params: { page?: number; pageSize?: number }) {
@@ -354,6 +359,76 @@ export class MeetingsService {
       throw new BadRequestException((err as Error).message);
     }
 
+    return this.finishInProgressMeeting(meeting, {
+      actorId: user.id,
+      reasonPrefix: 'Investor ended meeting',
+      auditAction: 'meeting.complete',
+    });
+  }
+
+  /**
+   * Completes IN_PROGRESS meetings left running past the admin-configured
+   * auto-stop window (default 45 minutes from actualStartedAt).
+   */
+  async autoCompleteStaleInProgress() {
+    const configured = await this.config.getNumber(
+      'ops.inProgressAutoCompleteMinutes',
+      45,
+    );
+    const maxMinutes = Math.min(Math.max(Math.round(configured) || 45, 5), 480);
+    const cutoff = new Date(Date.now() - maxMinutes * 60_000);
+
+    const stale = await this.prisma.meeting.findMany({
+      where: {
+        status: 'IN_PROGRESS',
+        OR: [
+          { actualStartedAt: { lte: cutoff } },
+          // Rare fallback if start time was never recorded.
+          { actualStartedAt: null, updatedAt: { lte: cutoff } },
+        ],
+      },
+      take: 50,
+      orderBy: { actualStartedAt: 'asc' },
+    });
+
+    let completed = 0;
+    for (const meeting of stale) {
+      try {
+        await this.finishInProgressMeeting(meeting, {
+          actorId: null,
+          reasonPrefix: `Auto-stopped after ${maxMinutes} min without Stop`,
+          auditAction: 'meeting.auto_complete',
+        });
+        completed += 1;
+      } catch (err) {
+        this.logger.warn(
+          `Auto-complete failed for meeting ${meeting.id}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    if (completed > 0) {
+      this.logger.log(
+        `Auto-completed ${completed} in-progress meeting(s) past ${maxMinutes} min`,
+      );
+    }
+    return { scanned: stale.length, completed, maxMinutes };
+  }
+
+  private async finishInProgressMeeting(
+    meeting: {
+      id: string;
+      status: string;
+      actualStartedAt: Date | null;
+      actualEndedAt: Date | null;
+      actualDurationMinutes: number | null;
+    },
+    opts: {
+      actorId: string | null;
+      reasonPrefix: string;
+      auditAction: string;
+    },
+  ) {
     const endedAt = new Date();
     const startedAt = meeting.actualStartedAt ?? endedAt;
     const actualDurationMinutes = Math.max(
@@ -363,7 +438,7 @@ export class MeetingsService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.meeting.update({
-        where: { id: meetingId },
+        where: { id: meeting.id },
         data: {
           status: 'COMPLETED',
           actualStartedAt: startedAt,
@@ -374,25 +449,27 @@ export class MeetingsService {
       });
       await tx.meetingStatusHistory.create({
         data: {
-          meetingId,
-          fromStatus: meeting.status,
+          meetingId: meeting.id,
+          fromStatus: meeting.status as MeetingStatus,
           toStatus: 'COMPLETED',
-          reason: `Investor ended meeting (${actualDurationMinutes} min recorded)`,
-          actorId: user.id,
+          reason: `${opts.reasonPrefix} (${actualDurationMinutes} min recorded)`,
+          actorId: opts.actorId ?? undefined,
         },
       });
       return next;
     });
+
     await this.audit.record({
-      actorId: user.id,
-      action: 'meeting.complete',
+      actorId: opts.actorId ?? undefined,
+      action: opts.auditAction,
       entityType: 'Meeting',
-      entityId: meetingId,
+      entityId: meeting.id,
       outcome: 'SUCCESS',
       metadata: {
         actualStartedAt: startedAt.toISOString(),
         actualEndedAt: endedAt.toISOString(),
         actualDurationMinutes,
+        auto: !opts.actorId,
       },
     });
     return updated;

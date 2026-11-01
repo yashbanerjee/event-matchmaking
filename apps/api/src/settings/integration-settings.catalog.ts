@@ -431,6 +431,15 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'number',
   },
   {
+    key: 'ops.inProgressAutoCompleteMinutes',
+    envKey: 'MEETING_IN_PROGRESS_AUTO_COMPLETE_MINUTES',
+    label: 'Auto-stop in-progress meetings (minutes)',
+    description:
+      'If an investor starts a meeting and forgets to stop it, the system completes it after this many minutes (default 45).',
+    group: 'ops',
+    type: 'number',
+  },
+  {
     key: 'ops.eventDates',
     envKey: 'MEETING_EVENT_DATES',
     label: 'Event dates',

@@ -25,6 +25,7 @@ const EVENT_SETTING_KEYS = new Set([
   'ops.eventActiveStart',
   'ops.eventActiveEnd',
   'ops.meetingDurationMinutes',
+  'ops.inProgressAutoCompleteMinutes',
   'ops.meetingWindowStart',
   'ops.meetingWindowEnd',
 ]);
@@ -113,6 +114,7 @@ export default function SettingsPage() {
     activeStart: DEFAULT_EVENT_ACTIVE_START,
     activeEnd: DEFAULT_EVENT_ACTIVE_END,
     durationMinutes: '15',
+    autoStopMinutes: '45',
   });
   const [testTo, setTestTo] = useState('');
   const [testNote, setTestNote] = useState('');
@@ -175,6 +177,11 @@ export default function SettingsPage() {
         settingValue(data.settings, 'ops.meetingDurationMinutes') ??
           next['ops.meetingDurationMinutes'] ??
           15,
+      ),
+      autoStopMinutes: String(
+        settingValue(data.settings, 'ops.inProgressAutoCompleteMinutes') ??
+          next['ops.inProgressAutoCompleteMinutes'] ??
+          45,
       ),
     });
   }, [data]);
@@ -274,6 +281,10 @@ export default function SettingsPage() {
               key: 'ops.meetingDurationMinutes',
               value: Number(eventHours.durationMinutes) || 15,
             },
+            {
+              key: 'ops.inProgressAutoCompleteMinutes',
+              value: Number(eventHours.autoStopMinutes) || 45,
+            },
           ],
         }),
       }),
@@ -367,7 +378,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm">
             <span className="mb-1 block text-[var(--muted)]">Active from</span>
             <Input
@@ -401,6 +412,23 @@ export default function SettingsPage() {
                 setEventHours((h) => ({
                   ...h,
                   durationMinutes: e.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-[var(--muted)]">
+              Auto-stop if forgotten (min)
+            </span>
+            <Input
+              type="number"
+              min={5}
+              max={480}
+              value={eventHours.autoStopMinutes}
+              onChange={(e) =>
+                setEventHours((h) => ({
+                  ...h,
+                  autoStopMinutes: e.target.value,
                 }))
               }
             />

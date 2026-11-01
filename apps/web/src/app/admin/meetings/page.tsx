@@ -33,6 +33,9 @@ type MeetingRow = {
   startsAt: string;
   endsAt?: string | null;
   durationMinutes?: number | null;
+  actualStartedAt?: string | null;
+  actualEndedAt?: string | null;
+  actualDurationMinutes?: number | null;
   matchScore: number | null;
   venue?: string | null;
   location?: string | null;
@@ -50,6 +53,33 @@ type MeetingRow = {
     mapAddress?: string | null;
   } | null;
 };
+
+/** Prefer recorded on-site duration; fall back to scheduled length. */
+function formatMeetingDurationMins(m: MeetingRow): string {
+  if (
+    typeof m.actualDurationMinutes === 'number' &&
+    Number.isFinite(m.actualDurationMinutes)
+  ) {
+    return `${m.actualDurationMinutes} min`;
+  }
+  if (m.status === 'IN_PROGRESS' && m.actualStartedAt) {
+    const started = new Date(m.actualStartedAt).getTime();
+    if (Number.isFinite(started)) {
+      const elapsed = Math.max(
+        1,
+        Math.round((Date.now() - started) / 60_000),
+      );
+      return `${elapsed} min (live)`;
+    }
+  }
+  if (
+    typeof m.durationMinutes === 'number' &&
+    Number.isFinite(m.durationMinutes)
+  ) {
+    return `${m.durationMinutes} min`;
+  }
+  return '—';
+}
 
 type OrgOption = { id: string; name: string; code: string };
 
@@ -566,6 +596,9 @@ export default function AdminMeetingsPage() {
                     </div>
                     <div className="mt-3 space-y-1.5 text-sm">
                       <p>{new Date(m.startsAt).toLocaleString()}</p>
+                      <p className="tabular-nums text-[var(--muted)]">
+                        Duration {formatMeetingDurationMins(m)}
+                      </p>
                       <MeetingPlaceLink
                         place={m.place}
                         fallback={m.location || m.venue}
@@ -614,6 +647,7 @@ export default function AdminMeetingsPage() {
                     <TH>Investor</TH>
                     <TH>Innovator</TH>
                     <TH>Starts</TH>
+                    <TH>Duration</TH>
                     <TH>Meeting place</TH>
                     <TH>Invited by</TH>
                     <TH>Status</TH>
@@ -631,6 +665,9 @@ export default function AdminMeetingsPage() {
                         <TD className="font-medium">{m.companyOrg.name}</TD>
                         <TD>{m.vendorOrg.name}</TD>
                         <TD>{new Date(m.startsAt).toLocaleString()}</TD>
+                        <TD className="whitespace-nowrap tabular-nums">
+                          {formatMeetingDurationMins(m)}
+                        </TD>
                         <TD className="min-w-[11rem]">
                           <MeetingPlaceLink
                             place={m.place}
