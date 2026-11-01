@@ -12,9 +12,11 @@ import {
   vendorToProfileFeatures,
 } from '@em/domain';
 import {
+  clampRecommendationLimit,
+  DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+  DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
   defaultMatchingWeights,
   meetsTagCategoryThresholds,
-  PEER_RECOMMENDATIONS_MAX_PER_ORG,
   resolveMatchingWeights,
   resolveTagCategoryThresholds,
 } from '@em/shared';
@@ -92,6 +94,32 @@ async function getTagCategoryThresholds() {
   return resolveTagCategoryThresholds(raw);
 }
 
+async function getNumberSetting(key: string, fallback: number) {
+  const row = await prisma.systemSetting.findUnique({ where: { key } });
+  const raw =
+    row &&
+    typeof row.value === 'object' &&
+    row.value !== null &&
+    'value' in row.value
+      ? Number((row.value as { value: unknown }).value)
+      : Number(row?.value);
+  return clampRecommendationLimit(raw, fallback);
+}
+
+async function getRoleLimits() {
+  const [investor, innovator] = await Promise.all([
+    getNumberSetting(
+      'ops.investorRecommendationLimit',
+      DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
+    ),
+    getNumberSetting(
+      'ops.innovatorRecommendationLimit',
+      DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+    ),
+  ]);
+  return { investor, innovator };
+}
+
 function stampAttrs(existing: unknown) {
   const base =
     existing && typeof existing === 'object' && !Array.isArray(existing)
@@ -122,13 +150,14 @@ async function syncFrom(
   }>,
   threshold: number,
   tagCategoryThresholds: ReturnType<typeof resolveTagCategoryThresholds>,
+  roleLimit: number,
 ) {
   const manual = await prisma.orgPeerRecommendation.findMany({
     where: { fromOrgId, source: 'MANUAL' },
     select: { toOrgId: true },
   });
   const manualToIds = new Set(manual.map((row) => row.toOrgId));
-  const slots = Math.max(0, PEER_RECOMMENDATIONS_MAX_PER_ORG - manualToIds.size);
+  const slots = Math.max(0, roleLimit - manualToIds.size);
 
   const ranked = [...scored]
     .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
@@ -219,14 +248,21 @@ async function syncFrom(
 }
 
 async function main() {
-  const [weights, equivalences, tagLabels, threshold, tagCategoryThresholds] =
-    await Promise.all([
-      loadWeights(),
-      loadEquivalences(),
-      loadTagLabels(),
-      getThreshold(),
-      getTagCategoryThresholds(),
-    ]);
+  const [
+    weights,
+    equivalences,
+    tagLabels,
+    threshold,
+    tagCategoryThresholds,
+    roleLimits,
+  ] = await Promise.all([
+    loadWeights(),
+    loadEquivalences(),
+    loadTagLabels(),
+    getThreshold(),
+    getTagCategoryThresholds(),
+    getRoleLimits(),
+  ]);
 
   const companies = await prisma.company.findMany({
     where: {
@@ -249,7 +285,7 @@ async function main() {
   });
 
   console.log(
-    `Backfilling peer recommendations for ${companies.length} investors and ${vendors.length} innovators (threshold ${threshold})…`,
+    `Backfilling peer recommendations for ${companies.length} investors and ${vendors.length} innovators (threshold ${threshold}, investor limit ${roleLimits.investor}, innovator limit ${roleLimits.innovator})…`,
   );
 
   let investorUpserts = 0;
@@ -303,6 +339,7 @@ async function main() {
       scored,
       threshold,
       tagCategoryThresholds,
+      roleLimits.investor,
     );
     investorUpserts += n;
     console.log(`  ${company.organization.code}: ${n} innovator matches`);
@@ -359,6 +396,7 @@ async function main() {
       scored,
       threshold,
       tagCategoryThresholds,
+      roleLimits.innovator,
     );
     innovatorUpserts += n;
     if (n > 0) {

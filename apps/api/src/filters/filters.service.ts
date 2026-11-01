@@ -407,6 +407,29 @@ export class FiltersService {
     return index;
   }
 
+  /** Maps tag value/label → profile field key used on company/vendor records. */
+  async listTagProfileIndex(): Promise<Record<string, string>> {
+    const tags = await this.prisma.filterTag.findMany({
+      where: { isActive: true },
+      select: {
+        value: true,
+        label: true,
+        dimension: { select: { profileKey: true, isActive: true } },
+      },
+    });
+    const index: Record<string, string> = {};
+    for (const tag of tags) {
+      if (!tag.dimension.isActive) continue;
+      const profileKey = tag.dimension.profileKey?.trim() || 'categories';
+      if (!PROFILE_KEYS.has(profileKey)) continue;
+      const valueKey = tag.value.trim().toLowerCase();
+      const labelKey = tag.label.trim().toLowerCase();
+      if (valueKey) index[valueKey] = profileKey;
+      if (labelKey) index[labelKey] = profileKey;
+    }
+    return index;
+  }
+
   optionsForDimension(dimensionId: string) {
     return this.prisma.filterTag.findMany({
       where: { dimensionId, isActive: true },

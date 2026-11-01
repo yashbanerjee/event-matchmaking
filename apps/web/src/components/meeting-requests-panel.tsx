@@ -122,6 +122,11 @@ export function MeetingRequestsPanel({
   const items = requests.data?.items ?? [];
   const canAct = useMemo(() => new Set(myOrgIds), [myOrgIds]);
 
+  const actorIsInvestorFor = (req: MeetingRequest) =>
+    isAdmin ||
+    (canAct.has(req.fromOrgId) && req.fromOrg.type === 'COMPANY') ||
+    (canAct.has(req.toOrgId) && req.toOrg.type === 'COMPANY');
+
   const renderActions = (
     req: MeetingRequest,
     layout: 'mobile' | 'desktop',
@@ -136,6 +141,7 @@ export function MeetingRequestsPanel({
         ? (proposer === req.fromOrgId && canAct.has(req.toOrgId)) ||
           (proposer === req.toOrgId && canAct.has(req.fromOrgId))
         : canAct.has(req.toOrgId));
+    const canProposeSchedule = actorIsInvestorFor(req);
     const mobile = layout === 'mobile';
     const full = mobile ? 'flex-1' : undefined;
     const busy =
@@ -177,6 +183,7 @@ export function MeetingRequestsPanel({
       req.status === 'AWAITING_CONFIRMATION' ||
       (req.status === 'INTEREST_ACCEPTED' && hasSchedule(req));
 
+    // Innovators (and the non-proposer party) only accept or decline a proposed slot.
     if (awaitingConfirm && isOpponentConfirmer) {
       return (
         <>
@@ -194,7 +201,12 @@ export function MeetingRequestsPanel({
       );
     }
 
-    if (req.status === 'INTEREST_ACCEPTED' && !hasSchedule(req) && isParty) {
+    // Only investors can propose date/time after bare interest is accepted.
+    if (
+      req.status === 'INTEREST_ACCEPTED' &&
+      !hasSchedule(req) &&
+      canProposeSchedule
+    ) {
       return (
         <>
           <Button
@@ -233,8 +245,8 @@ export function MeetingRequestsPanel({
             Meeting requests
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-            Accept interest from recommendations, then pick a time and place. The
-            other party confirms to lock the meeting.
+            Investors propose the meeting day and time. Innovators only accept or
+            decline — they cannot change the schedule.
           </p>
         </div>
 
@@ -371,7 +383,7 @@ export function MeetingRequestsPanel({
 
       <MeetingSchedulePicker
         open={Boolean(scheduleFor)}
-        title="Pick time & meeting place"
+        title="Propose time & meeting place"
         counterpartName={
           scheduleFor
             ? canAct.has(scheduleFor.fromOrgId)

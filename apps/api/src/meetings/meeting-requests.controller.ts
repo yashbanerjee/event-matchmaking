@@ -78,6 +78,28 @@ export class MeetingRequestsController {
     );
   }
 
+  @Get('recommendations/browse')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  browseRecommendations(
+    @CurrentUser() user: AuthUser,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('tags') tags?: string | string[],
+  ) {
+    const tagList = Array.isArray(tags)
+      ? tags.flatMap((value) => value.split(','))
+      : typeof tags === 'string'
+        ? tags.split(',')
+        : [];
+    return this.recommendationsService.browsePeers(user, {
+      q,
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 20,
+      tags: tagList,
+    });
+  }
+
   @Get('recommendations/:organizationId/profile')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   recommendationProfile(

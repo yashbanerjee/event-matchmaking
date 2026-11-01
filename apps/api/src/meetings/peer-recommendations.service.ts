@@ -12,9 +12,12 @@ import {
   type ProfileFeatures,
 } from '@em/domain';
 import {
+  clampRecommendationLimit,
+  DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+  DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
   defaultMatchingWeights,
   meetsTagCategoryThresholds,
-  PEER_RECOMMENDATIONS_MAX_PER_ORG,
+  PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
   resolveMatchingWeights,
   resolveTagCategoryThresholds,
   type MatchingWeights,
@@ -185,10 +188,7 @@ export class PeerRecommendationsService {
     return { computing: true as const };
   }
 
-  async listForOrganization(
-    organizationId: string,
-    limit = PEER_RECOMMENDATIONS_MAX_PER_ORG,
-  ) {
+  async listForOrganization(organizationId: string, limit?: number) {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
       select: { id: true, name: true, type: true },
@@ -196,7 +196,14 @@ export class PeerRecommendationsService {
     if (!org) throw new NotFoundException('Organization not found');
 
     const threshold = await this.getRecommendationThreshold();
-    const max = Math.min(Math.max(limit, 1), PEER_RECOMMENDATIONS_MAX_PER_ORG);
+    const roleLimit = await this.getRecommendationLimit(
+      org.type === 'VENDOR' ? 'VENDOR' : 'COMPANY',
+    );
+    const max = Math.min(
+      Math.max(limit ?? roleLimit, 1),
+      roleLimit,
+      PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
+    );
     const items = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId: organizationId },
       include: {
@@ -229,6 +236,7 @@ export class PeerRecommendationsService {
       organization: org,
       counterpartLabel: org.type === 'COMPANY' ? 'innovators' : 'investors',
       scoreThreshold: threshold,
+      recommendationLimit: roleLimit,
       items: visible.map((row) => ({
         id: row.id,
         toOrg: row.toOrg,
@@ -383,12 +391,15 @@ export class PeerRecommendationsService {
       where: { fromOrgId_toOrgId: { fromOrgId, toOrgId } },
       select: { id: true },
     });
+    const roleLimit = await this.getRecommendationLimit(
+      fromOrg.type as 'COMPANY' | 'VENDOR',
+    );
     const currentCount = await this.prisma.orgPeerRecommendation.count({
       where: { fromOrgId },
     });
-    if (!existingPair && currentCount >= PEER_RECOMMENDATIONS_MAX_PER_ORG) {
+    if (!existingPair && currentCount >= roleLimit) {
       throw new BadRequestException(
-        `Maximum ${PEER_RECOMMENDATIONS_MAX_PER_ORG} recommendations per organization. Remove one before adding.`,
+        `Maximum ${roleLimit} recommendations per organization. Remove one before adding.`,
       );
     }
 
@@ -446,7 +457,7 @@ export class PeerRecommendationsService {
       },
     });
 
-    await this.enforceMaxPerOrg(fromOrgId);
+    await this.enforceMaxPerOrg(fromOrgId, fromOrg.type as 'COMPANY' | 'VENDOR');
 
     await this.audit.record({
       actorId: actor.id,
@@ -544,7 +555,7 @@ export class PeerRecommendationsService {
             orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
             // Fetch extra so threshold/tag floors can drop low scores and
             // still leave enough visible matches for the overview chips.
-            take: Math.max(PEER_RECOMMENDATIONS_MAX_PER_ORG * 6, 30),
+            take: Math.max(PEER_RECOMMENDATIONS_ABSOLUTE_MAX * 6, 30),
             include: {
               toOrg: {
                 select: { id: true, name: true, type: true, industry: true },
@@ -555,13 +566,20 @@ export class PeerRecommendationsService {
       }),
     ]);
 
+    const [investorLimit, innovatorLimit] = await Promise.all([
+      this.getRecommendationLimit('COMPANY'),
+      this.getRecommendationLimit('VENDOR'),
+    ]);
+
     return {
       items: orgs.map((org) => {
+        const roleLimit =
+          org.type === 'VENDOR' ? innovatorLimit : investorLimit;
         const visible = this.filterVisibleRecommendations(
           org.peerRecommendationsFrom,
           threshold,
           tagCategoryThresholds,
-        ).slice(0, PEER_RECOMMENDATIONS_MAX_PER_ORG);
+        ).slice(0, roleLimit);
         return {
           organizationId: org.id,
           name: org.name,
@@ -569,6 +587,7 @@ export class PeerRecommendationsService {
           industry: org.industry,
           featured: Boolean(org.company?.featured || org.vendor?.featured),
           recommendationCount: visible.length,
+          recommendationLimit: roleLimit,
           scoreThreshold: threshold,
           topRecommendations: visible.map((row) => ({
             toOrg: row.toOrg,
@@ -582,6 +601,8 @@ export class PeerRecommendationsService {
         };
       }),
       scoreThreshold: threshold,
+      investorRecommendationLimit: investorLimit,
+      innovatorRecommendationLimit: innovatorLimit,
       page,
       pageSize,
       total,
@@ -685,10 +706,13 @@ export class PeerRecommendationsService {
     );
     const matchingWeights = await this.loadMatchingWeights();
 
+    const roleLimit = await this.getRecommendationLimit(
+      org.type as 'COMPANY' | 'VENDOR',
+    );
     const llmCandidateLimit = Math.min(
       30,
       Math.max(
-        PEER_RECOMMENDATIONS_MAX_PER_ORG,
+        roleLimit,
         await this.config.getNumber(
           'ai.peerRecomputeLlmCandidates',
           DEFAULT_PEER_RECOMPUTE_LLM_CANDIDATES,
@@ -1142,7 +1166,21 @@ export class PeerRecommendationsService {
     };
   }
 
-  private async enforceMaxPerOrg(fromOrgId: string) {
+  private async enforceMaxPerOrg(
+    fromOrgId: string,
+    perspective?: 'COMPANY' | 'VENDOR',
+  ) {
+    const orgType =
+      perspective ??
+      (
+        await this.prisma.organization.findUnique({
+          where: { id: fromOrgId },
+          select: { type: true },
+        })
+      )?.type;
+    const max = await this.getRecommendationLimit(
+      orgType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
+    );
     const rows = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId },
       select: { id: true, source: true, totalScore: true },
@@ -1153,7 +1191,7 @@ export class PeerRecommendationsService {
       }
       return b.totalScore - a.totalScore;
     });
-    const excess = rows.slice(PEER_RECOMMENDATIONS_MAX_PER_ORG);
+    const excess = rows.slice(max);
     if (!excess.length) return;
     await this.prisma.orgPeerRecommendation.deleteMany({
       where: { id: { in: excess.map((row) => row.id) } },
@@ -1167,6 +1205,27 @@ export class PeerRecommendationsService {
     );
     if (!Number.isFinite(raw)) return 50;
     return Math.max(0, Math.min(100, raw));
+  }
+
+  async getRecommendationLimit(
+    perspective: 'COMPANY' | 'VENDOR',
+  ): Promise<number> {
+    if (perspective === 'COMPANY') {
+      return clampRecommendationLimit(
+        await this.config.getNumber(
+          'ops.investorRecommendationLimit',
+          DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
+        ),
+        DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
+      );
+    }
+    return clampRecommendationLimit(
+      await this.config.getNumber(
+        'ops.innovatorRecommendationLimit',
+        DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+      ),
+      DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+    );
   }
 
   private async syncComputedRecommendations(input: {
@@ -1189,15 +1248,13 @@ export class PeerRecommendationsService {
     }>;
   }) {
     const threshold = await this.getRecommendationThreshold();
+    const roleLimit = await this.getRecommendationLimit(input.perspective);
     const manual = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
       select: { toOrgId: true },
     });
     const manualToIds = new Set(manual.map((row) => row.toOrgId));
-    const computedSlots = Math.max(
-      0,
-      PEER_RECOMMENDATIONS_MAX_PER_ORG - manualToIds.size,
-    );
+    const computedSlots = Math.max(0, roleLimit - manualToIds.size);
 
     const rankedComputed = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
@@ -1255,7 +1312,7 @@ export class PeerRecommendationsService {
       });
     }
 
-    await this.enforceMaxPerOrg(input.fromOrgId);
+    await this.enforceMaxPerOrg(input.fromOrgId, input.perspective);
     return topComputed.length;
   }
 

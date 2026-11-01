@@ -44,6 +44,8 @@ Score how well they should meet for a short networking session at the event.`;
 
 const FINE_TUNE_KEYS = [
   'ops.recommendationScoreThreshold',
+  'ops.investorRecommendationLimit',
+  'ops.innovatorRecommendationLimit',
   'ai.matchmakingBlendWeight',
   'ai.javTemperature',
   'ai.matchmakingMode',
@@ -105,6 +107,8 @@ type FineTuneDraft = Record<FineTuneKey, string>;
 
 const DEFAULTS: FineTuneDraft = {
   'ops.recommendationScoreThreshold': '50',
+  'ops.investorRecommendationLimit': '10',
+  'ops.innovatorRecommendationLimit': '5',
   'ai.matchmakingBlendWeight': '0.3',
   'ai.javTemperature': '0.2',
   'ai.matchmakingMode': 'llm',
@@ -280,10 +284,26 @@ export function AiFineTunePanel({ disabled = false }: Props) {
       setSaveError(null);
       setSaveNote(null);
       const threshold = Number(draft['ops.recommendationScoreThreshold']);
+      const investorLimit = Number(draft['ops.investorRecommendationLimit']);
+      const innovatorLimit = Number(draft['ops.innovatorRecommendationLimit']);
       const blend = Number(draft['ai.matchmakingBlendWeight']);
       const temperature = Number(draft['ai.javTemperature']);
       if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
         throw new Error('Threshold must be a number between 0 and 100');
+      }
+      if (
+        !Number.isFinite(investorLimit) ||
+        investorLimit < 1 ||
+        investorLimit > 20
+      ) {
+        throw new Error('Investor match count must be between 1 and 20');
+      }
+      if (
+        !Number.isFinite(innovatorLimit) ||
+        innovatorLimit < 1 ||
+        innovatorLimit > 20
+      ) {
+        throw new Error('Innovator match count must be between 1 and 20');
       }
       if (!Number.isFinite(blend) || blend < 0 || blend > 1) {
         throw new Error('AI blend weight must be a number between 0 and 1');
@@ -341,6 +361,14 @@ export function AiFineTunePanel({ disabled = false }: Props) {
             {
               key: 'ops.recommendationScoreThreshold',
               value: threshold,
+            },
+            {
+              key: 'ops.investorRecommendationLimit',
+              value: Math.round(investorLimit),
+            },
+            {
+              key: 'ops.innovatorRecommendationLimit',
+              value: Math.round(innovatorLimit),
             },
             {
               key: 'ops.tagCategoryThresholds',
@@ -453,7 +481,7 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
       {open ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="space-y-1 text-sm">
               <span className="text-[var(--muted)]">Score threshold (0–100)</span>
               <Input
@@ -469,6 +497,46 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               />
               <span className="block text-xs text-[var(--muted)]">
                 Only show recommendations at or above this score.
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className="text-[var(--muted)]">
+                Investor match count (1–20)
+              </span>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                step={1}
+                value={draft['ops.investorRecommendationLimit']}
+                disabled={disabled || save.isPending}
+                onChange={(e) =>
+                  setField('ops.investorRecommendationLimit', e.target.value)
+                }
+              />
+              <span className="block text-xs text-[var(--muted)]">
+                How many innovators each investor can be matched with.
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className="text-[var(--muted)]">
+                Innovator match count (1–20)
+              </span>
+              <Input
+                type="number"
+                min={1}
+                max={20}
+                step={1}
+                value={draft['ops.innovatorRecommendationLimit']}
+                disabled={disabled || save.isPending}
+                onChange={(e) =>
+                  setField('ops.innovatorRecommendationLimit', e.target.value)
+                }
+              />
+              <span className="block text-xs text-[var(--muted)]">
+                How many investors each innovator can be matched with.
               </span>
             </label>
 

@@ -31,7 +31,7 @@ export default function VendorRequestsPage() {
       <PageHeader
         eyebrow="Innovator workspace"
         title="Meeting requests"
-        description="Accept or decline requests sent to you. Confirming locks the meeting place and time."
+        description="Accept or decline meeting requests. Investors set the day and time — you cannot change the schedule."
       />
       <MeetingRequestsPanel
         myOrgIds={me.data?.organizationIds ?? []}

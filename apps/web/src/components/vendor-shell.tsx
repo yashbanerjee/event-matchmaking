@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { PEER_RECOMMENDATIONS_ABSOLUTE_MAX } from '@em/shared';
 import { LogOut } from 'lucide-react';
 import { clearTokens, getAccessToken } from '@/lib/auth-store';
 import { apiFetch } from '@/lib/api';
@@ -21,14 +22,44 @@ const NAV_ITEMS = [
   { href: '/vendor/meetings', label: 'Meetings' },
 ];
 
+function CountPill({
+  count,
+  tone = 'accent',
+}: {
+  count: number;
+  tone?: 'accent' | 'danger';
+}) {
+  if (count <= 0) return null;
+  if (tone === 'danger') {
+    return (
+      <span
+        className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums leading-none text-white"
+        aria-label={`${count} recommendations`}
+      >
+        {count > 99 ? '99+' : count}
+      </span>
+    );
+  }
+  return (
+    <Badge
+      variant="accent"
+      className="shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
+    >
+      {count}
+    </Badge>
+  );
+}
+
 function SidebarNav({
   pathname,
   pendingForms,
   openRequests,
+  recommendationCount,
 }: {
   pathname: string;
   pendingForms: number;
   openRequests: number;
+  recommendationCount: number;
 }) {
   const items =
     pendingForms > 0
@@ -49,9 +80,13 @@ function SidebarNav({
         const badge =
           item.href === '/vendor/forms'
             ? pendingForms
-            : item.href === '/vendor/requests'
-              ? openRequests
-              : 0;
+            : item.href === '/vendor/recommendations'
+              ? recommendationCount
+              : item.href === '/vendor/requests'
+                ? openRequests
+                : 0;
+        const tone =
+          item.href === '/vendor/recommendations' ? 'danger' : 'accent';
         return (
           <Link
             key={item.href}
@@ -63,14 +98,7 @@ function SidebarNav({
             )}
           >
             <span className="truncate">{item.label}</span>
-            {badge > 0 ? (
-              <Badge
-                variant="accent"
-                className="shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
-              >
-                {badge}
-              </Badge>
-            ) : null}
+            <CountPill count={badge} tone={tone} />
           </Link>
         );
       })}
@@ -99,11 +127,63 @@ export function VendorShell({
       }),
   });
 
+  const recommendations = useQuery({
+    queryKey: ['recommendations'],
+    enabled: pendingForms <= 0,
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<{
+        items: Array<{
+          organizationId: string;
+          type: 'COMPANY' | 'VENDOR';
+          score: number;
+          matchSource?: string;
+        }>;
+        featured: Array<{
+          organizationId: string;
+          type: 'COMPANY' | 'VENDOR';
+          score: number;
+          matchSource?: string;
+        }>;
+        perspective: 'COMPANY' | 'VENDOR' | null;
+      }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
+        token: getAccessToken(),
+      }),
+  });
+
   const openRequests = (requests.data?.items ?? []).filter((r) =>
     ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
       r.status,
     ),
   ).length;
+
+  const recommendationCount = (() => {
+    const perspective = recommendations.data?.perspective ?? null;
+    const allowed =
+      perspective === 'COMPANY'
+        ? 'VENDOR'
+        : perspective === 'VENDOR'
+          ? 'COMPANY'
+          : null;
+    const qualify = (item: {
+      organizationId: string;
+      type: 'COMPANY' | 'VENDOR';
+      score: number;
+      matchSource?: string;
+    }) => {
+      if (allowed && item.type !== allowed) return false;
+      if (item.matchSource === 'admin') return true;
+      return Number.isFinite(item.score) && item.score > 0;
+    };
+    const ids = new Set<string>();
+    for (const item of [
+      ...(recommendations.data?.featured ?? []),
+      ...(recommendations.data?.items ?? []),
+    ]) {
+      if (qualify(item)) ids.add(item.organizationId);
+    }
+    return ids.size;
+  })();
 
   const bottomItems =
     pendingForms > 0
@@ -122,6 +202,7 @@ export function VendorShell({
             href: '/vendor/recommendations',
             label: 'Matches',
             icon: 'recommendations' as const,
+            badge: recommendationCount,
           },
           {
             href: '/vendor/requests',
@@ -188,6 +269,7 @@ export function VendorShell({
           pathname={pathname}
           pendingForms={pendingForms}
           openRequests={openRequests}
+          recommendationCount={recommendationCount}
         />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">

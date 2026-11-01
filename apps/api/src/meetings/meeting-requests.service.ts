@@ -488,12 +488,34 @@ export class MeetingRequestsService {
     input: { startsAt: string; placeId?: string },
   ) {
     const request = await this.getRequestOrThrow(id);
-    // Either side can propose after interest is accepted.
     this.assertPartyOrAdmin(actor, request.fromOrgId, request.toOrgId);
     const orgIds = this.actorOrgIds(actor);
     if (request.status !== 'INTEREST_ACCEPTED') {
       throw new BadRequestException(
         'Accept the meeting interest before proposing a time and place',
+      );
+    }
+
+    // Only investors (COMPANY) set the meeting time — innovators accept/decline.
+    const [fromOrg, toOrg] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: request.fromOrgId },
+        select: { type: true },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: request.toOrgId },
+        select: { type: true },
+      }),
+    ]);
+    const actorCompanyOrgId =
+      fromOrg?.type === 'COMPANY' && orgIds.includes(request.fromOrgId)
+        ? request.fromOrgId
+        : toOrg?.type === 'COMPANY' && orgIds.includes(request.toOrgId)
+          ? request.toOrgId
+          : null;
+    if (!this.isPlatformAdmin(actor) && !actorCompanyOrgId) {
+      throw new ForbiddenException(
+        'Only the investor can propose a meeting time. Innovators accept or decline.',
       );
     }
 
@@ -533,10 +555,15 @@ export class MeetingRequestsService {
     });
 
     const proposedByOrgId = this.isPlatformAdmin(actor)
-      ? request.fromOrgId
-      : orgIds.includes(request.fromOrgId)
-        ? request.fromOrgId
-        : request.toOrgId;
+      ? (fromOrg?.type === 'COMPANY'
+          ? request.fromOrgId
+          : toOrg?.type === 'COMPANY'
+            ? request.toOrgId
+            : request.fromOrgId)
+      : (actorCompanyOrgId ??
+        (orgIds.includes(request.fromOrgId)
+          ? request.fromOrgId
+          : request.toOrgId));
 
     const updated = await this.prisma.meetingRequest.update({
       where: { id },
@@ -1172,9 +1199,9 @@ export class MeetingRequestsService {
     };
 
     const bodies: Record<typeof kind, string> = {
-      request_created: `${request.fromOrg.name} is interested in connecting with ${request.toOrg.name}. Accept if you'd like to meet — they'll propose a time and place next.`,
-      interest_accepted: `${request.toOrg.name} accepted. Propose a time slot and place.`,
-      schedule_proposed: `A time and place were proposed for ${request.fromOrg.name} ↔ ${request.toOrg.name}. Please confirm or decline.`,
+      request_created: `${request.fromOrg.name} is interested in connecting with ${request.toOrg.name}. Accept if you'd like to meet — the investor proposes the time next.`,
+      interest_accepted: `${request.toOrg.name} accepted. The investor can propose a time slot and place.`,
+      schedule_proposed: `${request.fromOrg.name} proposed a meeting time with ${request.toOrg.name}. Accept or decline — the schedule cannot be edited.`,
       meet_now_proposed: `${request.fromOrg.name} wants to meet now at ${placeLabel} (${startsLabel}). Confirm within 10 minutes.`,
       scheduled: `Your meeting is confirmed: ${request.fromOrg.name} ↔ ${request.toOrg.name}.`,
       declined: `The meeting request between ${request.fromOrg.name} and ${request.toOrg.name} was declined.`,

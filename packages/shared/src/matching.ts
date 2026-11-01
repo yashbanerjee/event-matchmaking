@@ -114,8 +114,26 @@ export function meetsTagCategoryThresholds(
   return { ok: failed.length === 0, failed };
 }
 
-/** Max peer recommendations stored and shown per investor/innovator org. */
+/**
+ * Absolute ceiling for recommendations per org (admin settings cannot exceed this).
+ * Role defaults live in ops.investorRecommendationLimit / ops.innovatorRecommendationLimit.
+ */
+export const PEER_RECOMMENDATIONS_ABSOLUTE_MAX = 20;
+
+/** @deprecated Prefer role-specific limits from settings; kept as innovator default. */
 export const PEER_RECOMMENDATIONS_MAX_PER_ORG = 5;
+
+export const DEFAULT_INVESTOR_RECOMMENDATION_LIMIT = 10;
+export const DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT = 5;
+
+export function clampRecommendationLimit(
+  value: unknown,
+  fallback: number,
+): number {
+  const n = Number(value);
+  const base = Number.isFinite(n) ? n : fallback;
+  return Math.max(1, Math.min(PEER_RECOMMENDATIONS_ABSOLUTE_MAX, Math.round(base)));
+}
 
 export const scheduleConfigSchema = z.object({
   scheduleDate: z.string().date(),

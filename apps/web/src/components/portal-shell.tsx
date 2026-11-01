@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { PEER_RECOMMENDATIONS_ABSOLUTE_MAX } from '@em/shared';
 import { LogOut } from 'lucide-react';
 import { clearTokens, getAccessToken } from '@/lib/auth-store';
 import { apiFetch } from '@/lib/api';
@@ -19,16 +20,47 @@ const NAV_ITEMS = [
   { href: '/portal/recommendations', label: 'Recommendations' },
   { href: '/portal/requests', label: 'Requests' },
   { href: '/portal/meetings', label: 'Meetings' },
+  { href: '/portal/innovators', label: 'Innovators' },
 ];
+
+function CountPill({
+  count,
+  tone = 'accent',
+}: {
+  count: number;
+  tone?: 'accent' | 'danger';
+}) {
+  if (count <= 0) return null;
+  if (tone === 'danger') {
+    return (
+      <span
+        className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold tabular-nums leading-none text-white"
+        aria-label={`${count} recommendations`}
+      >
+        {count > 99 ? '99+' : count}
+      </span>
+    );
+  }
+  return (
+    <Badge
+      variant="accent"
+      className="shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
+    >
+      {count}
+    </Badge>
+  );
+}
 
 function SidebarNav({
   pathname,
   pendingForms,
   openRequests,
+  recommendationCount,
 }: {
   pathname: string;
   pendingForms: number;
   openRequests: number;
+  recommendationCount: number;
 }) {
   const items =
     pendingForms > 0
@@ -50,9 +82,13 @@ function SidebarNav({
         const badge =
           item.href === '/portal/onboarding'
             ? pendingForms
-            : item.href === '/portal/requests'
-              ? openRequests
-              : 0;
+            : item.href === '/portal/recommendations'
+              ? recommendationCount
+              : item.href === '/portal/requests'
+                ? openRequests
+                : 0;
+        const tone =
+          item.href === '/portal/recommendations' ? 'danger' : 'accent';
         return (
           <Link
             key={item.href}
@@ -64,14 +100,7 @@ function SidebarNav({
             )}
           >
             <span className="truncate">{item.label}</span>
-            {badge > 0 ? (
-              <Badge
-                variant="accent"
-                className="shrink-0 border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
-              >
-                {badge}
-              </Badge>
-            ) : null}
+            <CountPill count={badge} tone={tone} />
           </Link>
         );
       })}
@@ -100,11 +129,63 @@ export function PortalShell({
       }),
   });
 
+  const recommendations = useQuery({
+    queryKey: ['recommendations'],
+    enabled: pendingForms <= 0,
+    staleTime: 30_000,
+    queryFn: () =>
+      apiFetch<{
+        items: Array<{
+          organizationId: string;
+          type: 'COMPANY' | 'VENDOR';
+          score: number;
+          matchSource?: string;
+        }>;
+        featured: Array<{
+          organizationId: string;
+          type: 'COMPANY' | 'VENDOR';
+          score: number;
+          matchSource?: string;
+        }>;
+        perspective: 'COMPANY' | 'VENDOR' | null;
+      }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
+        token: getAccessToken(),
+      }),
+  });
+
   const openRequests = (requests.data?.items ?? []).filter((r) =>
     ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
       r.status,
     ),
   ).length;
+
+  const recommendationCount = (() => {
+    const perspective = recommendations.data?.perspective ?? null;
+    const allowed =
+      perspective === 'COMPANY'
+        ? 'VENDOR'
+        : perspective === 'VENDOR'
+          ? 'COMPANY'
+          : null;
+    const qualify = (item: {
+      organizationId: string;
+      type: 'COMPANY' | 'VENDOR';
+      score: number;
+      matchSource?: string;
+    }) => {
+      if (allowed && item.type !== allowed) return false;
+      if (item.matchSource === 'admin') return true;
+      return Number.isFinite(item.score) && item.score > 0;
+    };
+    const ids = new Set<string>();
+    for (const item of [
+      ...(recommendations.data?.featured ?? []),
+      ...(recommendations.data?.items ?? []),
+    ]) {
+      if (qualify(item)) ids.add(item.organizationId);
+    }
+    return ids.size;
+  })();
 
   const bottomItems =
     pendingForms > 0
@@ -123,6 +204,7 @@ export function PortalShell({
             href: '/portal/recommendations',
             label: 'Matches',
             icon: 'recommendations' as const,
+            badge: recommendationCount,
           },
           {
             href: '/portal/requests',
@@ -131,6 +213,11 @@ export function PortalShell({
             badge: openRequests,
           },
           { href: '/portal/meetings', label: 'Meetings', icon: 'meetings' as const },
+          {
+            href: '/portal/innovators',
+            label: 'Innovators',
+            icon: 'innovators' as const,
+          },
         ];
 
   return (
@@ -189,6 +276,7 @@ export function PortalShell({
           pathname={pathname}
           pendingForms={pendingForms}
           openRequests={openRequests}
+          recommendationCount={recommendationCount}
         />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">

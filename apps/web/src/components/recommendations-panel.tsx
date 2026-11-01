@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PEER_RECOMMENDATIONS_MAX_PER_ORG } from '@em/shared';
+import { PEER_RECOMMENDATIONS_ABSOLUTE_MAX } from '@em/shared';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/empty-state';
+import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 
 type MatchSource = 'ai' | 'tags' | 'admin';
@@ -195,6 +196,8 @@ export function RecommendationsPanel({
   const qc = useQueryClient();
   const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
   const [interestOrgId, setInterestOrgId] = useState<string | null>(null);
+  const [scheduleFor, setScheduleFor] = useState<Recommendation | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [interestSent, setInterestSent] = useState<string | null>(null);
 
@@ -210,38 +213,57 @@ export function RecommendationsPanel({
         featured: Recommendation[];
         perspective: 'COMPANY' | 'VENDOR' | null;
         computing?: boolean;
-      }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_MAX_PER_ORG}`, {
+      }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
         token: getAccessToken(),
       }),
   });
 
   const expressInterest = useMutation({
-    mutationFn: (toOrgId: string) => {
+    mutationFn: (input: {
+      toOrgId: string;
+      mode: 'INTEREST' | 'SCHEDULED';
+      startsAt?: string;
+      placeId?: string;
+    }) => {
       if (!fromOrgId) throw new Error('Missing organization');
       return apiFetch('/meeting-requests', {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify({
           fromOrgId,
-          toOrgId,
-          mode: 'INTEREST',
+          toOrgId: input.toOrgId,
+          mode: input.mode,
+          startsAt: input.startsAt,
+          placeId: input.placeId,
+          message:
+            input.mode === 'SCHEDULED'
+              ? 'Would like to meet at the proposed time and place.'
+              : undefined,
         }),
       });
     },
-    onSuccess: async (_data, toOrgId) => {
+    onSuccess: async (_data, variables) => {
       setInterestOrgId(null);
+      setScheduleFor(null);
+      setScheduleError(null);
       setError(null);
-      setInterestSent(toOrgId);
+      setInterestSent(variables.toOrgId);
       await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
       await qc.invalidateQueries({ queryKey: ['recommendations'] });
     },
     onError: (err) => {
       setInterestOrgId(null);
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      if (scheduleFor) {
+        setScheduleError(message);
+      } else {
+        setError(message);
+      }
     },
   });
 
   const perspective = recs.data?.perspective ?? null;
+  const isInvestor = perspective === 'COMPANY';
   const allowedPeerType =
     perspective === 'COMPANY'
       ? 'VENDOR'
@@ -268,9 +290,18 @@ export function RecommendationsPanel({
 
   const sendInterest = (item: Recommendation) => {
     setError(null);
+    setScheduleError(null);
     setInterestSent(null);
+    if (isInvestor) {
+      // Investors propose date/time/place with the interest request.
+      setScheduleFor(item);
+      return;
+    }
     setInterestOrgId(item.organizationId);
-    expressInterest.mutate(item.organizationId);
+    expressInterest.mutate({
+      toOrgId: item.organizationId,
+      mode: 'INTEREST',
+    });
   };
 
   const openInterestFromProfile = () => {
@@ -287,9 +318,19 @@ export function RecommendationsPanel({
             {title}
           </h2>
           <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            {description} Tap <strong>I&apos;m interested</strong> to connect —
-            if they accept, pick a time and place under{' '}
-            <strong>Requests</strong>.
+            {description}{' '}
+            {isInvestor ? (
+              <>
+                Tap <strong>I&apos;m interested</strong>, pick a meeting day and
+                time, then send the request. The innovator can only accept or
+                decline.
+              </>
+            ) : (
+              <>
+                Tap <strong>I&apos;m interested</strong> to connect. The investor
+                will propose a time under <strong>Requests</strong>.
+              </>
+            )}
           </p>
         </div>
 
@@ -306,8 +347,9 @@ export function RecommendationsPanel({
         ) : null}
         {interestSent ? (
           <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-            Interest sent. When they accept, open <strong>Requests</strong> to
-            schedule your meeting.
+            {isInvestor
+              ? 'Meeting request sent with your proposed time. They can accept or decline under Requests.'
+              : 'Interest sent. The investor will propose a meeting time under Requests.'}
           </p>
         ) : null}
 
@@ -333,7 +375,7 @@ export function RecommendationsPanel({
                 <SuggestionGrid
                   items={featured}
                   fromOrgId={fromOrgId}
-                  pendingOrgId={interestOrgId}
+                  pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
                   onInterest={sendInterest}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                   featured
@@ -349,7 +391,7 @@ export function RecommendationsPanel({
                 <SuggestionGrid
                   items={items}
                   fromOrgId={fromOrgId}
-                  pendingOrgId={interestOrgId}
+                  pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
                   onInterest={sendInterest}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                 />
@@ -366,6 +408,32 @@ export function RecommendationsPanel({
         onRequestMeeting={fromOrgId ? openInterestFromProfile : undefined}
         requestMeetingLabel="I'm interested"
         reasons={profileItem ? matchReasons(profileItem) : undefined}
+      />
+
+      <MeetingSchedulePicker
+        open={Boolean(scheduleFor)}
+        title="Propose meeting time"
+        description="Choose a day and time for this innovator. They can only accept or decline — they cannot change the schedule."
+        counterpartName={scheduleFor?.name}
+        fromOrgId={fromOrgId}
+        toOrgId={scheduleFor?.organizationId}
+        submitting={expressInterest.isPending}
+        error={scheduleError}
+        onClose={() => {
+          if (expressInterest.isPending) return;
+          setScheduleFor(null);
+          setScheduleError(null);
+        }}
+        onConfirm={({ startsAt, placeId }) => {
+          if (!scheduleFor) return;
+          setInterestOrgId(scheduleFor.organizationId);
+          expressInterest.mutate({
+            toOrgId: scheduleFor.organizationId,
+            mode: 'SCHEDULED',
+            startsAt,
+            placeId,
+          });
+        }}
       />
     </>
   );

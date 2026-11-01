@@ -9,6 +9,7 @@ import {
   Inbox,
   QrCode,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +18,14 @@ type NavItem = {
   label: string;
   exact?: boolean;
   badge?: number;
-  icon: 'home' | 'forms' | 'recommendations' | 'requests' | 'meetings' | 'qr';
+  icon:
+    | 'home'
+    | 'forms'
+    | 'recommendations'
+    | 'requests'
+    | 'meetings'
+    | 'innovators'
+    | 'qr';
 };
 
 const ICONS = {
@@ -26,6 +34,7 @@ const ICONS = {
   recommendations: Sparkles,
   requests: Inbox,
   meetings: CalendarDays,
+  innovators: Users,
   qr: QrCode,
 } as const;
 
@@ -47,7 +56,9 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
             ? 'grid-cols-2'
             : items.length === 4
               ? 'grid-cols-4'
-              : 'grid-cols-5',
+              : items.length >= 6
+                ? 'grid-cols-6'
+                : 'grid-cols-5',
         )}
       >
         {items.map((item) => {
@@ -69,8 +80,15 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
                 <Icon className="h-5 w-5" aria-hidden />
                 <span>{item.label}</span>
                 {(item.badge ?? 0) > 0 ? (
-                  <span className="absolute right-2 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--accent-foreground)]">
-                    {item.badge}
+                  <span
+                    className={cn(
+                      'absolute right-2 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white',
+                      item.icon === 'recommendations'
+                        ? 'bg-red-600'
+                        : 'bg-[var(--accent)] text-[var(--accent-foreground)]',
+                    )}
+                  >
+                    {(item.badge ?? 0) > 99 ? '99+' : item.badge}
                   </span>
                 ) : null}
               </Link>

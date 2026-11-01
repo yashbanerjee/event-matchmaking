@@ -7,7 +7,7 @@ import {
 import {
   collectPublicProfileFields,
   meetsTagCategoryThresholds,
-  PEER_RECOMMENDATIONS_MAX_PER_ORG,
+  PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
   formSchemaDefinition,
   resolveTagCategoryThresholds,
   type FormSchemaDefinition,
@@ -57,11 +57,7 @@ export class RecommendationsService {
     return Math.max(0, Math.min(100, raw));
   }
 
-  async forActor(actor: AuthUser, limit = PEER_RECOMMENDATIONS_MAX_PER_ORG) {
-    const max = Math.min(
-      Math.max(Number(limit) || PEER_RECOMMENDATIONS_MAX_PER_ORG, 1),
-      PEER_RECOMMENDATIONS_MAX_PER_ORG,
-    );
+  async forActor(actor: AuthUser, limit?: number) {
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) {
       return { items: [], featured: [], perspective: null, computing: false };
@@ -85,6 +81,12 @@ export class RecommendationsService {
 
     const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
     const peerType = perspective === 'COMPANY' ? 'VENDOR' : 'COMPANY';
+    const roleLimit = await this.peers.getRecommendationLimit(perspective);
+    const max = Math.min(
+      Math.max(Number(limit) || roleLimit, 1),
+      roleLimit,
+      PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
+    );
     const { computing } = await this.peers.ensureComputed(perspectiveOrg.id);
 
     const stored = await this.fromStored({
@@ -96,14 +98,250 @@ export class RecommendationsService {
       excludeOrgIds: orgIds,
     });
     if (stored) {
-      return { ...stored, perspective, computing };
+      return { ...stored, perspective, recommendationLimit: roleLimit, computing };
     }
 
     return {
       items: [],
       featured: [],
       perspective,
+      recommendationLimit: roleLimit,
       computing,
+    };
+  }
+
+  /**
+   * Full counterpart directory (not score-capped): investors browse all
+   * eligible innovators; innovators browse all eligible investors.
+   * Optional tag values filter across every active filter dimension.
+   */
+  async browsePeers(
+    actor: AuthUser,
+    input?: {
+      q?: string;
+      page?: number;
+      pageSize?: number;
+      tags?: string[];
+    },
+  ) {
+    const orgIds = actor.organizationIds ?? [];
+    if (!orgIds.length) {
+      throw new ForbiddenException('Organization membership required');
+    }
+
+    const myOrgs = await this.prisma.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: { id: true, type: true },
+    });
+    const companyOrg = myOrgs.find((o) => o.type === 'COMPANY');
+    const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR');
+    const perspectiveOrg = companyOrg ?? vendorOrg;
+    if (!perspectiveOrg) {
+      return {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        perspective: null as 'COMPANY' | 'VENDOR' | null,
+        counterpartLabel: 'partners',
+      };
+    }
+
+    const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
+    const page = Math.max(1, input?.page ?? 1);
+    const pageSize = Math.min(Math.max(1, input?.pageSize ?? 20), 50);
+    const q = input?.q?.trim().replace(/\s+/g, ' ') ?? '';
+    const selectedTags = [
+      ...new Set(
+        (input?.tags ?? [])
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      ),
+    ];
+
+    const [tagLabels, tagIndex] = await Promise.all([
+      this.filters.listTagLabelIndex(),
+      this.filters.listTagProfileIndex(),
+    ]);
+    const grouped = this.groupTagsByProfileKey(selectedTags, tagIndex);
+
+    if (perspective === 'COMPANY') {
+      const vendors = await this.prisma.vendor.findMany({
+        where: {
+          matchingEligible: true,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          organizationId: { notIn: orgIds },
+          organization: {
+            status: { not: 'ARCHIVED' },
+            ...(q
+              ? {
+                  OR: [
+                    { name: { contains: q, mode: 'insensitive' as const } },
+                    {
+                      industry: { contains: q, mode: 'insensitive' as const },
+                    },
+                  ],
+                }
+              : {}),
+            ...(grouped.industry.length
+              ? { industry: { in: grouped.industry } }
+              : {}),
+          },
+          ...(grouped.categories.length
+            ? { categories: { hasEvery: grouped.categories } }
+            : {}),
+          ...(grouped.capabilities.length
+            ? { capabilities: { hasEvery: grouped.capabilities } }
+            : {}),
+          ...(grouped.regions.length
+            ? { operatingRegions: { hasEvery: grouped.regions } }
+            : {}),
+        },
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              industry: true,
+              region: true,
+              customAttrs: true,
+            },
+          },
+        },
+        orderBy: [{ featured: 'desc' }, { organization: { name: 'asc' } }],
+      });
+
+      const filtered = vendors.filter((vendor) =>
+        this.matchesCommercialAndPreferred(
+          {
+            commercialPrefs: vendor.commercialPrefs,
+            preferredCategories: vendor.categories,
+            requiredCapabilities: vendor.capabilities,
+          },
+          grouped,
+        ),
+      );
+      const total = filtered.length;
+      const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+      return {
+        items: slice.map((vendor) => ({
+          organizationId: vendor.organization.id,
+          name: vendor.organization.name,
+          type: 'VENDOR' as const,
+          industry: this.labelOf(vendor.organization.industry, tagLabels),
+          region: vendor.organization.region,
+          categories: this.labelsOf(vendor.categories, tagLabels),
+          capabilities: this.labelsOf(vendor.capabilities, tagLabels),
+          regions: this.labelsOf(vendor.operatingRegions, tagLabels),
+          commercialTags: this.labelsOf(
+            this.commercialTagValues(vendor.commercialPrefs),
+            tagLabels,
+          ),
+          featured: Boolean(vendor.featured),
+          logoUrl: this.logoOf(vendor.organization.customAttrs),
+        })),
+        total,
+        page,
+        pageSize,
+        perspective,
+        counterpartLabel: 'innovators',
+      };
+    }
+
+    const companies = await this.prisma.company.findMany({
+      where: {
+        matchingEligible: true,
+        approvalStatus: 'VERIFIED',
+        verificationStatus: 'VERIFIED',
+        organizationId: { notIn: orgIds },
+        organization: {
+          status: { not: 'ARCHIVED' },
+          ...(q
+            ? {
+                OR: [
+                  { name: { contains: q, mode: 'insensitive' as const } },
+                  {
+                    industry: { contains: q, mode: 'insensitive' as const },
+                  },
+                ],
+              }
+            : {}),
+          ...(grouped.industry.length
+            ? { industry: { in: grouped.industry } }
+            : {}),
+        },
+        ...(grouped.preferredCategories.length || grouped.categories.length
+          ? {
+              preferredCategories: {
+                hasEvery: [
+                  ...new Set([
+                    ...grouped.preferredCategories,
+                    ...grouped.categories,
+                  ]),
+                ],
+              },
+            }
+          : {}),
+        ...(grouped.capabilities.length
+          ? { requiredCapabilities: { hasEvery: grouped.capabilities } }
+          : {}),
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            region: true,
+            customAttrs: true,
+          },
+        },
+      },
+      orderBy: [{ featured: 'desc' }, { organization: { name: 'asc' } }],
+    });
+
+    const filtered = companies.filter((company) =>
+      this.matchesCommercialAndPreferred(
+        {
+          commercialPrefs: company.commercialPrefs,
+          preferredCategories: company.preferredCategories,
+          requiredCapabilities: company.requiredCapabilities,
+          regions: this.readNormalizedRegions(company.normalizedProfile),
+        },
+        grouped,
+      ),
+    );
+    const total = filtered.length;
+    const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+    return {
+      items: slice.map((company) => ({
+        organizationId: company.organization.id,
+        name: company.organization.name,
+        type: 'COMPANY' as const,
+        industry: this.labelOf(company.organization.industry, tagLabels),
+        region: company.organization.region,
+        categories: this.labelsOf(company.preferredCategories, tagLabels),
+        capabilities: this.labelsOf(company.requiredCapabilities, tagLabels),
+        regions: this.labelsOf(
+          this.readNormalizedRegions(company.normalizedProfile),
+          tagLabels,
+        ),
+        commercialTags: this.labelsOf(
+          this.commercialTagValues(company.commercialPrefs),
+          tagLabels,
+        ),
+        featured: Boolean(company.featured),
+        logoUrl: this.logoOf(company.organization.customAttrs),
+      })),
+      total,
+      page,
+      pageSize,
+      perspective,
+      counterpartLabel: 'investors',
     };
   }
 
@@ -346,6 +584,102 @@ export class RecommendationsService {
     tagLabels: Record<string, string>,
   ): string[] {
     return values.map((value) => this.labelOf(value, tagLabels) ?? value);
+  }
+
+  private groupTagsByProfileKey(
+    tags: string[],
+    tagIndex: Record<string, string>,
+  ) {
+    const groups = {
+      categories: [] as string[],
+      preferredCategories: [] as string[],
+      capabilities: [] as string[],
+      industry: [] as string[],
+      regions: [] as string[],
+      commercialTags: [] as string[],
+    };
+    for (const raw of tags) {
+      const key = raw.trim().toLowerCase();
+      const profileKey = tagIndex[key] ?? 'categories';
+      if (profileKey === 'preferredCategories') {
+        groups.preferredCategories.push(raw);
+      } else if (profileKey === 'capabilities') {
+        groups.capabilities.push(raw);
+      } else if (profileKey === 'industry') {
+        groups.industry.push(raw);
+      } else if (profileKey === 'regions') {
+        groups.regions.push(raw);
+      } else if (profileKey === 'commercialTags') {
+        groups.commercialTags.push(raw);
+      } else {
+        groups.categories.push(raw);
+      }
+    }
+    return groups;
+  }
+
+  private commercialTagValues(prefs: unknown): string[] {
+    if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) return [];
+    const record = prefs as Record<string, unknown>;
+    const tags = [
+      ...this.asStringArray(record.tags),
+      ...this.asStringArray(record.roleTags),
+      ...this.asStringArray(record.visitPurpose),
+      ...this.asStringArray(record.investmentStages),
+    ];
+    const ticket = record.ticketSize;
+    if (typeof ticket === 'string' && ticket.trim()) tags.push(ticket.trim());
+    return [...new Set(tags)];
+  }
+
+  private readNormalizedRegions(normalized: unknown): string[] {
+    if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+      return [];
+    }
+    return this.asStringArray(
+      (normalized as Record<string, unknown>).regions,
+    );
+  }
+
+  private asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim();
+        if (item && typeof item === 'object' && 'value' in item) {
+          return String((item as { value: unknown }).value ?? '').trim();
+        }
+        return '';
+      })
+      .filter(Boolean);
+  }
+
+  private matchesCommercialAndPreferred(
+    profile: {
+      commercialPrefs: unknown;
+      preferredCategories?: string[];
+      requiredCapabilities?: string[];
+      regions?: string[];
+    },
+    grouped: ReturnType<RecommendationsService['groupTagsByProfileKey']>,
+  ) {
+    if (grouped.commercialTags.length) {
+      const hay = new Set(
+        this.commercialTagValues(profile.commercialPrefs).map((t) =>
+          t.toLowerCase(),
+        ),
+      );
+      for (const tag of grouped.commercialTags) {
+        if (!hay.has(tag.toLowerCase())) return false;
+      }
+    }
+    if (grouped.regions.length && profile.regions) {
+      const hay = new Set(profile.regions.map((t) => t.toLowerCase()));
+      for (const tag of grouped.regions) {
+        if (!hay.has(tag.toLowerCase())) return false;
+      }
+    }
+    return true;
   }
 
 }

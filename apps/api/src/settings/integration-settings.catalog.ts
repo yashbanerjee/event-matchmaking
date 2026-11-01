@@ -300,6 +300,24 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'number',
   },
   {
+    key: 'ops.investorRecommendationLimit',
+    envKey: 'INVESTOR_RECOMMENDATION_LIMIT',
+    label: 'Investor recommendation count',
+    description:
+      'How many innovator matches to keep for each investor (1–20). Default 10.',
+    group: 'ai',
+    type: 'number',
+  },
+  {
+    key: 'ops.innovatorRecommendationLimit',
+    envKey: 'INNOVATOR_RECOMMENDATION_LIMIT',
+    label: 'Innovator recommendation count',
+    description:
+      'How many investor matches to keep for each innovator (1–20). Default 5.',
+    group: 'ai',
+    type: 'number',
+  },
+  {
     key: 'ops.tagCategoryThresholds',
     envKey: 'TAG_CATEGORY_THRESHOLDS',
     label: 'Tag category thresholds (JSON)',
@@ -322,7 +340,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_PEER_RECOMPUTE_LLM_CANDIDATES',
     label: 'Peer recompute LLM candidates',
     description:
-      'How many top rule-based matches get a full Qwen reason per org (default 12). Lower = faster recompute; we only store 5 recommendations.',
+      'How many top rule-based matches get a full Qwen reason per org (default 12). Lower = faster recompute; final stored count still follows investor/innovator limits.',
     group: 'ai',
     type: 'number',
   },

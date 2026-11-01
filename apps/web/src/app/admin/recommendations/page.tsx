@@ -20,7 +20,10 @@ import { EmptyState } from '@/components/empty-state';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { cn } from '@/lib/utils';
-import { PEER_RECOMMENDATIONS_MAX_PER_ORG } from '@em/shared';
+import {
+  DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
+  DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
+} from '@em/shared';
 import { MatchReasonDisplay } from '@/components/match-reason-display';
 
 type OverviewItem = {
@@ -30,6 +33,7 @@ type OverviewItem = {
   industry: string | null;
   featured: boolean;
   recommendationCount: number;
+  recommendationLimit?: number;
   topRecommendations: Array<{
     toOrg: { id: string; name: string; type: string };
     source?: 'COMPUTED' | 'MANUAL';
@@ -44,6 +48,8 @@ type OverviewResponse = {
   page: number;
   pageSize: number;
   total: number;
+  investorRecommendationLimit?: number;
+  innovatorRecommendationLimit?: number;
 };
 
 type OrgDetailResponse = {
@@ -327,11 +333,15 @@ function AdminRecommendationsPageInner() {
         ) : (
           <ul className="divide-y divide-[#DFE1E6] rounded-lg border border-[#DFE1E6] bg-white">
             {items.map((org) => {
-              const matchCount = Math.min(
-                org.recommendationCount,
-                PEER_RECOMMENDATIONS_MAX_PER_ORG,
-              );
-              const top = org.topRecommendations.slice(0, 5);
+              const roleLimit =
+                org.recommendationLimit ??
+                (org.type === 'COMPANY'
+                  ? (overview.data?.investorRecommendationLimit ??
+                    DEFAULT_INVESTOR_RECOMMENDATION_LIMIT)
+                  : (overview.data?.innovatorRecommendationLimit ??
+                    DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT));
+              const matchCount = Math.min(org.recommendationCount, roleLimit);
+              const top = org.topRecommendations.slice(0, roleLimit);
               const isRecomputing =
                 recompute.isPending &&
                 recompute.variables === org.organizationId;
@@ -350,10 +360,10 @@ function AdminRecommendationsPageInner() {
                         {org.type === 'COMPANY' ? 'Investor' : 'Innovator'}
                       </Badge>
                       <span className="text-xs tabular-nums text-[var(--muted)]">
-                        {matchCount} match{matchCount === 1 ? '' : 'es'}
+                        {matchCount}/{roleLimit} match
+                        {roleLimit === 1 ? '' : 'es'}
                       </span>
-                      {org.recommendationCount >
-                      PEER_RECOMMENDATIONS_MAX_PER_ORG ? (
+                      {org.recommendationCount > roleLimit ? (
                         <span className="text-[10px] font-medium text-amber-700">
                           Recompute to trim extras
                         </span>
@@ -494,7 +504,13 @@ function AdminRecommendationsPageInner() {
             ) : null}
 
             <p className="text-xs text-[var(--muted)]">
-              Maximum {PEER_RECOMMENDATIONS_MAX_PER_ORG} recommendations per
+              Maximum{' '}
+              {detail.data?.organization.type === 'VENDOR'
+                ? (overview.data?.innovatorRecommendationLimit ??
+                  DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT)
+                : (overview.data?.investorRecommendationLimit ??
+                  DEFAULT_INVESTOR_RECOMMENDATION_LIMIT)}{' '}
+              recommendations per
               organization (admin pins kept first, then top AI scores).
             </p>
 

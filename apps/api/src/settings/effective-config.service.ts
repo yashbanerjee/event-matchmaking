@@ -206,6 +206,12 @@ export class EffectiveConfigService {
     if (field.key === 'ai.matchmakingUserTemplate') {
       return DEFAULT_MATCHMAKING_USER_TEMPLATE;
     }
+    if (field.key === 'ops.investorRecommendationLimit') {
+      return 10;
+    }
+    if (field.key === 'ops.innovatorRecommendationLimit') {
+      return 5;
+    }
     return fromEnv;
   }
 

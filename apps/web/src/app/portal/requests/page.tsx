@@ -53,7 +53,7 @@ export default function PortalRequestsPage() {
       <PageHeader
         eyebrow="Investor / Delegate"
         title="Meeting requests"
-        description="Accept interest from recommendations, propose a time and place, then confirm to lock the meeting."
+        description="When you show interest, pick a day and time first. Innovators only accept or decline your proposed slot."
       />
       <MeetingRequestsPanel
         myOrgIds={me.data?.organizationIds ?? []}
