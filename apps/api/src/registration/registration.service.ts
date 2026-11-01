@@ -44,7 +44,16 @@ export class RegistrationService {
   async getPublicConfig(role?: 'CLIENT' | 'GUEST') {
     const enabled = await this.getSettingBool('registration.enabled', false);
     if (!enabled) {
-      return { enabled: false, schema: null, formName: null };
+      return {
+        enabled: false as const,
+        schema: null,
+        formName: null,
+        formVersionId: null as string | null,
+        eventDates: [] as Array<{ value: string; label: string }>,
+        eventActiveStart: '09:00',
+        eventActiveEnd: '17:00',
+        eventTimeZone: 'Asia/Dubai',
+      };
     }
 
     const investorFormId = await this.getSettingString(
@@ -61,9 +70,10 @@ export class RegistrationService {
 
     if (!role) {
       return {
-        enabled: true,
+        enabled: true as const,
         schema: null,
         formName: null,
+        formVersionId: null as string | null,
         needsRole: true,
         investorFormConfigured: Boolean(investorFormId || legacyFormId),
         innovatorFormConfigured: Boolean(innovatorFormId || legacyFormId),
@@ -77,9 +87,10 @@ export class RegistrationService {
         : innovatorFormId || legacyFormId;
     if (!formId) {
       return {
-        enabled: true,
+        enabled: true as const,
         schema: null,
         formName: null,
+        formVersionId: null as string | null,
         reason: 'no_form',
         role,
         ...schedule,
@@ -93,9 +104,10 @@ export class RegistrationService {
     });
     if (!version) {
       return {
-        enabled: true,
+        enabled: true as const,
         schema: null,
         formName: null,
+        formVersionId: null as string | null,
         reason: 'no_published_version',
         role,
         ...schedule,
@@ -105,10 +117,10 @@ export class RegistrationService {
     const schema = this.resolveSchema(version.schemaJson, version.fields);
 
     return {
-      enabled: true,
+      enabled: true as const,
       role,
       formId: version.formId,
-      formVersionId: version.id,
+      formVersionId: version.id as string,
       formName: version.form.name,
       schema,
       ...schedule,
@@ -129,9 +141,9 @@ export class RegistrationService {
 
     this.assertAvailabilityResponses(
       input.responses,
-      config.eventDates ?? [],
-      config.eventActiveStart ?? '09:00',
-      config.eventActiveEnd ?? '17:00',
+      config.eventDates,
+      config.eventActiveStart,
+      config.eventActiveEnd,
     );
 
     const email = input.email.trim().toLowerCase();
