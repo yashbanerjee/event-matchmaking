@@ -213,14 +213,10 @@ export function InnovatorsBrowsePanel({
   return (
     <>
       <Card className="min-w-0 space-y-4 overflow-hidden p-4">
-        <div className="space-y-1">
+        <div>
           <h2 className="h-display text-base font-semibold tracking-tight">
             All {counterpartLabel}
           </h2>
-          <p className="text-xs leading-relaxed text-[var(--muted)]">
-            Browse every verified partner and narrow the list with any tag.
-            Tap <strong>I&apos;m interested</strong> to start a request.
-          </p>
         </div>
 
         <Input

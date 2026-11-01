@@ -7,7 +7,6 @@ import { Button } from './button';
 export function Modal({
   open,
   title,
-  description,
   children,
   onClose,
   footer,
@@ -17,6 +16,7 @@ export function Modal({
 }: {
   open: boolean;
   title: string;
+  /** @deprecated Unused — kept so call sites can pass it without breaking. */
   description?: string;
   children: React.ReactNode;
   onClose: () => void;
@@ -83,9 +83,6 @@ export function Modal({
             <h2 className="text-lg font-semibold tracking-tight sm:text-xl">
               {title}
             </h2>
-            {description ? (
-              <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
-            ) : null}
           </div>
           <Button
             variant="ghost"

@@ -43,9 +43,9 @@ type Mapping = {
 
 export function TagMappingsPanel({
   title = 'Manual matchmaking',
-  description = 'Link related tags so recommendations cross-match. Previously linked tags stay listed below.',
 }: {
   title?: string;
+  /** @deprecated Unused */
   description?: string;
 } = {}) {
   const qc = useQueryClient();
@@ -136,10 +136,7 @@ export function TagMappingsPanel({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h3 className="text-base font-semibold">{title}</h3>
-        <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
-      </div>
+      <h3 className="text-base font-semibold">{title}</h3>
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/50 p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">

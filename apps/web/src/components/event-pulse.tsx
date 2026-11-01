@@ -103,22 +103,17 @@ function Stat({
 }
 
 function SectionTitle({
-  eyebrow,
   title,
   action,
 }: {
-  eyebrow: string;
+  /** @deprecated Unused */
+  eyebrow?: string;
   title: string;
   action?: string;
 }) {
   return (
     <div className="mb-4 flex items-end justify-between gap-3">
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)]">
-          {eyebrow}
-        </p>
-        <h2 className="h-display text-lg tracking-tight">{title}</h2>
-      </div>
+      <h2 className="h-display text-lg tracking-tight">{title}</h2>
       {action ? (
         <p className="text-xs text-[var(--muted)]">{action}</p>
       ) : null}

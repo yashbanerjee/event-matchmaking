@@ -262,31 +262,25 @@ export default function MatchmakingPage() {
 
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold">Matchmaking</h2>
-              <Badge variant={matchmakingEnabled ? 'success' : 'default'}>
-                {matchmakingEnabled ? 'Enabled' : 'Off'}
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">Matchmaking</h2>
+            <Badge variant={matchmakingEnabled ? 'success' : 'default'}>
+              {matchmakingEnabled ? 'Enabled' : 'Off'}
+            </Badge>
+            {matchmakingEnabled ? (
+              <Badge
+                variant={
+                  aiMatchmakingOn && aiEnabled ? 'success' : 'default'
+                }
+              >
+                AI{' '}
+                {!aiMatchmakingOn
+                  ? 'off'
+                  : aiEnabled
+                    ? 'on'
+                    : 'configured off / unavailable'}
               </Badge>
-              {matchmakingEnabled ? (
-                <Badge
-                  variant={
-                    aiMatchmakingOn && aiEnabled ? 'success' : 'default'
-                  }
-                >
-                  AI{' '}
-                  {!aiMatchmakingOn
-                    ? 'off'
-                    : aiEnabled
-                      ? 'on'
-                      : 'configured off / unavailable'}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Scores all investor–innovator pairs for the selected event day.
-              Turn AI matchmaking off to score with rules only.
-            </p>
+            ) : null}
           </div>
           {meetingCount > 0 && (
             <Badge variant="warning">{meetingCount} meetings on this date</Badge>
@@ -294,39 +288,27 @@ export default function MatchmakingPage() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
             <input
               type="checkbox"
-              className="mt-1 h-4 w-4 accent-[var(--brand)]"
+              className="h-4 w-4 accent-[var(--brand)]"
               checked={matchmakingEnabled}
               onChange={(e) => setMatchmakingEnabled(e.target.checked)}
             />
-            <span>
-              <span className="font-medium">Enable matchmaking</span>
-              <span className="mt-0.5 block text-[var(--muted)]">
-                Allows scoring runs for the selected event day.
-              </span>
-            </span>
+            <span className="font-medium">Enable matchmaking</span>
           </label>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
             <input
               type="checkbox"
-              className="mt-1 h-4 w-4 accent-[var(--brand)]"
+              className="h-4 w-4 accent-[var(--brand)]"
               checked={aiMatchmakingOn}
               disabled={
                 !matchmakingEnabled || saveAiMatchmaking.isPending
               }
               onChange={(e) => saveAiMatchmaking.mutate(e.target.checked)}
             />
-            <span>
-              <span className="font-medium">AI matchmaking</span>
-              <span className="mt-0.5 block text-[var(--muted)]">
-                {aiMatchmakingOn
-                  ? 'On — model scores pairs and blends with rules. Also saved in Settings → AI.'
-                  : 'Off — rule-based tag matching only (no AI calls).'}
-              </span>
-            </span>
+            <span className="font-medium">AI matchmaking</span>
           </label>
         </div>
 
@@ -441,18 +423,12 @@ export default function MatchmakingPage() {
       )}
 
       <Card className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-semibold">Manual matchmaking</h2>
-              <Badge variant={manualMatchmakingOn ? 'success' : 'default'}>
-                {manualMatchmakingOn ? 'On' : 'Off'}
-              </Badge>
-            </div>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Link related tags by hand when you want custom cross-matches.
-              Leave this off unless you need manual tag links.
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">Manual matchmaking</h2>
+            <Badge variant={manualMatchmakingOn ? 'success' : 'default'}>
+              {manualMatchmakingOn ? 'On' : 'Off'}
+            </Badge>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -466,15 +442,8 @@ export default function MatchmakingPage() {
         </div>
 
         {manualMatchmakingOn ? (
-          <TagMappingsPanel
-            title="Manual tag links"
-            description="Link related tags so recommendations cross-match. Previously linked tags stay listed below."
-          />
-        ) : (
-          <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--muted)]">
-            Manual matchmaking is off. Turn it on above to link tags.
-          </p>
-        )}
+          <TagMappingsPanel title="Manual tag links" />
+        ) : null}
       </Card>
     </div>
   );

@@ -54,10 +54,10 @@ function windowLabel(row: Assignment) {
 export function InvestorTablePanel({
   organizationId,
   title = 'Investor tables',
-  description = 'Allot a table to an investor for a day or a time window. Every meeting with that investor in the window is marked on that table.',
 }: {
   organizationId?: string;
   title?: string;
+  /** @deprecated Unused — kept so call sites can pass it without breaking. */
   description?: string;
 }) {
   const qc = useQueryClient();
@@ -180,13 +180,7 @@ export function InvestorTablePanel({
     <Card id="table">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">
-            Tables
-          </p>
           <h2 className="h-display text-lg">{title}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
-            {description}
-          </p>
         </div>
         <Button
           onClick={() => {

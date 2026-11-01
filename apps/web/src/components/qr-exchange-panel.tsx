@@ -412,16 +412,9 @@ export function QrExchangePanel({
         <Card className="overflow-hidden p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                My QR
-              </p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">
+              <h2 className="text-xl font-semibold tracking-tight">
                 Share your meeting code
               </h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Others scan this to view your public profile and request a
-                meeting.
-              </p>
             </div>
             <div className="rounded-2xl bg-[var(--accent-soft)] p-3 text-[var(--accent-hover)]">
               <QrCode className="h-5 w-5" />
@@ -497,15 +490,9 @@ export function QrExchangePanel({
         <Card className="overflow-hidden p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                Scan
-              </p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">
+              <h2 className="text-xl font-semibold tracking-tight">
                 Meet someone nearby
               </h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Scan with your camera or upload a QR saved in the gallery.
-              </p>
             </div>
             <div className="rounded-2xl bg-[var(--accent-soft)] p-3 text-[var(--accent-hover)]">
               <ScanLine className="h-5 w-5" />

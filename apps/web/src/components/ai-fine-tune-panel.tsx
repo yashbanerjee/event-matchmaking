@@ -494,16 +494,10 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
   return (
     <Card className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold">Fine-tune AI</h2>
-            {dirty ? <Badge variant="warning">Unsaved</Badge> : null}
-          </div>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Edit scoring knobs and prompts used for matchmaking. Changes apply
-            on the next scoring run or peer recompute.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">Fine-tune AI</h2>
+          {dirty ? <Badge variant="warning">Unsaved</Badge> : null}
         </div>
         <Button
           type="button"
@@ -530,10 +524,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                   setField('ops.recommendationScoreThreshold', e.target.value)
                 }
               />
-              <span className="block text-xs text-[var(--muted)]">
-                Default 75 — strong matches only on Recommendations (full list
-                stays under Innovators).
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -551,9 +541,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                   setField('ops.investorRecommendationLimit', e.target.value)
                 }
               />
-              <span className="block text-xs text-[var(--muted)]">
-                How many innovators each investor can be matched with.
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -571,9 +558,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                   setField('ops.innovatorRecommendationLimit', e.target.value)
                 }
               />
-              <span className="block text-xs text-[var(--muted)]">
-                How many investors each innovator can be matched with.
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -589,9 +573,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                   setField('ai.matchmakingBlendWeight', e.target.value)
                 }
               />
-              <span className="block text-xs text-[var(--muted)]">
-                Keep ~0.25–0.35 (default 0.3 = 70% tags + 30% AI).
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -608,9 +589,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 </option>
                 <option value="jev_decisions">jev_decisions (legacy)</option>
               </Select>
-              <span className="block text-xs text-[var(--muted)]">
-                Prefer structured_json for 2–3 sentence match reasons.
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -630,9 +608,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 <option value="true">On — include onboarding text</option>
                 <option value="false">Off — tags only</option>
               </Select>
-              <span className="block text-xs text-[var(--muted)]">
-                On by default. Personal contact fields are never sent.
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -646,9 +621,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 disabled={disabled || save.isPending}
                 onChange={(e) => setField('ai.javTemperature', e.target.value)}
               />
-              <span className="block text-xs text-[var(--muted)]">
-                Lower = more consistent scores.
-              </span>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -666,14 +638,7 @@ export function AiFineTunePanel({ disabled = false }: Props) {
           </div>
 
           <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-            <div>
-              <h3 className="text-sm font-semibold">Tag category thresholds</h3>
-              <p className="text-xs text-[var(--muted)]">
-                Hard floors before AI can recommend a pair (defaults: challenge
-                25, geography 20, stage 15). Tags catch region/stage; AI judges
-                narrative fit. Set 0 to ignore a category.
-              </p>
-            </div>
+            <h3 className="text-sm font-semibold">Tag category thresholds</h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {TAG_CATEGORY_KEYS.map((key) => (
                 <label key={`th-${key}`} className="space-y-1 text-sm">
@@ -696,13 +661,7 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
           <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold">Tag category weights</h3>
-                <p className="text-xs text-[var(--muted)]">
-                  How much each tag category contributes to the rule score. Must
-                  sum to 1.0.
-                </p>
-              </div>
+              <h3 className="text-sm font-semibold">Tag category weights</h3>
               <Badge
                 variant={Math.abs(weightSum - 1) < 0.001 ? 'success' : 'warning'}
               >
@@ -751,9 +710,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 }
                 placeholder="Optional — pins a fine-tuned model"
               />
-              <span className="block text-xs text-[var(--muted)]">
-                If set, replaces the matchmaking model id above.
-              </span>
             </label>
           </div>
 
@@ -767,10 +723,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               placeholder={DEFAULT_MATCHMAKING_PROMPT}
               className="font-mono text-xs"
             />
-            <span className="block text-xs text-[var(--muted)]">
-              Default matchmaking prompt is shown here. Edit and save to override
-              it. Keep the JSON score + rationale format.
-            </span>
           </label>
 
           <label className="block space-y-1 text-sm">
@@ -785,10 +737,6 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               placeholder={DEFAULT_MATCHMAKING_USER_TEMPLATE}
               className="font-mono text-xs"
             />
-            <span className="block text-xs text-[var(--muted)]">
-              Placeholders: {'{{investorProfile}}'}, {'{{innovatorProfile}}'}{' '}
-              (aliases {'{{left}}'}, {'{{right}}'}).
-            </span>
           </label>
 
           {saveError ? (

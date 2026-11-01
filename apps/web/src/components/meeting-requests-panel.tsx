@@ -244,10 +244,6 @@ export function MeetingRequestsPanel({
           <h2 className="h-display text-lg font-semibold tracking-tight">
             Meeting requests
           </h2>
-          <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-            Investors propose the meeting day and time. Innovators only accept or
-            decline — they cannot change the schedule.
-          </p>
         </div>
 
         {requests.isLoading ? (

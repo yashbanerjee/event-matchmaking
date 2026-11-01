@@ -209,11 +209,11 @@ function SuggestionGrid({
 export function RecommendationsPanel({
   fromOrgId,
   title,
-  description,
 }: {
   fromOrgId?: string;
   title: string;
-  description: string;
+  /** @deprecated Unused — kept so call sites can pass it without breaking. */
+  description?: string;
 }) {
   const qc = useQueryClient();
   const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
@@ -372,21 +372,6 @@ export function RecommendationsPanel({
           <h2 className="h-display text-base font-semibold tracking-tight">
             {title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            {description}{' '}
-            {isInvestor ? (
-              <>
-                Tap <strong>I&apos;m interested</strong>, pick a meeting day and
-                time, then send the request. Use <strong>Not interested</strong>{' '}
-                to hide a match permanently.
-              </>
-            ) : (
-              <>
-                Tap <strong>I&apos;m interested</strong> to connect. The investor
-                will propose a time under <strong>Requests</strong>.
-              </>
-            )}
-          </p>
         </div>
 
         {computing && !empty ? (

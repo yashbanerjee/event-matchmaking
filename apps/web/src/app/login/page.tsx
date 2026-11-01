@@ -79,9 +79,6 @@ function LoginForm() {
 
         <Card className="animate-rise mx-auto w-full max-w-md border-white/60 bg-white/90 p-7">
           <h2 className="text-2xl">Sign in</h2>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Use your account email and password.
-          </p>
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
               <label className="mb-1.5 block text-sm font-medium">Email</label>
