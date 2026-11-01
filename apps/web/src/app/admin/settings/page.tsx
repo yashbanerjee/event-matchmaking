@@ -544,7 +544,7 @@ export default function SettingsPage() {
                 {group.id === 'email'
                   ? 'Messages to innovators use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
                   : group.id === 'ai'
-                    ? 'Recommendation score threshold controls which pairs appear as recommendations (0–100). AI matches profile and tags only — never personal contact details.'
+                    ? 'Use AI matchmaking to turn model scoring on or off. Recommendation score threshold (0–100) controls which pairs appear. AI matches profile and tags only — never personal contact details.'
                     : 'Setting key shown on each row'}
               </p>
             </div>

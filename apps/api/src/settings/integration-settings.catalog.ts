@@ -201,9 +201,9 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.enabled',
     envKey: 'AI_ENABLED',
-    label: 'AI enabled',
+    label: 'AI matchmaking',
     description:
-      'OpenRouter or self-hosted OpenAI-compatible API for matchmaking scores and meeting reasons.',
+      'Turn AI matchmaking on or off. When off, scoring and recommendations use rule-based tag matching only (no model calls).',
     group: 'ai',
     type: 'boolean',
   },

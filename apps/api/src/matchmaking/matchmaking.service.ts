@@ -293,7 +293,8 @@ export class MatchmakingService {
         companyProfileVersion: number;
         vendorProfileVersion: number;
       }> = [];
-      const useAi = Boolean(config.useAi);
+      const aiGloballyEnabled = await this.ai.isEnabled();
+      const useAi = Boolean(config.useAi) && aiGloballyEnabled;
       let aiPairsScored = 0;
       const aiModeSetting = useAi
         ? await this.config.getString('ai.matchmakingMode', 'llm')

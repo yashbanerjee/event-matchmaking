@@ -121,6 +121,24 @@ export class SettingsService {
 
     this.effective.invalidate();
 
+    // Keep feature flag in sync when AI matchmaking is toggled from Settings / Matchmaking.
+    if (key === 'ai.enabled') {
+      const enabled =
+        value === true ||
+        value === 'true' ||
+        value === 1 ||
+        value === '1';
+      await this.prisma.featureFlag.upsert({
+        where: { key: 'ai_enabled' },
+        create: {
+          key: 'ai_enabled',
+          enabled,
+          description: 'Global switch for AI matchmaking / recommendations',
+        },
+        update: { enabled },
+      });
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'settings.upsert',

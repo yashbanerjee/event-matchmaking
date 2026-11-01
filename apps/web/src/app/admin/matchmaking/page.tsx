@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AiFineTunePanel } from '@/components/ai-fine-tune-panel';
 import { PageHeader } from '@/components/page-header';
 import { TagMappingsPanel } from '@/components/tag-mappings-panel';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +52,7 @@ export default function MatchmakingPage() {
   const [endTime, setEndTime] = useState('17:00');
   const [duration, setDuration] = useState(15);
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
+  const [aiMatchmakingOn, setAiMatchmakingOn] = useState(true);
   const [manualMatchmakingOn, setManualMatchmakingOn] = useState(false);
   const [lastRunId, setLastRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +141,23 @@ export default function MatchmakingPage() {
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.3;
   }, [aiSettings.data]);
 
+  const settingsAiEnabled = useMemo(() => {
+    const aiGroup = aiSettings.data?.integration.find((g) => g.id === 'ai');
+    const field = aiGroup?.fields.find((f) => f.key === 'ai.enabled');
+    const raw =
+      field?.value !== undefined &&
+      field?.value !== null &&
+      field?.value !== ''
+        ? field.value
+        : (field?.envDefault ?? true);
+    return raw === true || raw === 'true' || raw === 1 || raw === '1';
+  }, [aiSettings.data]);
+
+  useEffect(() => {
+    if (!aiSettings.data) return;
+    setAiMatchmakingOn(settingsAiEnabled);
+  }, [aiSettings.data, settingsAiEnabled]);
+
   const run = useQuery({
     queryKey: ['matchmaking-run', lastRunId],
     queryFn: () =>
@@ -163,7 +182,7 @@ export default function MatchmakingPage() {
           meetingDurationMinutes: duration,
           bufferMinutes: 5,
           mode: 'IN_PERSON',
-          useAi: matchmakingEnabled,
+          useAi: matchmakingEnabled && aiMatchmakingOn,
         }),
       });
     },
@@ -175,6 +194,27 @@ export default function MatchmakingPage() {
     },
     onError: (err: Error) => {
       setError(err.message || 'Failed to start matchmaking run');
+    },
+  });
+
+  const saveAiMatchmaking = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      setError(null);
+      return apiFetch('/settings/values', {
+        method: 'PUT',
+        token: getAccessToken(),
+        body: JSON.stringify({ key: 'ai.enabled', value: enabled }),
+      });
+    },
+    onSuccess: (_data, enabled) => {
+      setAiMatchmakingOn(enabled);
+      void qc.invalidateQueries({ queryKey: ['settings-ai-matchmaking'] });
+      void qc.invalidateQueries({ queryKey: ['settings'] });
+      void qc.invalidateQueries({ queryKey: ['integrations-health-ai'] });
+    },
+    onError: (err: Error) => {
+      setError(err.message || 'Failed to update AI matchmaking');
+      void qc.invalidateQueries({ queryKey: ['settings-ai-matchmaking'] });
     },
   });
 
@@ -255,6 +295,9 @@ export default function MatchmakingPage() {
             AI scores fit from match fields only — personal details (name, phone,
             LinkedIn, job title) are never used. Recommendations appear only when
             the total score is at or above the threshold set in Settings.
+            {aiMatchmakingOn
+              ? ''
+              : ' AI matchmaking is currently off, so scoring uses rules only.'}
           </p>
         </div>
         <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -272,12 +315,16 @@ export default function MatchmakingPage() {
             {
               step: '3',
               title: 'AI compare',
-              body: 'The model compares investor and innovator profile cards and returns a 0–100 score with reasons.',
+              body: aiMatchmakingOn
+                ? 'The model compares investor and innovator profile cards and returns a 0–100 score with reasons.'
+                : 'Skipped while AI matchmaking is off.',
             },
             {
               step: '4',
               title: 'Blend',
-              body: `Rules and AI are combined (current AI weight ${(blendWeight * 100).toFixed(0)}%).`,
+              body: aiMatchmakingOn
+                ? `Rules and AI are combined (current AI weight ${(blendWeight * 100).toFixed(0)}%).`
+                : 'Not applied — final score is the rule score only.',
             },
             {
               step: '5',
@@ -298,10 +345,12 @@ export default function MatchmakingPage() {
           ))}
         </ol>
         <p className="text-xs text-[var(--muted)]">
-          Change the threshold under Settings → AI → Recommendation score
-          threshold. Re-run scoring or peer recompute after changing it.
+          Use Fine-tune AI below to edit threshold, blend, model, and prompts.
+          Re-run scoring after saving changes.
         </p>
       </Card>
+
+      <AiFineTunePanel />
 
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -312,14 +361,23 @@ export default function MatchmakingPage() {
                 {matchmakingEnabled ? 'Enabled' : 'Off'}
               </Badge>
               {matchmakingEnabled ? (
-                <Badge variant={aiEnabled ? 'success' : 'default'}>
-                  AI {aiEnabled ? 'ready' : 'local fallback'}
+                <Badge
+                  variant={
+                    aiMatchmakingOn && aiEnabled ? 'success' : 'default'
+                  }
+                >
+                  AI{' '}
+                  {!aiMatchmakingOn
+                    ? 'off'
+                    : aiEnabled
+                      ? 'on'
+                      : 'configured off / unavailable'}
                 </Badge>
               ) : null}
             </div>
             <p className="mt-1 text-sm text-[var(--muted)]">
               Scores all investor–innovator pairs for the selected event day.
-              Keep this on to run matchmaking.
+              Turn AI matchmaking off to score with rules only.
             </p>
           </div>
           {meetingCount > 0 && (
@@ -327,20 +385,42 @@ export default function MatchmakingPage() {
           )}
         </div>
 
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-[var(--brand)]"
-            checked={matchmakingEnabled}
-            onChange={(e) => setMatchmakingEnabled(e.target.checked)}
-          />
-          <span>
-            <span className="font-medium">Enable matchmaking</span>
-            <span className="mt-0.5 block text-[var(--muted)]">
-              Uses AI when configured; otherwise local scoring still runs.
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[var(--brand)]"
+              checked={matchmakingEnabled}
+              onChange={(e) => setMatchmakingEnabled(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Enable matchmaking</span>
+              <span className="mt-0.5 block text-[var(--muted)]">
+                Allows scoring runs for the selected event day.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-[var(--brand)]"
+              checked={aiMatchmakingOn}
+              disabled={
+                !matchmakingEnabled || saveAiMatchmaking.isPending
+              }
+              onChange={(e) => saveAiMatchmaking.mutate(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">AI matchmaking</span>
+              <span className="mt-0.5 block text-[var(--muted)]">
+                {aiMatchmakingOn
+                  ? 'On — model scores pairs and blends with rules. Also saved in Settings → AI.'
+                  : 'Off — rule-based tag matching only (no AI calls).'}
+              </span>
+            </span>
+          </label>
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
@@ -408,8 +488,10 @@ export default function MatchmakingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">Latest run</h2>
             <Badge>{run.data.status}</Badge>
-            {run.data.config?.useAi && (
-              <Badge variant="success">Matchmaking</Badge>
+            {run.data.config?.useAi ? (
+              <Badge variant="success">AI on</Badge>
+            ) : (
+              <Badge>Rules only</Badge>
             )}
             <span className="text-sm text-[var(--muted)]">
               {String(run.data.scheduleDate).slice(0, 10)} ·{' '}
