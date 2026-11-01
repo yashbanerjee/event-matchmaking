@@ -95,8 +95,9 @@ export class AiService implements OnModuleInit {
     await ensure('ai.javChatModel', DEFAULT_MATCHMAKING_CHAT_MODEL);
     await ensure('ai.matchmakingMode', 'llm');
     await ensure('ai.matchmakingBlendWeight', 0.3);
+    await ensure('ops.recommendationScoreThreshold', 50);
     await ensure('ai.pairScoringMethod', 'structured_json');
-    await ensure('ai.includeOnboardingInProfile', true);
+    await ensure('ai.includeOnboardingInProfile', false);
 
     await this.prisma.featureFlag.upsert({
       where: { key: 'ai_enabled' },

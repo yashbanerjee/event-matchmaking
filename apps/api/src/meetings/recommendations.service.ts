@@ -19,6 +19,7 @@ import {
 } from '@em/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
+import { EffectiveConfigService } from '../settings/effective-config.service';
 import type { AuthUser } from '../common/decorators';
 
 type RecommendationItem = {
@@ -43,7 +44,17 @@ export class RecommendationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly filters: FiltersService,
+    private readonly config: EffectiveConfigService,
   ) {}
+
+  private async getRecommendationThreshold(): Promise<number> {
+    const raw = await this.config.getNumber(
+      'ops.recommendationScoreThreshold',
+      50,
+    );
+    if (!Number.isFinite(raw)) return 50;
+    return Math.max(0, Math.min(100, raw));
+  }
 
   async forActor(actor: AuthUser, limit = PEER_RECOMMENDATIONS_MAX_PER_ORG) {
     const max = Math.min(
@@ -388,8 +399,13 @@ export class RecommendationsService {
     });
     if (!rows.length) return null;
 
+    const threshold = await this.getRecommendationThreshold();
     const scored: RecommendationItem[] = rows
-      .filter((row) => row.toOrg.type === input.peerType)
+      .filter(
+        (row) =>
+          row.toOrg.type === input.peerType &&
+          (row.source === 'MANUAL' || row.totalScore >= threshold),
+      )
       .map((row) => {
         const peer = row.toOrg;
         const featured = Boolean(

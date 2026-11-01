@@ -113,6 +113,7 @@ export class PeerRecommendationsService {
     });
     if (!org) throw new NotFoundException('Organization not found');
 
+    const threshold = await this.getRecommendationThreshold();
     const max = Math.min(Math.max(limit, 1), PEER_RECOMMENDATIONS_MAX_PER_ORG);
     const items = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId: organizationId },
@@ -128,19 +129,25 @@ export class PeerRecommendationsService {
         },
       },
       orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
-      take: max,
+      take: Math.max(max * 3, 30),
     });
 
-    // Admin pins first, then by score
-    items.sort((a, b) => {
-      if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
-      return b.totalScore - a.totalScore;
-    });
+    // Admin pins first, then by score. COMPUTED rows must meet the threshold.
+    const visible = items
+      .filter(
+        (row) => row.source === 'MANUAL' || row.totalScore >= threshold,
+      )
+      .sort((a, b) => {
+        if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
+        return b.totalScore - a.totalScore;
+      })
+      .slice(0, max);
 
     return {
       organization: org,
       counterpartLabel: org.type === 'COMPANY' ? 'innovators' : 'investors',
-      items: items.map((row) => ({
+      scoreThreshold: threshold,
+      items: visible.map((row) => ({
         id: row.id,
         toOrg: row.toOrg,
         perspective: row.perspective,
@@ -153,7 +160,7 @@ export class PeerRecommendationsService {
         scoreBreakdown: row.scoreBreakdown,
         computedAt: row.computedAt,
       })),
-      total: items.length,
+      total: visible.length,
     };
   }
 
@@ -526,7 +533,7 @@ export class PeerRecommendationsService {
       : 'embedding';
     const includeOnboarding = await this.config.getBoolean(
       'ai.includeOnboardingInProfile',
-      true,
+      false,
     );
     const blend = aiEnabled
       ? Math.max(
@@ -937,6 +944,15 @@ export class PeerRecommendationsService {
     });
   }
 
+  private async getRecommendationThreshold(): Promise<number> {
+    const raw = await this.config.getNumber(
+      'ops.recommendationScoreThreshold',
+      50,
+    );
+    if (!Number.isFinite(raw)) return 50;
+    return Math.max(0, Math.min(100, raw));
+  }
+
   private async syncComputedRecommendations(input: {
     fromOrgId: string;
     perspective: 'COMPANY' | 'VENDOR';
@@ -955,6 +971,7 @@ export class PeerRecommendationsService {
       };
     }>;
   }) {
+    const threshold = await this.getRecommendationThreshold();
     const manual = await this.prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
       select: { toOrgId: true },
@@ -967,7 +984,10 @@ export class PeerRecommendationsService {
 
     const rankedComputed = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
-      .filter((row) => !manualToIds.has(row.toOrgId));
+      .filter(
+        (row) =>
+          !manualToIds.has(row.toOrgId) && row.pair.totalScore >= threshold,
+      );
     const topComputed = selectDiverseTop(
       rankedComputed,
       computedSlots,

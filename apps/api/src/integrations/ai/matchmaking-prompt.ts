@@ -3,7 +3,7 @@ export const DEFAULT_MATCHMAKING_CHAT_MODEL = 'qwen/qwen-2.5-72b-instruct';
 
 export const DEFAULT_MATCHMAKING_PROMPT = `You are Ethara's event matchmaking analyst for investor–innovator meetings at a water-sector networking event.
 
-Given an INVESTOR profile and an INNOVATOR profile (including onboarding answers), judge how valuable a short in-person meeting would be.
+Given an INVESTOR profile and an INNOVATOR profile built from match fields only (topics, regions, capabilities, funding, thesis/solution — never personal contact details), judge how valuable a short in-person meeting would be.
 
 Respond with JSON only — no markdown fences:
 {

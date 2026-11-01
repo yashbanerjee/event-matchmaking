@@ -291,6 +291,15 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     options: ['llm', 'hybrid', 'embedding'],
   },
   {
+    key: 'ops.recommendationScoreThreshold',
+    envKey: 'RECOMMENDATION_SCORE_THRESHOLD',
+    label: 'Recommendation score threshold',
+    description:
+      'Only show recommendations with a total match score at or above this value (0–100). AI matches all profile and tag details except personal contact fields (name, phone, LinkedIn, job title, etc.).',
+    group: 'ai',
+    type: 'number',
+  },
+  {
     key: 'ai.matchmakingBlendWeight',
     envKey: 'AI_MATCHMAKING_BLEND_WEIGHT',
     label: 'AI blend weight',
@@ -338,9 +347,9 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.includeOnboardingInProfile',
     envKey: 'AI_INCLUDE_ONBOARDING_IN_PROFILE',
-    label: 'Include onboarding answers in AI profile text',
+    label: 'Include raw onboarding answers in AI profile text',
     description:
-      'When on, form responses are appended to the text sent to the model (recommended for water onboarding variables).',
+      'Leave off. Matchmaking already uses structured match fields (topics, regions, capabilities, funding). Personal details are never sent to AI.',
     group: 'ai',
     type: 'boolean',
   },

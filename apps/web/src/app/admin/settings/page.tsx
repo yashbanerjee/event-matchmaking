@@ -543,7 +543,9 @@ export default function SettingsPage() {
               <p className="text-xs text-[var(--muted)]">
                 {group.id === 'email'
                   ? 'Messages to innovators use these sender and SMTP details. Large batches wait about 5 seconds between sends.'
-                  : 'Setting key shown on each row'}
+                  : group.id === 'ai'
+                    ? 'Recommendation score threshold controls which pairs appear as recommendations (0–100). AI matches profile and tags only — never personal contact details.'
+                    : 'Setting key shown on each row'}
               </p>
             </div>
             <Button

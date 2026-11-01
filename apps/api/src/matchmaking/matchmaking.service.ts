@@ -299,8 +299,15 @@ export class MatchmakingService {
         ? await this.config.getString('ai.matchmakingMode', 'llm')
         : 'embedding';
       const includeOnboarding = useAi
-        ? await this.config.getBoolean('ai.includeOnboardingInProfile', true)
-        : true;
+        ? await this.config.getBoolean('ai.includeOnboardingInProfile', false)
+        : false;
+      const recommendationThreshold = Math.max(
+        0,
+        Math.min(
+          100,
+          await this.config.getNumber('ops.recommendationScoreThreshold', 50),
+        ),
+      );
       const aiBlendWeight = useAi
         ? Math.max(
             0,
@@ -451,8 +458,8 @@ export class MatchmakingService {
             aiPairsScored += 1;
           }
 
-          // Prefer better fits, but still schedule verified pairs above a soft floor.
-          const softMinScore = Math.min(minScore, 20);
+          // Eligible for recommendations when score meets admin threshold.
+          const scoreFloor = Math.max(recommendationThreshold, Math.min(minScore, 20));
           candidates.push({
             runId,
             companyOrgId: company.organizationId,
@@ -460,10 +467,10 @@ export class MatchmakingService {
             totalScore,
             scoreBreakdown: breakdown as unknown as Prisma.InputJsonValue,
             explanation,
-            eligible: eligibility.eligible && totalScore >= softMinScore,
+            eligible: eligibility.eligible && totalScore >= scoreFloor,
             ineligibilityReasons: [
               ...eligibility.reasons,
-              ...(totalScore < softMinScore ? ['BELOW_MIN_SCORE'] : []),
+              ...(totalScore < scoreFloor ? ['BELOW_SCORE_THRESHOLD'] : []),
             ],
             companyProfileVersion: company.profileVersion,
             vendorProfileVersion: vendor.profileVersion,
