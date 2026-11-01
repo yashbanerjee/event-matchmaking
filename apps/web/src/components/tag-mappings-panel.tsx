@@ -7,7 +7,6 @@ import { getAccessToken } from '@/lib/auth-store';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
@@ -42,7 +41,13 @@ type Mapping = {
   };
 };
 
-export function TagMappingsPanel() {
+export function TagMappingsPanel({
+  title = 'Manual matchmaking',
+  description = 'Link related tags so recommendations cross-match. Previously linked tags stay listed below.',
+}: {
+  title?: string;
+  description?: string;
+} = {}) {
   const qc = useQueryClient();
   const [fromTagId, setFromTagId] = useState('');
   const [toTagId, setToTagId] = useState('');
@@ -130,14 +135,10 @@ export function TagMappingsPanel() {
   const rows = mappings.data ?? [];
 
   return (
-    <Card className="space-y-5 p-5">
+    <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold">Tag matching</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Link related tags so recommendations cross-match. Previously linked
-          tags stay listed below. The left dropdown only shows tags not yet
-          used as a “from” link; the right dropdown shows every tag.
-        </p>
+        <h3 className="text-base font-semibold">{title}</h3>
+        <p className="mt-1 text-sm text-[var(--muted)]">{description}</p>
       </div>
 
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/50 p-4">
@@ -269,6 +270,6 @@ export function TagMappingsPanel() {
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

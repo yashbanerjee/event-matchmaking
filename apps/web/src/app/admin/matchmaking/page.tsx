@@ -50,9 +50,11 @@ export default function MatchmakingPage() {
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
   const [duration, setDuration] = useState(15);
-  const [useAi, setUseAi] = useState(true);
+  const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
+  const [manualMatchmakingOn, setManualMatchmakingOn] = useState(false);
   const [lastRunId, setLastRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const bookingWindow = useQuery({
     queryKey: ['meeting-booking-window'],
@@ -108,6 +110,7 @@ export default function MatchmakingPage() {
   const startRun = useMutation({
     mutationFn: async () => {
       setError(null);
+      setResetMessage(null);
       return apiFetch<MatchRun>('/matchmaking/runs', {
         method: 'POST',
         token: getAccessToken(),
@@ -119,7 +122,7 @@ export default function MatchmakingPage() {
           meetingDurationMinutes: duration,
           bufferMinutes: 5,
           mode: 'IN_PERSON',
-          useAi,
+          useAi: matchmakingEnabled,
         }),
       });
     },
@@ -127,9 +130,40 @@ export default function MatchmakingPage() {
       setLastRunId(data.id);
       void qc.invalidateQueries({ queryKey: ['matchmaking-date-status'] });
       void qc.invalidateQueries({ queryKey: ['admin-meetings'] });
+      void qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
     },
     onError: (err: Error) => {
       setError(err.message || 'Failed to start matchmaking run');
+    },
+  });
+
+  const resetMatchmaking = useMutation({
+    mutationFn: async () => {
+      setError(null);
+      setResetMessage(null);
+      return apiFetch<{
+        scheduleDate: string;
+        cancelledMeetings: number;
+        deletedRuns: number;
+        clearedPeerRecommendations: number;
+      }>('/matchmaking/reset', {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({ scheduleDate }),
+      });
+    },
+    onSuccess: (data) => {
+      setLastRunId(null);
+      setResetMessage(
+        `Reset ${data.scheduleDate}: removed ${data.deletedRuns} run(s), cancelled ${data.cancelledMeetings} meeting(s), cleared ${data.clearedPeerRecommendations} recommendation(s).`,
+      );
+      void qc.invalidateQueries({ queryKey: ['matchmaking-date-status'] });
+      void qc.invalidateQueries({ queryKey: ['matchmaking-run'] });
+      void qc.invalidateQueries({ queryKey: ['admin-meetings'] });
+      void qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
+    },
+    onError: (err: Error) => {
+      setError(err.message || 'Failed to reset matchmaking');
     },
   });
 
@@ -146,22 +180,71 @@ export default function MatchmakingPage() {
         eyebrow="Match & meet"
         title="Matchmaking"
         description="Score investor–innovator pairs for admin review. Participants express interest from Recommendations and schedule meetings themselves."
+        actions={
+          <Button
+            variant="outline"
+            loading={resetMatchmaking.isPending}
+            disabled={!scheduleDate || resetMatchmaking.isPending}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Reset matchmaking for ${scheduleDate}? This cancels open meetings and deletes scoring runs for that date.`,
+                )
+              ) {
+                return;
+              }
+              resetMatchmaking.mutate();
+            }}
+          >
+            {resetMatchmaking.isPending ? 'Resetting…' : 'Reset matchmaking'}
+          </Button>
+        }
       />
+
+      {resetMessage ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {resetMessage}
+        </p>
+      ) : null}
 
       <Card className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Score all pairs</h2>
-            <p className="text-sm text-[var(--muted)]">
-              Produces ranked candidates only — no automatic meeting times.
-              Use Recommendations to surface matches; users schedule under
-              Requests.
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold">Matchmaking</h2>
+              <Badge variant={matchmakingEnabled ? 'success' : 'default'}>
+                {matchmakingEnabled ? 'Enabled' : 'Off'}
+              </Badge>
+              {matchmakingEnabled ? (
+                <Badge variant={aiEnabled ? 'success' : 'default'}>
+                  AI {aiEnabled ? 'ready' : 'local fallback'}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Scores all investor–innovator pairs for the selected event day.
+              Keep this on to run matchmaking.
             </p>
           </div>
           {meetingCount > 0 && (
             <Badge variant="warning">{meetingCount} meetings on this date</Badge>
           )}
         </div>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-[var(--brand)]"
+            checked={matchmakingEnabled}
+            onChange={(e) => setMatchmakingEnabled(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium">Enable matchmaking</span>
+            <span className="mt-0.5 block text-[var(--muted)]">
+              Uses AI when configured; otherwise local scoring still runs.
+            </span>
+          </span>
+        </label>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-sm sm:col-span-2 lg:col-span-4">
@@ -180,6 +263,7 @@ export default function MatchmakingPage() {
               max={eventSchedule.activeEnd}
               value={startTime}
               onChange={(e) => setStartTime(e.target.value)}
+              disabled={!matchmakingEnabled}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -190,6 +274,7 @@ export default function MatchmakingPage() {
               max={eventSchedule.activeEnd}
               value={endTime}
               onChange={(e) => setEndTime(e.target.value)}
+              disabled={!matchmakingEnabled}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -200,34 +285,9 @@ export default function MatchmakingPage() {
               max={120}
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value) || 15)}
+              disabled={!matchmakingEnabled}
             />
           </label>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex cursor-pointer items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 accent-[var(--brand)]"
-              checked={useAi}
-              onChange={(e) => setUseAi(e.target.checked)}
-            />
-            <span>
-              <span className="font-medium">
-                Use AI to boost matching (Qwen 2.5 via OpenRouter)
-              </span>
-              <span className="mt-0.5 block text-[var(--muted)]">
-                Blends rule scores with model fit scores and plain-language
-                match reasons
-                {aiEnabled
-                  ? ' (configured AI provider).'
-                  : ' (local text similarity if AI is off).'}
-              </span>
-            </span>
-          </label>
-          <Badge variant={aiEnabled ? 'success' : 'default'}>
-            AI {aiEnabled ? 'enabled' : 'fallback'}
-          </Badge>
         </div>
 
         {error && (
@@ -237,7 +297,11 @@ export default function MatchmakingPage() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button loading={startRun.isPending} onClick={() => startRun.mutate()}>
+          <Button
+            loading={startRun.isPending}
+            disabled={!matchmakingEnabled || !scheduleDate || startRun.isPending}
+            onClick={() => startRun.mutate()}
+          >
             Run scoring
           </Button>
         </div>
@@ -248,7 +312,9 @@ export default function MatchmakingPage() {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">Latest run</h2>
             <Badge>{run.data.status}</Badge>
-            {run.data.config?.useAi && <Badge variant="success">AI</Badge>}
+            {run.data.config?.useAi && (
+              <Badge variant="success">Matchmaking</Badge>
+            )}
             <span className="text-sm text-[var(--muted)]">
               {String(run.data.scheduleDate).slice(0, 10)} ·{' '}
               {run.data.candidates?.length ?? 0} scored pairs
@@ -288,14 +354,42 @@ export default function MatchmakingPage() {
         </Card>
       )}
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Tag equivalences</h2>
-        <p className="text-sm text-[var(--muted)]">
-          Link related Ethara tags (e.g. Sports ↔ Motorsport) so recommendations
-          cross-match.
-        </p>
-        <TagMappingsPanel />
-      </div>
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold">Manual matchmaking</h2>
+              <Badge variant={manualMatchmakingOn ? 'success' : 'default'}>
+                {manualMatchmakingOn ? 'On' : 'Off'}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Link related tags by hand when you want custom cross-matches.
+              Leave this off unless you need manual tag links.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[var(--brand)]"
+              checked={manualMatchmakingOn}
+              onChange={(e) => setManualMatchmakingOn(e.target.checked)}
+            />
+            Turn on manual matchmaking
+          </label>
+        </div>
+
+        {manualMatchmakingOn ? (
+          <TagMappingsPanel
+            title="Manual tag links"
+            description="Link related tags so recommendations cross-match. Previously linked tags stay listed below."
+          />
+        ) : (
+          <p className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-sm text-[var(--muted)]">
+            Manual matchmaking is off. Turn it on above to link tags.
+          </p>
+        )}
+      </Card>
     </div>
   );
 }

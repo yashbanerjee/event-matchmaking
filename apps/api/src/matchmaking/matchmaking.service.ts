@@ -1135,6 +1135,86 @@ export class MatchmakingService {
     });
   }
 
+  /**
+   * Clear scoring runs (and cancel open meetings) for a schedule date so
+   * admins can start matchmaking fresh.
+   */
+  async resetMatchmaking(actor: AuthUser, scheduleDate: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduleDate)) {
+      throw new BadRequestException('Invalid schedule date');
+    }
+    const { dayStart, dayEnd } = this.dayBoundsUtc(scheduleDate);
+
+    const cancelled = await this.cancelMeetingsForDate(
+      actor,
+      scheduleDate,
+      'Matchmaking reset by admin',
+    );
+
+    const runs = await this.prisma.matchmakingRun.findMany({
+      where: { scheduleDate: { gte: dayStart, lt: dayEnd } },
+      select: {
+        id: true,
+        scheduleVersions: { select: { id: true } },
+        matches: { select: { id: true } },
+      },
+    });
+    const scheduleVersionIds = runs.flatMap((r) =>
+      r.scheduleVersions.map((s) => s.id),
+    );
+    const matchIds = runs.flatMap((r) => r.matches.map((m) => m.id));
+    const runIds = runs.map((r) => r.id);
+
+    if (scheduleVersionIds.length || matchIds.length) {
+      await this.prisma.meeting.updateMany({
+        where: {
+          OR: [
+            ...(scheduleVersionIds.length
+              ? [{ scheduleVersionId: { in: scheduleVersionIds } }]
+              : []),
+            ...(matchIds.length ? [{ matchId: { in: matchIds } }] : []),
+          ],
+        },
+        data: {
+          scheduleVersionId: null,
+          slotId: null,
+          matchId: null,
+        },
+      });
+    }
+
+    if (runIds.length) {
+      await this.prisma.matchmakingRun.deleteMany({
+        where: { id: { in: runIds } },
+      });
+    }
+
+    const peerDeleted = await this.prisma.orgPeerRecommendation.deleteMany({
+      where: { source: 'COMPUTED' },
+    });
+
+    await this.audit.record({
+      actorId: actor.id,
+      action: 'matchmaking.reset',
+      entityType: 'MatchmakingRun',
+      entityId: scheduleDate,
+      outcome: 'SUCCESS',
+      metadata: {
+        scheduleDate,
+        cancelledMeetings: cancelled.cancelled,
+        deletedRuns: runIds.length,
+        clearedPeerRecommendations: peerDeleted.count,
+      },
+    });
+
+    return {
+      scheduleDate,
+      cancelledMeetings: cancelled.cancelled,
+      deletedRuns: runIds.length,
+      clearedPeerRecommendations: peerDeleted.count,
+    };
+  }
+
   async cancelMeetingsForDate(
     actor: AuthUser,
     scheduleDate: string,

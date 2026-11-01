@@ -98,6 +98,15 @@ export class MatchmakingController {
       }));
   }
 
+  @Post('reset')
+  @RequirePermissions(PERMISSIONS.MATCHING_RUN)
+  reset(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { scheduleDate: string },
+  ) {
+    return this.matchmaking.resetMatchmaking(user, body.scheduleDate);
+  }
+
   @Patch('meetings/:id')
   @RequirePermissions(PERMISSIONS.SCHEDULE_OVERRIDE)
   updateMeeting(
