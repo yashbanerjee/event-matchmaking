@@ -273,8 +273,12 @@ export function RecommendationsPanel({
       setError(null);
       setDismissedNote(null);
       setInterestSent(variables.toOrgId);
-      await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
-      await qc.invalidateQueries({ queryKey: ['recommendations'] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['meeting-requests'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations-browse'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations-browse-catalog'] }),
+      ]);
     },
     onError: (err) => {
       setInterestOrgId(null);

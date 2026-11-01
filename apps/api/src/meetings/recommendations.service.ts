@@ -88,7 +88,10 @@ export class RecommendationsService {
       PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
     );
     const { computing } = await this.peers.ensureComputed(perspectiveOrg.id);
-    const dismissedIds = await this.listDismissedPeerIds(perspectiveOrg.id);
+    const [dismissedIds, engagedIds] = await Promise.all([
+      this.listDismissedPeerIds(perspectiveOrg.id),
+      this.listEngagedPeerIds(perspectiveOrg.id),
+    ]);
 
     const stored = await this.fromStored({
       fromOrgId: perspectiveOrg.id,
@@ -96,7 +99,7 @@ export class RecommendationsService {
       peerType,
       max,
       tagLabels,
-      excludeOrgIds: [...orgIds, ...dismissedIds],
+      excludeOrgIds: [...orgIds, ...dismissedIds, ...engagedIds],
     });
     if (stored) {
       return { ...stored, perspective, recommendationLimit: roleLimit, computing };
@@ -180,6 +183,59 @@ export class RecommendationsService {
   }
 
   /**
+   * Peers already in an open meeting request or active meeting with this org.
+   * Hidden from Recommendations and directory browse until declined/cancelled.
+   */
+  private async listEngagedPeerIds(orgId: string): Promise<string[]> {
+    const openRequestStatuses = [
+      'PENDING',
+      'INTEREST_ACCEPTED',
+      'AWAITING_CONFIRMATION',
+      'SCHEDULED',
+    ] as const;
+
+    const [outbound, inbound, asCompany, asVendor] = await Promise.all([
+      this.prisma.meetingRequest.findMany({
+        where: {
+          fromOrgId: orgId,
+          status: { in: [...openRequestStatuses] },
+        },
+        select: { toOrgId: true },
+      }),
+      this.prisma.meetingRequest.findMany({
+        where: {
+          toOrgId: orgId,
+          status: { in: [...openRequestStatuses] },
+        },
+        select: { fromOrgId: true },
+      }),
+      this.prisma.meeting.findMany({
+        where: {
+          companyOrgId: orgId,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        },
+        select: { vendorOrgId: true },
+      }),
+      this.prisma.meeting.findMany({
+        where: {
+          vendorOrgId: orgId,
+          status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        },
+        select: { companyOrgId: true },
+      }),
+    ]);
+
+    return [
+      ...new Set([
+        ...outbound.map((row) => row.toOrgId),
+        ...inbound.map((row) => row.fromOrgId),
+        ...asCompany.map((row) => row.vendorOrgId),
+        ...asVendor.map((row) => row.companyOrgId),
+      ]),
+    ];
+  }
+
+  /**
    * Full counterpart directory (not score-capped): investors browse all
    * eligible innovators; innovators browse all eligible investors.
    * Optional tag values filter across every active filter dimension.
@@ -232,8 +288,11 @@ export class RecommendationsService {
           .filter(Boolean),
       ),
     ];
-    const dismissedIds = await this.listDismissedPeerIds(perspectiveOrg.id);
-    const excludeOrgIds = [...orgIds, ...dismissedIds];
+    const [dismissedIds, engagedIds] = await Promise.all([
+      this.listDismissedPeerIds(perspectiveOrg.id),
+      this.listEngagedPeerIds(perspectiveOrg.id),
+    ]);
+    const excludeOrgIds = [...orgIds, ...dismissedIds, ...engagedIds];
 
     const [tagLabels, tagIndex] = await Promise.all([
       this.filters.listTagLabelIndex(),

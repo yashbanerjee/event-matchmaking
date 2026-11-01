@@ -153,7 +153,12 @@ export function InnovatorsBrowsePanel({
       setScheduleError(null);
       setError(null);
       setInterestSent(variables.toOrgId);
-      await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['meeting-requests'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations-browse'] }),
+        qc.invalidateQueries({ queryKey: ['recommendations-browse-catalog'] }),
+      ]);
     },
     onError: (err) => {
       setInterestOrgId(null);
