@@ -120,7 +120,6 @@ export default function MatchmakingPage() {
           bufferMinutes: 5,
           mode: 'IN_PERSON',
           useAi,
-          forceRegenerate,
         }),
       });
     },
