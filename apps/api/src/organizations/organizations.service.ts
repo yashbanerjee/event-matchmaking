@@ -853,7 +853,7 @@ export class OrganizationsService {
   private async resolveOnboardingForm(type: 'COMPANY' | 'VENDOR') {
     const codes =
       type === 'COMPANY'
-        ? ['WATER_INVESTOR_ONBOARDING', 'ETHARA_ONBOARDING']
+        ? ['WATER_INVESTOR_ONBOARDING']
         : ['WATER_INNOVATOR_ONBOARDING'];
     for (const code of codes) {
       const form = await this.prisma.form.findUnique({

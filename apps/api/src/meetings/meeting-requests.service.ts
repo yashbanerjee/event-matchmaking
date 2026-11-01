@@ -774,8 +774,14 @@ export class MeetingRequestsService {
     const dayStartDate = new Date(dayStart);
     const dayEndDate = new Date(dayEnd);
 
-    const [busyMeetings, busyProposals, places, partyOrgs, dayAssignments] =
-      await Promise.all([
+    const [
+      busyMeetings,
+      busyProposals,
+      places,
+      partyOrgs,
+      dayAssignments,
+      availabilityWindows,
+    ] = await Promise.all([
       this.prisma.meeting.findMany({
         where: {
           status: { notIn: ['CANCELLED', 'NO_SHOW'] },
@@ -818,10 +824,62 @@ export class MeetingRequestsService {
           startsAt: { lt: dayEndDate },
           endsAt: { gt: dayStartDate },
         },
-        select: { organizationId: true, placeId: true, startsAt: true, endsAt: true },
+        select: {
+          organizationId: true,
+          placeId: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      }),
+      this.prisma.availabilityWindow.findMany({
+        where: { organizationId: { in: partyOrgIds } },
+        select: {
+          organizationId: true,
+          startDate: true,
+          endDate: true,
+          startTime: true,
+          endTime: true,
+        },
       }),
     ]);
     const companyOrgId = partyOrgs.find((org) => org.type === 'COMPANY')?.id;
+
+    const partyDayWindows = partyOrgIds.map((orgId) =>
+      this.resolveOrgDayWindow(
+        orgId,
+        date,
+        window.activeStart,
+        window.activeEnd,
+        availabilityWindows,
+      ),
+    );
+    // If either party marked the day as unavailable, there are no mutual slots.
+    if (partyDayWindows.some((w) => w === null)) {
+      return {
+        durationMinutes: duration,
+        slots: [],
+        windowStart: window.start,
+        windowEnd: window.end,
+        partyOrgIds,
+      };
+    }
+    const mutualStart = partyDayWindows.reduce(
+      (max, w) => Math.max(max, w!.startMs),
+      dayStart,
+    );
+    const mutualEnd = partyDayWindows.reduce(
+      (min, w) => Math.min(min, w!.endMs),
+      dayEnd,
+    );
+    if (mutualStart >= mutualEnd) {
+      return {
+        durationMinutes: duration,
+        slots: [],
+        windowStart: window.start,
+        windowEnd: window.end,
+        partyOrgIds,
+      };
+    }
 
     const busyIntervals: Array<{ startsAt: Date; endsAt: Date }> = [
       ...busyMeetings.map((m) => ({
@@ -925,8 +983,8 @@ export class MeetingRequestsService {
     ];
 
     const slots: Array<{ startsAt: string; endsAt: string }> = [];
-    let cursor = dayStart;
-    while (cursor + duration * 60_000 <= dayEnd) {
+    let cursor = mutualStart;
+    while (cursor + duration * 60_000 <= mutualEnd) {
       const startsAt = new Date(cursor);
       const endsAt = new Date(cursor + duration * 60_000);
       const partiesBusy = busyIntervals.some(
@@ -990,6 +1048,63 @@ export class MeetingRequestsService {
     });
     if (!request) throw new NotFoundException('Meeting request not found');
     return request;
+  }
+
+  /**
+   * Intersect event hours with an org's declared availability for a calendar day.
+   * Returns null when the org has windows but none cover this date.
+   * Falls back to full event hours when the org has no windows yet (legacy orgs).
+   */
+  private resolveOrgDayWindow(
+    organizationId: string,
+    date: string,
+    eventStart: string,
+    eventEnd: string,
+    windows: Array<{
+      organizationId: string;
+      startDate: Date | null;
+      endDate: Date | null;
+      startTime: string;
+      endTime: string;
+    }>,
+  ): { startMs: number; endMs: number } | null {
+    const orgWindows = windows.filter((w) => w.organizationId === organizationId);
+    if (orgWindows.length === 0) {
+      return {
+        startMs: new Date(`${date}T${eventStart}:00+04:00`).getTime(),
+        endMs: new Date(`${date}T${eventEnd}:00+04:00`).getTime(),
+      };
+    }
+
+    const dayWindows = orgWindows.filter((w) => {
+      if (!w.startDate) return true;
+      const start = w.startDate.toISOString().slice(0, 10);
+      const end = (w.endDate ?? w.startDate).toISOString().slice(0, 10);
+      return date >= start && date <= end;
+    });
+    if (dayWindows.length === 0) return null;
+
+    let startMs = Number.POSITIVE_INFINITY;
+    let endMs = Number.NEGATIVE_INFINITY;
+    for (const w of dayWindows) {
+      const start = new Date(`${date}T${w.startTime}:00+04:00`).getTime();
+      const end = new Date(`${date}T${w.endTime}:00+04:00`).getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+        continue;
+      }
+      startMs = Math.min(startMs, start);
+      endMs = Math.max(endMs, end);
+    }
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
+      return null;
+    }
+
+    const eventStartMs = new Date(`${date}T${eventStart}:00+04:00`).getTime();
+    const eventEndMs = new Date(`${date}T${eventEnd}:00+04:00`).getTime();
+    return {
+      startMs: Math.max(startMs, eventStartMs),
+      endMs: Math.min(endMs, eventEndMs),
+    };
   }
 
   private async resolveOrgEmails(orgId: string): Promise<string[]> {

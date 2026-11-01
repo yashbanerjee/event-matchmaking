@@ -250,6 +250,8 @@ async function main() {
     { key: 'ops.rtoHours', value: 4 },
     { key: 'registration.enabled', value: false },
     { key: 'registration.formId', value: '' },
+    { key: 'registration.investorFormId', value: '' },
+    { key: 'registration.innovatorFormId', value: '' },
     { key: 'registration.notifyEmails', value: '' },
   ];
 

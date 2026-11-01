@@ -132,7 +132,20 @@ export const WATER_DIMENSIONS = [
   },
 ] as const;
 
-type FieldType = 'heading' | 'text' | 'textarea' | 'select' | 'multiselect';
+type FieldType =
+  | 'heading'
+  | 'text'
+  | 'textarea'
+  | 'select'
+  | 'multiselect'
+  | 'time';
+
+/** Default event dates used until admin settings override availability options. */
+export const DEFAULT_AVAILABILITY_DATES: TagDef[] = [
+  { value: '2026-12-07', label: 'Sun 7 Dec 2026' },
+  { value: '2026-12-08', label: 'Mon 8 Dec 2026' },
+  { value: '2026-12-09', label: 'Tue 9 Dec 2026' },
+];
 
 function field(
   sectionId: string,
@@ -145,6 +158,7 @@ function field(
     description?: string;
     options?: TagDef[];
     filterDimensionId?: string | null;
+    placeholder?: string;
   },
 ) {
   return {
@@ -157,6 +171,7 @@ function field(
     description: partial.description ?? '',
     options: partial.options ?? [],
     filterDimensionId: partial.filterDimensionId ?? null,
+    placeholder: partial.placeholder ?? '',
     order,
   };
 }
@@ -166,24 +181,98 @@ function mapFieldType(type: FieldType) {
   if (type === 'select') return 'SINGLE_SELECT';
   if (type === 'multiselect') return 'MULTI_SELECT';
   if (type === 'heading') return 'READ_ONLY';
+  if (type === 'time') return 'SHORT_TEXT';
   return 'SHORT_TEXT';
 }
 
+const TICKET_OPTIONS: TagDef[] = [
+  { value: 'under-250k', label: 'Under USD 250k' },
+  { value: '250k-1m', label: 'USD 250k – 1m' },
+  { value: '1m-5m', label: 'USD 1m – 5m' },
+  { value: '5m-25m', label: 'USD 5m – 25m' },
+  { value: '25m-plus', label: 'USD 25m+' },
+];
+
+const COUNTRY_OPTIONS: TagDef[] = [
+  { value: 'AE', label: 'United Arab Emirates' },
+  { value: 'SA', label: 'Saudi Arabia' },
+  { value: 'EG', label: 'Egypt' },
+  { value: 'KE', label: 'Kenya' },
+  { value: 'NG', label: 'Nigeria' },
+  { value: 'ZA', label: 'South Africa' },
+  { value: 'IN', label: 'India' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'US', label: 'United States' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+/** Personal contact fields shared by investor + innovator forms. */
+function personalDetailFields(sectionId: string, startOrder: number) {
+  return [
+    field(sectionId, startOrder, {
+      key: 'contact_name',
+      type: 'text',
+      label: `${startOrder}. Full name`,
+      required: true,
+      description: 'Name shown on your meeting profile.',
+      placeholder: 'First and last name',
+    }),
+    field(sectionId, startOrder + 1, {
+      key: 'job_title',
+      type: 'text',
+      label: `${startOrder + 1}. Job title`,
+      required: true,
+      description: 'Your role at the organization.',
+      placeholder: 'e.g. Partner, CEO, Investment Director',
+    }),
+    field(sectionId, startOrder + 2, {
+      key: 'phone',
+      type: 'text',
+      label: `${startOrder + 2}. Mobile phone`,
+      required: true,
+      description: 'Include country code for on-site coordination.',
+      placeholder: '+971 …',
+    }),
+    field(sectionId, startOrder + 3, {
+      key: 'linkedin_url',
+      type: 'text',
+      label: `${startOrder + 3}. LinkedIn or website`,
+      required: true,
+      description: 'Profile or company URL for introductions.',
+      placeholder: 'https://',
+    }),
+    field(sectionId, startOrder + 4, {
+      key: 'country',
+      type: 'select',
+      label: `${startOrder + 4}. Country / base`,
+      required: true,
+      description: 'Where you are primarily based.',
+      options: COUNTRY_OPTIONS,
+    }),
+  ];
+}
+
+/**
+ * Investor form — personal details + match fields (≥10 questions).
+ * Meeting dates/times are collected on the next registration step.
+ */
 export function buildInvestorOnboardingFields(
   dimensionIds: Record<string, string>,
   tagOptions: Record<string, TagDef[]>,
 ) {
-  const about = randomUUID();
-  const mandate = randomUUID();
+  const personal = randomUUID();
+  const profile = randomUUID();
+  const match = randomUUID();
   const capital = randomUUID();
 
   const fields = [
-    field(about, 0, { key: 'heading_about', type: 'heading', label: 'Your institution' }),
-    field(about, 1, {
+    ...personalDetailFields(personal, 1),
+    field(profile, 6, {
       key: 'industry',
       type: 'select',
-      label: 'Investor type',
+      label: '6. Investor type',
       required: true,
+      description: 'Used to pair you with relevant innovator pitches.',
       options: [
         { value: 'Development finance institution', label: 'Development finance institution' },
         { value: 'Impact / climate fund', label: 'Impact / climate fund' },
@@ -196,124 +285,127 @@ export function buildInvestorOnboardingFields(
         { value: 'Government / sovereign', label: 'Government / sovereign' },
       ],
     }),
-    field(about, 2, {
+    field(profile, 7, {
       key: 'organization_summary',
       type: 'textarea',
-      label: 'Investment thesis for water',
+      label: '7. Investment thesis',
       required: true,
-      description:
-        'What water outcomes and business models you back (SDG 6, climate, utilities, WASH).',
+      description: 'What you look for in a pitch — outcomes, sectors, deal style.',
     }),
-    field(about, 3, {
+    field(profile, 8, {
       key: 'focus_events',
       type: 'textarea',
-      label: 'What you want from this 3-day UN Water event',
+      label: '8. Goal for this event',
       required: true,
-      description: 'e.g. pipeline for 2027, pilot partners in the Sahel, co-investors for blended facilities.',
+      description: 'e.g. shortlist innovators, find pilot partners, co-invest.',
     }),
-    field(mandate, 10, { key: 'heading_mandate', type: 'heading', label: 'Mandate' }),
-    field(mandate, 11, {
+    field(match, 9, {
       key: 'categories',
       type: 'multiselect',
-      label: 'Water challenges you want to fund',
+      label: '9. Challenges you want to fund',
       required: true,
+      description: 'Primary recommendation filter vs innovator challenges.',
       options: tagOptions.event_categories,
       filterDimensionId: dimensionIds.event_categories,
     }),
-    field(mandate, 12, {
+    field(match, 10, {
       key: 'regions',
       type: 'multiselect',
-      label: 'Priority geographies',
+      label: '10. Priority geographies',
       required: true,
+      description: 'Geography fit used in recommendations.',
       options: tagOptions.venues,
       filterDimensionId: dimensionIds.venues,
     }),
-    field(mandate, 13, {
+    field(match, 11, {
       key: 'capabilities',
       type: 'multiselect',
-      label: 'Solution types of interest',
+      label: '11. Solution types of interest',
       required: true,
+      description: 'Maps to innovator capabilities for scoring.',
       options: tagOptions.capabilities,
       filterDimensionId: dimensionIds.capabilities,
     }),
-    field(capital, 20, { key: 'heading_capital', type: 'heading', label: 'Capital & partnership' }),
-    field(capital, 21, {
+    field(capital, 12, {
       key: 'commercialTags',
       type: 'multiselect',
-      label: 'Instruments you can deploy',
+      label: '12. Instruments you can deploy',
       required: true,
+      description: 'Commercial fit against innovator ask.',
       options: tagOptions.commercial_tags,
       filterDimensionId: dimensionIds.commercial_tags,
     }),
-    field(capital, 22, {
+    field(capital, 13, {
       key: 'investment_stages',
       type: 'multiselect',
-      label: 'Preferred stages',
+      label: '13. Preferred stages',
       required: true,
+      description: 'Stage fit vs innovator maturity.',
       options: tagOptions.investment_stages,
       filterDimensionId: dimensionIds.investment_stages,
     }),
-    field(capital, 23, {
+    field(capital, 14, {
       key: 'ticket_size',
       type: 'select',
-      label: 'Typical ticket size',
+      label: '14. Typical ticket size',
       required: true,
-      options: [
-        { value: 'under-250k', label: 'Under USD 250k' },
-        { value: '250k-1m', label: 'USD 250k – 1m' },
-        { value: '1m-5m', label: 'USD 1m – 5m' },
-        { value: '5m-25m', label: 'USD 5m – 25m' },
-        { value: '25m-plus', label: 'USD 25m+' },
-      ],
-    }),
-    field(capital, 24, {
-      key: 'partnership_goal',
-      type: 'textarea',
-      label: 'What a successful meeting looks like',
-      required: false,
+      description: 'Ticket-size fit against innovator capital ask.',
+      options: TICKET_OPTIONS,
     }),
   ];
 
   return {
     sections: [
       {
-        id: about,
-        title: 'Institution',
-        description: 'Help innovators understand who you are as a capital partner.',
+        id: personal,
+        title: 'Personal details',
+        description: 'How innovators and the team will reach you.',
         order: 0,
       },
       {
-        id: mandate,
-        title: 'Water mandate',
-        description: 'Shared matching variables with innovators — challenges, regions, solutions.',
+        id: profile,
+        title: 'About your firm',
+        description: 'Who sits across the table from innovators.',
         order: 1,
       },
       {
-        id: capital,
-        title: 'How you invest',
-        description: 'Instruments, stage, and ticket size used for pairing.',
+        id: match,
+        title: 'Match criteria',
+        description: 'These answers drive investor ↔ innovator recommendations.',
         order: 2,
+      },
+      {
+        id: capital,
+        title: 'Capital',
+        description: 'Instruments, stage, and check size.',
+        order: 3,
       },
     ],
     fields,
   };
 }
 
+/**
+ * Innovator form — personal details + match fields (≥10 questions).
+ * Meeting dates/times are collected on the next registration step.
+ */
 export function buildInnovatorOnboardingFields(
   dimensionIds: Record<string, string>,
   tagOptions: Record<string, TagDef[]>,
 ) {
-  const about = randomUUID();
-  const solution = randomUUID();
-  const capital = randomUUID();
+  const personal = randomUUID();
+  const profile = randomUUID();
+  const match = randomUUID();
+  const ask = randomUUID();
 
   const fields = [
-    field(about, 0, { key: 'heading_about', type: 'heading', label: 'Your organization' }),
-    field(about, 1, {
+    ...personalDetailFields(personal, 1),
+    field(profile, 6, {
       key: 'industry',
       type: 'select',
-      label: 'Organization type',
+      label: '6. Organization type',
       required: true,
+      description: 'Helps investors understand the pitch context.',
       options: [
         { value: 'Startup / scale-up', label: 'Startup / scale-up' },
         { value: 'Technology provider', label: 'Technology provider' },
@@ -323,110 +415,100 @@ export function buildInnovatorOnboardingFields(
         { value: 'Project developer', label: 'Project developer' },
       ],
     }),
-    field(about, 2, {
+    field(profile, 7, {
       key: 'organization_summary',
       type: 'textarea',
-      label: 'Solution and the water problem it solves',
+      label: '7. Your pitch in plain language',
       required: true,
-      description: 'Be concrete: who is served, what changes, and where it is deployed.',
+      description: 'Problem, solution, and who pays — one-minute story.',
     }),
-    field(about, 3, {
+    field(profile, 8, {
       key: 'focus_events',
       type: 'textarea',
-      label: 'What you want from this UN Water event',
+      label: '8. Goal for this event',
       required: true,
-      description: 'Capital, pilots, offtake, technical partners, or policy support.',
+      description: 'Capital, pilots, offtake, partners, or policy support.',
     }),
-    field(solution, 10, { key: 'heading_solution', type: 'heading', label: 'Solution fit' }),
-    field(solution, 11, {
+    field(match, 9, {
       key: 'categories',
       type: 'multiselect',
-      label: 'Water challenges you address',
+      label: '9. Challenges you address',
       required: true,
+      description: 'Primary recommendation filter vs investor mandates.',
       options: tagOptions.event_categories,
       filterDimensionId: dimensionIds.event_categories,
     }),
-    field(solution, 12, {
+    field(match, 10, {
       key: 'regions',
       type: 'multiselect',
-      label: 'Regions you can deploy in',
+      label: '10. Regions you can deploy in',
       required: true,
+      description: 'Geography fit for investor interest.',
       options: tagOptions.venues,
       filterDimensionId: dimensionIds.venues,
     }),
-    field(solution, 13, {
+    field(match, 11, {
       key: 'capabilities',
       type: 'multiselect',
-      label: 'Your solution capabilities',
+      label: '11. Your solution capabilities',
       required: true,
+      description: 'Capability overlap used in match scoring.',
       options: tagOptions.capabilities,
       filterDimensionId: dimensionIds.capabilities,
     }),
-    field(solution, 14, {
+    field(match, 12, {
       key: 'investment_stages',
       type: 'select',
-      label: 'Solution maturity',
+      label: '12. Solution maturity',
       required: true,
+      description: 'Stage fit against investor preferences.',
       options: tagOptions.investment_stages,
       filterDimensionId: dimensionIds.investment_stages,
     }),
-    field(capital, 20, { key: 'heading_ask', type: 'heading', label: 'Capital & traction' }),
-    field(capital, 21, {
+    field(ask, 13, {
       key: 'commercialTags',
       type: 'multiselect',
-      label: 'Partnership or capital you are seeking',
+      label: '13. Partnership or capital you seek',
       required: true,
+      description: 'Commercial fit with investor instruments.',
       options: tagOptions.commercial_tags,
       filterDimensionId: dimensionIds.commercial_tags,
     }),
-    field(capital, 22, {
+    field(ask, 14, {
       key: 'ticket_size',
       type: 'select',
-      label: 'Capital sought',
+      label: '14. Capital sought',
       required: true,
-      options: [
-        { value: 'under-250k', label: 'Under USD 250k' },
-        { value: '250k-1m', label: 'USD 250k – 1m' },
-        { value: '1m-5m', label: 'USD 1m – 5m' },
-        { value: '5m-25m', label: 'USD 5m – 25m' },
-        { value: '25m-plus', label: 'USD 25m+' },
-      ],
-    }),
-    field(capital, 23, {
-      key: 'impact_metrics',
-      type: 'textarea',
-      label: 'Impact and traction to date',
-      required: false,
-      description:
-        'People served, m³ saved or treated, utility pilots, revenue, or letters of intent.',
-    }),
-    field(capital, 24, {
-      key: 'partnership_goal',
-      type: 'textarea',
-      label: 'What a successful meeting looks like',
-      required: false,
+      description: 'Ticket-size fit against investor check size.',
+      options: TICKET_OPTIONS,
     }),
   ];
 
   return {
     sections: [
       {
-        id: about,
-        title: 'Organization',
-        description: 'Tell investors what you do in the water sector.',
+        id: personal,
+        title: 'Personal details',
+        description: 'How investors and the team will reach you.',
         order: 0,
       },
       {
-        id: solution,
-        title: 'Solution fit',
-        description: 'Same challenge, region, and capability variables used for investors.',
+        id: profile,
+        title: 'About your venture',
+        description: 'Your pitch card for investors.',
         order: 1,
       },
       {
-        id: capital,
-        title: 'Ask & traction',
-        description: 'Capital type, ticket, and evidence of operational impact.',
+        id: match,
+        title: 'Match criteria',
+        description: 'Same fields investors use for recommendations.',
         order: 2,
+      },
+      {
+        id: ask,
+        title: 'The ask',
+        description: 'Capital type and check size.',
+        order: 3,
       },
     ],
     fields,
@@ -435,7 +517,7 @@ export function buildInnovatorOnboardingFields(
 
 export const INVESTOR_FORM_CODE = 'WATER_INVESTOR_ONBOARDING';
 export const INNOVATOR_FORM_CODE = 'WATER_INNOVATOR_ONBOARDING';
-export const LEGACY_FORM_CODE = 'ETHARA_ONBOARDING';
+export const KEEP_FORM_CODES = [INVESTOR_FORM_CODE, INNOVATOR_FORM_CODE] as const;
 
 export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
   const dimensionIds: Record<string, string> = {};
@@ -594,41 +676,56 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
 
   const investorForm = await upsertPublishedForm({
     code: INVESTOR_FORM_CODE,
-    name: 'Investor onboarding',
+    name: 'Investor form',
     description:
-      'UN Water matchmaking form for investors — challenges, geographies, instruments, and ticket size.',
+      'Personal details and match fields for investors (availability on next step).',
     targetType: 'COMPANY',
-    hash: 'water-investor-onboarding-v1',
+    hash: 'investor-form-v4',
     schema: investorBuilt,
   });
 
   const innovatorForm = await upsertPublishedForm({
     code: INNOVATOR_FORM_CODE,
-    name: 'Innovator onboarding',
+    name: 'Innovator form',
     description:
-      'UN Water matchmaking form for innovators — solution, regions, maturity, and capital ask.',
+      'Personal details and match fields for innovators (availability on next step).',
     targetType: 'VENDOR',
-    hash: 'water-innovator-onboarding-v1',
+    hash: 'innovator-form-v4',
     schema: innovatorBuilt,
   });
 
-  await upsertPublishedForm({
-    code: LEGACY_FORM_CODE,
-    name: 'Investor onboarding',
-    description: 'Legacy code kept in sync with the investor water form.',
-    targetType: 'COMPANY',
-    hash: 'water-investor-onboarding-v1',
-    schema: investorBuilt,
-  });
+  // Delete every other form so the product only has these two.
+  await deleteFormsExcept(prisma, [...KEEP_FORM_CODES]);
 
-  await prisma.systemSetting.upsert({
-    where: { key: 'registration.formId' },
-    create: {
-      key: 'registration.formId',
-      value: { value: investorForm.form.id },
+  const dualFormSettings = [
+    {
+      key: 'registration.investorFormId',
+      value: investorForm.form.id,
     },
-    update: { value: { value: investorForm.form.id } },
-  });
+    {
+      key: 'registration.innovatorFormId',
+      value: innovatorForm.form.id,
+    },
+    { key: 'registration.formId', value: investorForm.form.id },
+    { key: 'registration.enabled', value: true },
+    {
+      key: 'ops.eventDates',
+      value: DEFAULT_AVAILABILITY_DATES.map((d) => d.value).join(','),
+    },
+    { key: 'ops.eventActiveStart', value: '09:00' },
+    { key: 'ops.eventActiveEnd', value: '17:00' },
+  ] as const;
+
+  for (const setting of dualFormSettings) {
+    await prisma.systemSetting.upsert({
+      where: { key: setting.key },
+      create: {
+        key: setting.key,
+        value: { value: setting.value },
+      },
+      update: { value: { value: setting.value } },
+    });
+  }
 
   return {
     dimensionIds,
@@ -636,4 +733,73 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     investorForm,
     innovatorForm,
   };
+}
+
+/** Remove legacy / unused forms and their dependent rows. */
+async function deleteFormsExcept(
+  prisma: PrismaClient,
+  keepCodes: string[],
+) {
+  const obsolete = await prisma.form.findMany({
+    where: { code: { notIn: keepCodes } },
+    select: { id: true, code: true },
+  });
+  if (!obsolete.length) return;
+
+  const formIds = obsolete.map((f) => f.id);
+  const versions = await prisma.formVersion.findMany({
+    where: { formId: { in: formIds } },
+    select: { id: true },
+  });
+  const versionIds = versions.map((v) => v.id);
+
+  if (versionIds.length) {
+    const submissions = await prisma.formSubmission.findMany({
+      where: { formVersionId: { in: versionIds } },
+      select: { id: true },
+    });
+    const submissionIds = submissions.map((s) => s.id);
+    if (submissionIds.length) {
+      await prisma.submissionCorrectionField.deleteMany({
+        where: { correction: { submissionId: { in: submissionIds } } },
+      });
+      await prisma.submissionCorrection.deleteMany({
+        where: { submissionId: { in: submissionIds } },
+      });
+      await prisma.formSubmission.deleteMany({
+        where: { id: { in: submissionIds } },
+      });
+      // EventRegistration.formVersionId / submissionId are not FK-constrained,
+      // but clear rows that pointed at removed versions/submissions.
+      await prisma.eventRegistration.deleteMany({
+        where: {
+          OR: [
+            { formVersionId: { in: versionIds } },
+            { submissionId: { in: submissionIds } },
+          ],
+        },
+      });
+    } else {
+      await prisma.eventRegistration.deleteMany({
+        where: { formVersionId: { in: versionIds } },
+      });
+    }
+    await prisma.formField.deleteMany({
+      where: { formVersionId: { in: versionIds } },
+    });
+  }
+
+  await prisma.formAssignment.deleteMany({
+    where: { formId: { in: formIds } },
+  });
+  await prisma.formVersion.deleteMany({
+    where: { formId: { in: formIds } },
+  });
+  await prisma.form.deleteMany({
+    where: { id: { in: formIds } },
+  });
+
+  console.log(
+    `Deleted ${obsolete.length} old form(s): ${obsolete.map((f) => f.code).join(', ')}`,
+  );
 }

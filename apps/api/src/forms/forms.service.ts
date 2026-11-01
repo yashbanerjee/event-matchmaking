@@ -1713,6 +1713,8 @@ export class FormsService {
       });
     }
 
+    await this.syncAvailabilityWindows(org.id, responses);
+
     const refreshed = await this.prisma.organization.findUnique({
       where: { id: org.id },
       include: { company: true, vendor: true },
@@ -1725,6 +1727,56 @@ export class FormsService {
     if (ready) {
       this.peerRecs.scheduleRecompute(org.id, 'profile.normalize');
     }
+  }
+
+  /**
+   * Persist pitch-day availability from registration answers so meeting slots
+   * only land inside each party's declared timetable (within event hours).
+   */
+  private async syncAvailabilityWindows(
+    organizationId: string,
+    responses: Record<string, unknown>,
+  ) {
+    const dates = asStringArray(responses.availability_dates).filter((d) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(d),
+    );
+    const fallbackStart =
+      normalizeHm(firstString(responses.availability_start_time)) ?? '09:00';
+    const fallbackEnd =
+      normalizeHm(firstString(responses.availability_end_time)) ?? '17:00';
+    const byDate = parseAvailabilityByDate(responses.availability_windows);
+
+    await this.prisma.availabilityWindow.deleteMany({
+      where: { organizationId },
+    });
+
+    if (!dates.length) return;
+
+    const rows = dates
+      .map((date) => {
+        const window = byDate.get(date);
+        const startTime = window?.start ?? fallbackStart;
+        const endTime = window?.end ?? fallbackEnd;
+        if (startTime >= endTime) {
+          this.logger.warn(
+            `Skipping availability for ${organizationId} on ${date}: ${startTime} >= ${endTime}`,
+          );
+          return null;
+        }
+        return {
+          organizationId,
+          startDate: new Date(`${date}T00:00:00.000Z`),
+          endDate: new Date(`${date}T00:00:00.000Z`),
+          startTime,
+          endTime,
+          timeZone: 'Asia/Dubai',
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    if (!rows.length) return;
+
+    await this.prisma.availabilityWindow.createMany({ data: rows });
   }
 
   async list() {
@@ -1971,4 +2023,31 @@ function firstString(value: unknown): string | null {
     return first != null ? String(first).trim() : null;
   }
   return null;
+}
+
+function normalizeHm(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function parseAvailabilityByDate(
+  value: unknown,
+): Map<string, { start: string; end: string }> {
+  const map = new Map<string, { start: string; end: string }>();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return map;
+  for (const [date, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const start = normalizeHm(firstString(row.start ?? row.startTime));
+    const end = normalizeHm(firstString(row.end ?? row.endTime));
+    if (!start || !end) continue;
+    map.set(date, { start, end });
+  }
+  return map;
 }

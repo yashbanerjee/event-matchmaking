@@ -103,7 +103,8 @@ export default function SettingsPage() {
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [registration, setRegistration] = useState({
     enabled: false,
-    formId: '',
+    investorFormId: '',
+    innovatorFormId: '',
     notifyEmails: '',
   });
   const [eventDates, setEventDates] = useState<string[]>(DEFAULT_EVENT_DATES);
@@ -136,9 +137,18 @@ export default function SettingsPage() {
     }
     setDraft(next);
 
+    const legacyFormId = String(
+      settingValue(data.settings, 'registration.formId') ?? '',
+    );
     setRegistration({
       enabled: Boolean(settingValue(data.settings, 'registration.enabled')),
-      formId: String(settingValue(data.settings, 'registration.formId') ?? ''),
+      investorFormId: String(
+        settingValue(data.settings, 'registration.investorFormId') ??
+          legacyFormId,
+      ),
+      innovatorFormId: String(
+        settingValue(data.settings, 'registration.innovatorFormId') ?? '',
+      ),
       notifyEmails: String(
         settingValue(data.settings, 'registration.notifyEmails') ?? '',
       ),
@@ -227,7 +237,19 @@ export default function SettingsPage() {
         body: JSON.stringify({
           values: [
             { key: 'registration.enabled', value: registration.enabled },
-            { key: 'registration.formId', value: registration.formId },
+            {
+              key: 'registration.investorFormId',
+              value: registration.investorFormId,
+            },
+            {
+              key: 'registration.innovatorFormId',
+              value: registration.innovatorFormId,
+            },
+            // Keep legacy key aligned with investor form for older clients.
+            {
+              key: 'registration.formId',
+              value: registration.investorFormId,
+            },
             {
               key: 'registration.notifyEmails',
               value: registration.notifyEmails,
@@ -403,8 +425,9 @@ export default function SettingsPage() {
           <div>
             <h2 className="font-medium">Event registration</h2>
             <p className="text-xs text-[var(--muted)]">
-              Public “Register for event” uses a published form, then email OTP
-              and password setup. Investor/Innovator is collected on the form flow.
+              Shark Tank–style public signup: separate investor and innovator
+              pitch forms, email OTP, then instant verified access to each
+              dashboard. Meetings only schedule inside each party’s availability.
             </p>
           </div>
           <Button
@@ -426,31 +449,59 @@ export default function SettingsPage() {
           Enable public registration
         </label>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Registration form
-          </label>
-          <Select
-            value={registration.formId}
-            onChange={(e) =>
-              setRegistration((r) => ({ ...r, formId: e.target.value }))
-            }
-          >
-            <option value="">Select a published form…</option>
-            {publishedForms.map((form) => (
-              <option key={form.id} value={form.id}>
-                {form.name}
-              </option>
-            ))}
-          </Select>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Latest published version is used. The Investor/Innovator role field is
-            added automatically.
-          </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Investor form
+            </label>
+            <Select
+              value={registration.investorFormId}
+              onChange={(e) =>
+                setRegistration((r) => ({
+                  ...r,
+                  investorFormId: e.target.value,
+                }))
+              }
+            >
+              <option value="">Select investor form…</option>
+              {publishedForms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Used when someone registers as an investor.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Innovator form
+            </label>
+            <Select
+              value={registration.innovatorFormId}
+              onChange={(e) =>
+                setRegistration((r) => ({
+                  ...r,
+                  innovatorFormId: e.target.value,
+                }))
+              }
+            >
+              <option value="">Select innovator form…</option>
+              {publishedForms.map((form) => (
+                <option key={form.id} value={form.id}>
+                  {form.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Used when someone registers as an innovator.
+            </p>
+          </div>
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">
+          <label className="mb-1.5 block text-sm font-medium">
             Notify admins (emails)
           </label>
           <Input

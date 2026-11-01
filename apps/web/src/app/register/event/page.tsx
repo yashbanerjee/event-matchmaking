@@ -4,16 +4,22 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { FormSchemaDefinition } from '@em/shared';
+import {
+  responsesByFieldKey,
+  type FormSchemaDefinition,
+} from '@em/shared';
 import { FormRenderer } from '@/components/form-renderer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { apiFetch } from '@/lib/api';
 import { setTokens } from '@/lib/auth-store';
 import { BRAND } from '@/lib/brand';
 import { resolveParticipantHome } from '@/lib/portal-onboarding';
 import { cn } from '@/lib/utils';
+
+type EventDateOption = { value: string; label: string };
 
 type PublicConfig = {
   enabled: boolean;
@@ -22,19 +28,52 @@ type PublicConfig = {
   formName?: string | null;
   schema?: FormSchemaDefinition | null;
   reason?: string;
+  needsRole?: boolean;
+  investorFormConfigured?: boolean;
+  innovatorFormConfigured?: boolean;
+  eventDates?: EventDateOption[];
+  eventActiveStart?: string;
+  eventActiveEnd?: string;
+  eventTimeZone?: string;
 };
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 const STEPS = [
-  { id: 1 as const, label: 'Details', hint: 'Profile & role' },
-  { id: 2 as const, label: 'Verify', hint: 'Email code' },
-  { id: 3 as const, label: 'Password', hint: 'Secure access' },
+  { id: 1 as const, label: 'Profile', hint: 'Details & form' },
+  { id: 2 as const, label: 'Availability', hint: 'Days & times' },
+  { id: 3 as const, label: 'Verify', hint: 'Email code' },
+  { id: 4 as const, label: 'Password', hint: 'Secure access' },
 ];
+
+function hmToMinutes(hm: string) {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minutesToHm(total: number) {
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Fixed event-hour slot options (15-minute steps). */
+function buildTimeOptions(activeStart: string, activeEnd: string) {
+  const start = hmToMinutes(activeStart);
+  const end = hmToMinutes(activeEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+    return [];
+  }
+  const options: string[] = [];
+  for (let t = start; t <= end; t += 15) {
+    options.push(minutesToHm(t));
+  }
+  return options;
+}
 
 function StepRail({ step }: { step: Step }) {
   return (
-    <ol className="grid grid-cols-3 gap-2">
+    <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {STEPS.map((item, index) => {
         const active = step === item.id;
         const done = step > item.id;
@@ -101,12 +140,12 @@ function RolePicker({
           {
             id: 'CLIENT' as const,
             title: 'Investor',
-            body: 'Share your water mandate and meet innovators looking for capital.',
+            body: 'Share your mandate and meet the innovators that fit your check.',
           },
           {
             id: 'GUEST' as const,
             title: 'Innovator',
-            body: 'Share your water solution and meet investors at the event.',
+            body: 'Pitch your solution and meet investors who can fund or partner.',
           },
         ] as const
       ).map((option) => {
@@ -134,6 +173,155 @@ function RolePicker({
   );
 }
 
+function AvailabilityStep({
+  eventDates,
+  activeStart,
+  activeEnd,
+  timeZone,
+  selectedDates,
+  windows,
+  onToggleDate,
+  onChangeWindow,
+}: {
+  eventDates: EventDateOption[];
+  activeStart: string;
+  activeEnd: string;
+  timeZone: string;
+  selectedDates: string[];
+  windows: Record<string, { start: string; end: string }>;
+  onToggleDate: (date: string) => void;
+  onChangeWindow: (date: string, next: { start: string; end: string }) => void;
+}) {
+  const timeOptions = useMemo(
+    () => buildTimeOptions(activeStart, activeEnd),
+    [activeStart, activeEnd],
+  );
+
+  if (!eventDates.length) {
+    return (
+      <p className="text-sm text-[var(--danger)]">
+        Event dates are not configured yet. Ask an admin to set them in
+        Settings.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-[var(--highlight)]/20 bg-[var(--highlight-soft)]/50 px-4 py-3 text-sm leading-relaxed">
+        Event hours are fixed at{' '}
+        <span className="font-semibold">
+          {activeStart}–{activeEnd}
+        </span>{' '}
+        ({timeZone}). Pick the days you can meet, then choose your window
+        inside those hours for each day.
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-semibold">
+          Event days you can take meetings{' '}
+          <span className="text-[var(--danger)]">*</span>
+        </p>
+        <div className="space-y-2">
+          {eventDates.map((day) => {
+            const checked = selectedDates.includes(day.value);
+            return (
+              <label
+                key={day.value}
+                className={cn(
+                  'flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors',
+                  checked
+                    ? 'border-[var(--accent)]/40 bg-[var(--accent-soft)]/50'
+                    : 'border-[var(--border)] bg-white hover:border-[var(--accent)]/30',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[var(--border)]"
+                  checked={checked}
+                  onChange={() => onToggleDate(day.value)}
+                />
+                <span className="font-medium">{day.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDates.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Your time on each day</p>
+          {selectedDates.map((date) => {
+            const meta = eventDates.find((d) => d.value === date);
+            const window = windows[date] ?? {
+              start: activeStart,
+              end: activeEnd,
+            };
+            const endOptions = timeOptions.filter((t) => t > window.start);
+            return (
+              <div
+                key={date}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/70 p-3 sm:p-4"
+              >
+                <p className="mb-3 text-sm font-medium">
+                  {meta?.label ?? date}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm">
+                    <span className="mb-1.5 block font-medium">
+                      Available from
+                    </span>
+                    <Select
+                      value={window.start}
+                      onChange={(e) => {
+                        const start = e.target.value;
+                        const end =
+                          window.end > start ? window.end : endOptions[0] ?? activeEnd;
+                        onChangeWindow(date, { start, end });
+                      }}
+                    >
+                      {timeOptions
+                        .filter((t) => t < activeEnd)
+                        .map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                    </Select>
+                  </label>
+                  <label className="text-sm">
+                    <span className="mb-1.5 block font-medium">
+                      Available until
+                    </span>
+                    <Select
+                      value={window.end}
+                      onChange={(e) =>
+                        onChangeWindow(date, {
+                          start: window.start,
+                          end: e.target.value,
+                        })
+                      }
+                    >
+                      {endOptions.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Must stay between {activeStart} and {activeEnd}.
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function EventRegisterForm() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -141,6 +329,10 @@ function EventRegisterForm() {
   const [role, setRole] = useState<'CLIENT' | 'GUEST' | ''>('');
   const [organizationName, setOrganizationName] = useState('');
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [availabilityWindows, setAvailabilityWindows] = useState<
+    Record<string, { start: string; end: string }>
+  >({});
   const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [registrationToken, setRegistrationToken] = useState<string | null>(
@@ -152,35 +344,73 @@ function EventRegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
 
-  const config = useQuery({
-    queryKey: ['registration-event'],
+  const status = useQuery({
+    queryKey: ['registration-event-status'],
     queryFn: () => apiFetch<PublicConfig>('/registration/event'),
   });
 
-  const schemaWithoutRole = useMemo(() => {
-    const schema = config.data?.schema;
-    if (!schema) return null;
+  const config = useQuery({
+    queryKey: ['registration-event', role],
+    queryFn: () =>
+      apiFetch<PublicConfig>(`/registration/event?role=${role}`),
+    enabled: Boolean(role),
+  });
+
+  const schema = useMemo(() => {
+    const next = config.data?.schema;
+    if (!next) return null;
     return {
-      ...schema,
-      fields: schema.fields.filter((f) => f.key !== 'participant_role'),
+      ...next,
+      fields: next.fields.filter(
+        (f) =>
+          f.key !== 'participant_role' &&
+          !f.key.startsWith('availability_'),
+      ),
     };
   }, [config.data?.schema]);
 
+  const schedule = config.data ?? status.data;
+  const eventDates = schedule?.eventDates ?? [];
+  const activeStart = schedule?.eventActiveStart ?? '09:00';
+  const activeEnd = schedule?.eventActiveEnd ?? '17:00';
+  const timeZone = schedule?.eventTimeZone ?? 'Asia/Dubai';
+
   const start = useMutation({
-    mutationFn: () =>
-      apiFetch<{ registrationId: string }>('/registration/event/start', {
+    mutationFn: () => {
+      if (!schema || !role) {
+        throw new Error('Select a role and complete the form first');
+      }
+      const formResponses = responsesByFieldKey(schema, values);
+      const windows: Record<string, { start: string; end: string }> = {};
+      for (const date of selectedDates) {
+        windows[date] = availabilityWindows[date] ?? {
+          start: activeStart,
+          end: activeEnd,
+        };
+      }
+      const firstWindow = selectedDates[0]
+        ? windows[selectedDates[0]]
+        : undefined;
+      return apiFetch<{ registrationId: string }>('/registration/event/start', {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim(),
           role,
           organizationName: organizationName.trim(),
-          responses: values,
+          responses: {
+            ...formResponses,
+            availability_dates: selectedDates,
+            availability_windows: windows,
+            availability_start_time: firstWindow?.start ?? activeStart,
+            availability_end_time: firstWindow?.end ?? activeEnd,
+          },
         }),
-      }),
+      });
+    },
     onSuccess: (res) => {
       setError('');
       setRegistrationId(res.registrationId);
-      setStep(2);
+      setStep(3);
     },
     onError: (caught) => setError((caught as Error).message),
   });
@@ -200,7 +430,27 @@ function EventRegisterForm() {
     onSuccess: (res) => {
       setError('');
       setRegistrationToken(res.registrationToken);
-      setStep(3);
+      // Prefill account name from personal details when possible.
+      if (!firstName.trim() || !lastName.trim()) {
+        const contact =
+          typeof values[
+            schema?.fields.find((f) => f.key === 'contact_name')?.id ?? ''
+          ] === 'string'
+            ? String(
+                values[
+                  schema?.fields.find((f) => f.key === 'contact_name')?.id ?? ''
+                ],
+              ).trim()
+            : '';
+        if (contact) {
+          const parts = contact.split(/\s+/);
+          if (!firstName.trim() && parts[0]) setFirstName(parts[0]);
+          if (!lastName.trim() && parts.length > 1) {
+            setLastName(parts.slice(1).join(' '));
+          }
+        }
+      }
+      setStep(4);
     },
     onError: (caught) => setError((caught as Error).message),
   });
@@ -229,7 +479,21 @@ function EventRegisterForm() {
     onError: (caught) => setError((caught as Error).message),
   });
 
-  if (config.isLoading) {
+  const availabilityReady =
+    selectedDates.length > 0 &&
+    selectedDates.every((date) => {
+      const window = availabilityWindows[date] ?? {
+        start: activeStart,
+        end: activeEnd,
+      };
+      return (
+        window.start >= activeStart &&
+        window.end <= activeEnd &&
+        window.start < window.end
+      );
+    });
+
+  if (status.isLoading) {
     return (
       <Card className="animate-rise w-full max-w-xl border-white/70 bg-white/90 p-8">
         <p className="text-sm text-[var(--muted)]">Loading registration…</p>
@@ -237,7 +501,7 @@ function EventRegisterForm() {
     );
   }
 
-  if (!config.data?.enabled) {
+  if (!status.data?.enabled) {
     return (
       <Card className="animate-rise w-full max-w-lg border-white/70 bg-white/90 p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--highlight)]">
@@ -260,7 +524,10 @@ function EventRegisterForm() {
     );
   }
 
-  if (!config.data.schema) {
+  if (
+    !status.data.investorFormConfigured &&
+    !status.data.innovatorFormConfigured
+  ) {
     return (
       <Card className="animate-rise w-full max-w-lg border-white/70 bg-white/90 p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--highlight)]">
@@ -268,7 +535,7 @@ function EventRegisterForm() {
         </p>
         <h1 className="mt-3 h-display text-3xl">Almost ready</h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-          An administrator still needs to select a published registration form
+          An administrator still needs to select investor and innovator forms
           in Settings.
         </p>
         <Link href="/" className="mt-6 inline-block">
@@ -299,15 +566,14 @@ function EventRegisterForm() {
           {BRAND.tagline}.
         </h1>
         <p className="relative mt-4 max-w-sm text-sm leading-relaxed text-[var(--sidebar-muted)]">
-          Tell us who you are, verify your email, and set a password. Your
-          profile goes to the Ethara event team for review while you explore
-          your dashboard.
+          Complete your profile, pick meeting days inside fixed event hours,
+          verify your email, then open your dashboard.
         </p>
         <ul className="relative mt-8 space-y-3 text-sm">
           {[
-            'Choose Investor or Innovator',
-            'Verify with a one-time email code',
-            'Open your panel right after setup',
+            'Personal details + match profile',
+            'Choose days and times within event hours',
+            'Verify email and open your dashboard',
           ].map((item) => (
             <li
               key={item}
@@ -330,9 +596,15 @@ function EventRegisterForm() {
               Register for event
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
-              {config.data.formName
-                ? `Complete “${config.data.formName}”, then verify your email and set a password.`
-                : 'Complete the form, verify your email, then set a password.'}
+              {step === 1
+                ? config.data?.formName
+                  ? `Complete “${config.data.formName}”, then set your meeting availability.`
+                  : 'Choose a role to load your form, then set availability.'
+                : step === 2
+                  ? 'Select event days and your available hours within the fixed schedule.'
+                  : step === 3
+                    ? 'Enter the code we emailed you.'
+                    : 'Set a password to open your dashboard.'}
             </p>
           </div>
         </div>
@@ -344,7 +616,11 @@ function EventRegisterForm() {
                 <p className="mb-2 text-sm font-semibold">I am registering as</p>
                 <RolePicker
                   value={role}
-                  onChange={(next) => setRole(next)}
+                  onChange={(next) => {
+                    setRole(next);
+                    setValues({});
+                    setError('');
+                  }}
                 />
               </div>
 
@@ -373,13 +649,24 @@ function EventRegisterForm() {
                 </div>
               </div>
 
-              {schemaWithoutRole ? (
+              {role && config.isLoading ? (
+                <p className="text-sm text-[var(--muted)]">Loading form…</p>
+              ) : null}
+
+              {role && config.data && !config.data.schema ? (
+                <p className="text-sm text-[var(--danger)]">
+                  The {role === 'CLIENT' ? 'investor' : 'innovator'} form is not
+                  configured yet. Ask an admin to select it in Settings.
+                </p>
+              ) : null}
+
+              {schema ? (
                 <div className="rounded-[1.25rem] border border-[var(--border)] bg-[var(--card-elevated)]/80 p-3 sm:p-4">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                    Profile form
+                    {role === 'CLIENT' ? 'Investor' : 'Innovator'} form
                   </p>
                   <FormRenderer
-                    schema={schemaWithoutRole}
+                    schema={schema}
                     values={values}
                     onChange={(fieldId, value) =>
                       setValues((current) => ({
@@ -394,20 +681,81 @@ function EventRegisterForm() {
               <Button
                 className="w-full sm:w-auto sm:min-w-52"
                 size="lg"
-                loading={start.isPending} disabled={!email.trim() ||
+                disabled={
+                  !email.trim() ||
                   !role ||
-                  !organizationName.trim()}
+                  !organizationName.trim() ||
+                  !schema
+                }
                 onClick={() => {
                   setError('');
-                  start.mutate();
+                  setStep(2);
                 }}
               >
-                {start.isPending ? 'Sending code…' : 'Continue to email verify'}
+                Continue to availability
               </Button>
             </div>
           ) : null}
 
           {step === 2 ? (
+            <div
+              className="space-y-5"
+              style={{ animation: 'rise-in 0.45s ease-out both' }}
+            >
+              <AvailabilityStep
+                eventDates={eventDates}
+                activeStart={activeStart}
+                activeEnd={activeEnd}
+                timeZone={timeZone}
+                selectedDates={selectedDates}
+                windows={availabilityWindows}
+                onToggleDate={(date) => {
+                  setSelectedDates((current) => {
+                    if (current.includes(date)) {
+                      setAvailabilityWindows((windows) => {
+                        const next = { ...windows };
+                        delete next[date];
+                        return next;
+                      });
+                      return current.filter((d) => d !== date);
+                    }
+                    setAvailabilityWindows((windows) => ({
+                      ...windows,
+                      [date]: windows[date] ?? {
+                        start: activeStart,
+                        end: activeEnd,
+                      },
+                    }));
+                    return [...current, date].sort();
+                  });
+                }}
+                onChangeWindow={(date, next) => {
+                  setAvailabilityWindows((windows) => ({
+                    ...windows,
+                    [date]: next,
+                  }));
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="lg"
+                  loading={start.isPending}
+                  disabled={!availabilityReady || start.isPending}
+                  onClick={() => {
+                    setError('');
+                    start.mutate();
+                  }}
+                >
+                  {start.isPending ? 'Sending code…' : 'Continue to email verify'}
+                </Button>
+                <Button variant="ghost" onClick={() => setStep(1)}>
+                  Back
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
             <div
               className="mx-auto max-w-md space-y-5"
               style={{ animation: 'rise-in 0.45s ease-out both' }}
@@ -435,7 +783,8 @@ function EventRegisterForm() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="lg"
-                  loading={verify.isPending} disabled={otp.length !== 6}
+                  loading={verify.isPending}
+                  disabled={otp.length !== 6}
                   onClick={() => {
                     setError('');
                     verify.mutate();
@@ -453,14 +802,14 @@ function EventRegisterForm() {
                 >
                   Resend code
                 </Button>
-                <Button variant="ghost" onClick={() => setStep(1)}>
+                <Button variant="ghost" onClick={() => setStep(2)}>
                   Back
                 </Button>
               </div>
             </div>
           ) : null}
 
-          {step === 3 ? (
+          {step === 4 ? (
             <div
               className="mx-auto max-w-md space-y-4"
               style={{ animation: 'rise-in 0.45s ease-out both' }}

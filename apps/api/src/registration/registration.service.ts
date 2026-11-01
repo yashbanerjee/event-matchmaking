@@ -30,8 +30,6 @@ import { hashToken, timingSafeEqualHex } from '../common/crypto.util';
 const OTP_TTL_MS = 10 * 60_000;
 const OTP_RESEND_MS = 60_000;
 const OTP_MAX_ATTEMPTS = 5;
-const ROLE_FIELD_KEY = 'participant_role';
-
 @Injectable()
 export class RegistrationService {
   constructor(
@@ -43,15 +41,49 @@ export class RegistrationService {
     private readonly forms: FormsService,
   ) {}
 
-  async getPublicConfig() {
+  async getPublicConfig(role?: 'CLIENT' | 'GUEST') {
     const enabled = await this.getSettingBool('registration.enabled', false);
     if (!enabled) {
       return { enabled: false, schema: null, formName: null };
     }
 
-    const formId = await this.getSettingString('registration.formId', '');
+    const investorFormId = await this.getSettingString(
+      'registration.investorFormId',
+      '',
+    );
+    const innovatorFormId = await this.getSettingString(
+      'registration.innovatorFormId',
+      '',
+    );
+    const legacyFormId = await this.getSettingString('registration.formId', '');
+
+    const schedule = await this.getEventSchedule();
+
+    if (!role) {
+      return {
+        enabled: true,
+        schema: null,
+        formName: null,
+        needsRole: true,
+        investorFormConfigured: Boolean(investorFormId || legacyFormId),
+        innovatorFormConfigured: Boolean(innovatorFormId || legacyFormId),
+        ...schedule,
+      };
+    }
+
+    const formId =
+      role === 'CLIENT'
+        ? investorFormId || legacyFormId
+        : innovatorFormId || legacyFormId;
     if (!formId) {
-      return { enabled: true, schema: null, formName: null, reason: 'no_form' };
+      return {
+        enabled: true,
+        schema: null,
+        formName: null,
+        reason: 'no_form',
+        role,
+        ...schedule,
+      };
     }
 
     const version = await this.prisma.formVersion.findFirst({
@@ -65,32 +97,42 @@ export class RegistrationService {
         schema: null,
         formName: null,
         reason: 'no_published_version',
+        role,
+        ...schedule,
       };
     }
 
-    const base = this.resolveSchema(version.schemaJson, version.fields);
-    const schema = this.injectRoleField(base);
+    const schema = this.resolveSchema(version.schemaJson, version.fields);
 
     return {
       enabled: true,
+      role,
       formId: version.formId,
       formVersionId: version.id,
       formName: version.form.name,
       schema,
+      ...schedule,
     };
   }
 
   async start(raw: EventRegistrationStartInput) {
     const input = eventRegistrationStartSchema.parse(raw);
-    const config = await this.getPublicConfig();
+    const config = await this.getPublicConfig(input.role);
     if (!config.enabled) {
       throw new BadRequestException('Event registration is closed');
     }
     if (!config.formVersionId || !config.schema) {
       throw new BadRequestException(
-        'Registration form is not configured. Ask an administrator to select a published form in Settings.',
+        'Registration form is not configured. Ask an administrator to select investor and innovator forms in Settings.',
       );
     }
+
+    this.assertAvailabilityResponses(
+      input.responses,
+      config.eventDates ?? [],
+      config.eventActiveStart ?? '09:00',
+      config.eventActiveEnd ?? '17:00',
+    );
 
     const email = input.email.trim().toLowerCase();
     const existingUser = await this.prisma.user.findUnique({
@@ -331,13 +373,19 @@ export class RegistrationService {
         });
       }
 
+      // Public registration is Shark Tank–style: OTP proves email, then the
+      // participant is verified and match-eligible immediately.
       const org = await tx.organization.create({
         data: {
           type: orgType,
           code,
           name,
-          status: 'PENDING_APPROVAL',
-          customAttrs: { contactEmail: email, registration: true },
+          status: 'APPROVED',
+          customAttrs: {
+            contactEmail: email,
+            registration: true,
+            autoVerified: true,
+          },
         },
       });
 
@@ -348,19 +396,19 @@ export class RegistrationService {
             displayName: name,
             categories: [],
             capabilities: [],
-            approvalStatus: 'IN_REVIEW',
-            verificationStatus: 'UNVERIFIED',
-            matchingEligible: false,
-            onboardingComplete: false,
+            approvalStatus: 'VERIFIED',
+            verificationStatus: 'VERIFIED',
+            matchingEligible: true,
+            onboardingComplete: true,
           },
         });
       } else {
         await tx.company.create({
           data: {
             organizationId: org.id,
-            approvalStatus: 'IN_REVIEW',
-            verificationStatus: 'UNVERIFIED',
-            matchingEligible: false,
+            approvalStatus: 'VERIFIED',
+            verificationStatus: 'VERIFIED',
+            matchingEligible: true,
           },
         });
       }
@@ -404,9 +452,10 @@ export class RegistrationService {
           formVersionId: registration.formVersionId,
           organizationId: org.id,
           submittedById: user.id,
-          status: 'SUBMITTED',
+          status: 'APPROVED',
           responses: registration.responses as object,
           submittedAt: new Date(),
+          reviewedAt: new Date(),
         },
       });
 
@@ -471,33 +520,114 @@ export class RegistrationService {
     return this.auth.createSessionForUser(created.user.id, email);
   }
 
-  private injectRoleField(schema: FormSchemaDefinition): FormSchemaDefinition {
-    const sectionId = schema.sections[0]?.id ?? randomUUID();
-    const maxOrder = schema.fields.reduce(
-      (max, field) => Math.max(max, field.order),
-      -1,
-    );
-    const already = schema.fields.some((f) => f.key === ROLE_FIELD_KEY);
-    if (already) return schema;
+  private assertAvailabilityResponses(
+    responses: Record<string, unknown>,
+    eventDates: Array<{ value: string; label: string }>,
+    activeStart: string,
+    activeEnd: string,
+  ) {
+    const allowed = new Set(eventDates.map((d) => d.value));
+    const dates = Array.isArray(responses.availability_dates)
+      ? responses.availability_dates.map(String)
+      : [];
+    const selected = dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (!selected.length) {
+      throw new BadRequestException(
+        'Select at least one event day for meetings.',
+      );
+    }
+    if (selected.some((d) => !allowed.has(d))) {
+      throw new BadRequestException(
+        'Meeting days must be within the published event dates.',
+      );
+    }
+
+    const windows =
+      responses.availability_windows &&
+      typeof responses.availability_windows === 'object' &&
+      !Array.isArray(responses.availability_windows)
+        ? (responses.availability_windows as Record<string, unknown>)
+        : {};
+
+    for (const date of selected) {
+      const raw = windows[date];
+      const row =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : {};
+      const start =
+        typeof row.start === 'string'
+          ? row.start
+          : typeof responses.availability_start_time === 'string'
+            ? responses.availability_start_time
+            : '';
+      const end =
+        typeof row.end === 'string'
+          ? row.end
+          : typeof responses.availability_end_time === 'string'
+            ? responses.availability_end_time
+            : '';
+      if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) {
+        throw new BadRequestException(
+          `Choose available times for ${date} within event hours.`,
+        );
+      }
+      if (start < activeStart || end > activeEnd || start >= end) {
+        throw new BadRequestException(
+          `Availability on ${date} must stay between ${activeStart} and ${activeEnd}.`,
+        );
+      }
+    }
+  }
+
+  /** Public event days + fixed active hours (Dubai) for the availability step. */
+  private async getEventSchedule() {
+    const dates = await this.getEventDateOptions();
+    const activeStart =
+      (await this.getSettingString('ops.eventActiveStart', '09:00')).trim() ||
+      '09:00';
+    const activeEnd =
+      (await this.getSettingString('ops.eventActiveEnd', '17:00')).trim() ||
+      '17:00';
     return {
-      ...schema,
-      fields: [
-        ...schema.fields,
-        {
-          id: randomUUID(),
-          key: ROLE_FIELD_KEY,
-          type: 'select',
-          label: 'I am registering as',
-          required: true,
-          sectionId,
-          order: maxOrder + 1,
-          options: [
-            { value: 'CLIENT', label: 'Investor' },
-            { value: 'GUEST', label: 'Innovator' },
-          ],
-        },
-      ],
+      eventDates: dates,
+      eventActiveStart: /^\d{2}:\d{2}$/.test(activeStart) ? activeStart : '09:00',
+      eventActiveEnd: /^\d{2}:\d{2}$/.test(activeEnd) ? activeEnd : '17:00',
+      eventTimeZone: 'Asia/Dubai',
     };
+  }
+
+  private async getEventDateOptions(): Promise<
+    Array<{ value: string; label: string }>
+  > {
+    const raw = await this.getSettingString('ops.eventDates', '');
+    const dates = raw
+      .split(/[,\n]/)
+      .map((part) => part.trim())
+      .filter((part) => /^\d{4}-\d{2}-\d{2}$/.test(part));
+    if (!dates.length) {
+      const row = await this.prisma.systemSetting.findUnique({
+        where: { key: 'ops.eventDates' },
+      });
+      const value = (row?.value as { value?: unknown } | null)?.value;
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item)) {
+            dates.push(item);
+          }
+        }
+      }
+    }
+    return dates.map((value) => ({
+      value,
+      label: new Date(`${value}T12:00:00Z`).toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Asia/Dubai',
+      }),
+    }));
   }
 
   private resolveSchema(

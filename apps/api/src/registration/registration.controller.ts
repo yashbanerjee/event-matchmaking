@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { RegistrationService } from './registration.service';
@@ -9,8 +9,8 @@ export class RegistrationController {
   constructor(private readonly registration: RegistrationService) {}
 
   @Get('event')
-  getEvent() {
-    return this.registration.getPublicConfig();
+  getEvent(@Query('role') role?: 'CLIENT' | 'GUEST') {
+    return this.registration.getPublicConfig(role);
   }
 
   @Post('event/start')
