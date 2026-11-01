@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
@@ -377,8 +378,7 @@ export default function AdminFiltersPage() {
               Description{' '}
               <span className="font-normal text-[var(--muted)]">(optional)</span>
             </label>
-            <textarea
-              className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm shadow-sm placeholder:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            <Textarea
               value={dimForm.description}
               onChange={(e) =>
                 setDimForm({ ...dimForm, description: e.target.value })

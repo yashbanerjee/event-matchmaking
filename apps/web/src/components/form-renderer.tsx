@@ -9,9 +9,12 @@ import {
   type FormSchemaDefinition,
 } from '@em/shared';
 import { cn } from '@/lib/utils';
+import { controlClassName } from '@/components/ui/control';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
-export const formControlClass =
-  'flex h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-50';
+/** @deprecated Prefer Input / Select / Textarea components. Kept for callers. */
+export const formControlClass = controlClassName;
 
 export function FormRenderer({
   schema,
@@ -275,9 +278,8 @@ function Control({
       : '';
   if (field.type === 'textarea') {
     return (
-      <textarea
+      <Textarea
         id={id}
-        className={`${formControlClass} min-h-24 py-2`}
         disabled={!editable}
         aria-describedby={describedBy}
         placeholder={field.placeholder}
@@ -304,9 +306,8 @@ function Control({
             }))
           : (field.options ?? []);
     return (
-      <select
+      <Select
         id={id}
-        className={formControlClass}
         disabled={!editable}
         aria-describedby={describedBy}
         value={text}
@@ -325,7 +326,7 @@ function Control({
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
   if (field.type === 'radio') {

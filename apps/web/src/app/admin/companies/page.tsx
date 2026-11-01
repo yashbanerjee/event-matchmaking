@@ -22,6 +22,8 @@ import { EmptyState } from '@/components/empty-state';
 import { OrgRowActions } from '@/components/org-actions';
 import { FormRenderer } from '@/components/form-renderer';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
   formatNextMeeting,
@@ -585,8 +587,7 @@ export default function CompaniesPage() {
               <label className="mb-1.5 block text-sm font-medium">
                 Select form (required)
               </label>
-              <select
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+              <Select
                 value={
                   form.formId ? `${form.formId}::${form.formVersionId}` : ''
                 }
@@ -610,7 +611,7 @@ export default function CompaniesPage() {
                     {f.name} (v{f.version})
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : (
             <p className="text-sm text-[var(--muted)]">
@@ -654,8 +655,8 @@ export default function CompaniesPage() {
               Phone number (optional)
             </label>
             <div className="grid grid-cols-[140px_1fr] gap-2">
-              <select
-                className="h-10 rounded-xl border border-[var(--border)] bg-white px-2 text-sm"
+              <Select
+                className="px-2.5"
                 value={form.phoneCountryCode}
                 onChange={(e) =>
                   setForm({ ...form, phoneCountryCode: e.target.value })
@@ -666,7 +667,7 @@ export default function CompaniesPage() {
                     {c.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Input
                 placeholder="501234567"
                 value={form.phone}
@@ -758,8 +759,8 @@ export default function CompaniesPage() {
             Each row receives an invitation email. Onboarding forms are assigned
             automatically from published investor forms.
           </p>
-          <textarea
-            className="min-h-48 w-full rounded-xl border border-[var(--border)] bg-white p-3 font-mono text-xs"
+          <Textarea
+            className="min-h-48 font-mono text-xs"
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
           />

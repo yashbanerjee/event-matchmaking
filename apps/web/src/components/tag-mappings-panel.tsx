@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 
 type FilterTag = {
@@ -143,8 +144,7 @@ export function TagMappingsPanel() {
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
           <label className="grid gap-1.5 text-sm font-medium">
             From tag
-            <select
-              className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <Select
               value={fromTagId}
               onChange={(e) => setFromTagId(e.target.value)}
             >
@@ -154,15 +154,14 @@ export function TagMappingsPanel() {
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="text-xs font-normal text-[var(--muted)]">
               {fromTagOptions.length} available
             </span>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">
             To tag
-            <select
-              className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <Select
               value={toTagId}
               onChange={(e) => setToTagId(e.target.value)}
             >
@@ -172,7 +171,7 @@ export function TagMappingsPanel() {
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <span className="text-xs font-normal text-[var(--muted)]">
               All {toTagOptions.length} tags
             </span>

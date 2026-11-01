@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { EventDateChips } from '@/components/event-date-chips';
 import {
@@ -448,10 +449,9 @@ export default function AdminMeetingsPage() {
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Status</span>
-              <select
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-[var(--muted)]">Status</span>
+              <Select
                 value={filters.status}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, status: e.target.value }))
@@ -462,12 +462,11 @@ export default function AdminMeetingsPage() {
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Investor</span>
-              <select
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-[var(--muted)]">Investor</span>
+              <Select
                 value={filters.companyOrgId}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, companyOrgId: e.target.value }))
@@ -479,12 +478,11 @@ export default function AdminMeetingsPage() {
                     {org.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Innovator</span>
-              <select
-                className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-[var(--muted)]">Innovator</span>
+              <Select
                 value={filters.vendorOrgId}
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, vendorOrgId: e.target.value }))
@@ -496,10 +494,10 @@ export default function AdminMeetingsPage() {
                     {org.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-[var(--muted)]">Search</span>
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-[var(--muted)]">Search</span>
               <Input
                 placeholder="Investor or innovator name…"
                 value={filters.search}
@@ -621,8 +619,8 @@ export default function AdminMeetingsPage() {
         <div className="space-y-3">
           <label className="block text-sm">
             Investor
-            <select
-              className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
+            <Select
+              className="mt-1"
               value={editForm.companyOrgId}
               onChange={(e) =>
                 setEditForm((f) => ({ ...f, companyOrgId: e.target.value }))
@@ -634,12 +632,12 @@ export default function AdminMeetingsPage() {
                   {org.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="block text-sm">
             Innovator
-            <select
-              className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
+            <Select
+              className="mt-1"
               value={editForm.vendorOrgId}
               onChange={(e) =>
                 setEditForm((f) => ({ ...f, vendorOrgId: e.target.value }))
@@ -651,7 +649,7 @@ export default function AdminMeetingsPage() {
                   {org.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="space-y-2">
             <p className="text-sm">Event date</p>
@@ -719,8 +717,8 @@ export default function AdminMeetingsPage() {
         <div className="space-y-3">
           <label className="block text-sm">
             Investor
-            <select
-              className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
+            <Select
+              className="mt-1"
               value={createForm.companyOrgId}
               onChange={(e) =>
                 setCreateForm((f) => ({ ...f, companyOrgId: e.target.value }))
@@ -732,12 +730,12 @@ export default function AdminMeetingsPage() {
                   {org.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="block text-sm">
             Innovator
-            <select
-              className="mt-1 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm"
+            <Select
+              className="mt-1"
               value={createForm.vendorOrgId}
               onChange={(e) =>
                 setCreateForm((f) => ({ ...f, vendorOrgId: e.target.value }))
@@ -749,7 +747,7 @@ export default function AdminMeetingsPage() {
                   {org.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="space-y-2">
             <p className="text-sm">Event date</p>

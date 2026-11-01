@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
+import { Select } from '@/components/ui/select';
 import { EmptyState } from '@/components/empty-state';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
@@ -410,8 +411,8 @@ function AdminRecommendationsPageInner() {
                   if (e.key === 'Enter') setCandidateSearch(candidateQ);
                 }}
               />
-              <select
-                className="h-10 min-w-[12rem] flex-1 rounded-md border border-[var(--border)] bg-white px-3 text-sm"
+              <Select
+                className="min-w-[12rem] flex-1"
                 value={selectedCandidateId}
                 onChange={(e) => setSelectedCandidateId(e.target.value)}
               >
@@ -426,7 +427,7 @@ function AdminRecommendationsPageInner() {
                     {c.industry ? ` · ${c.industry}` : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Button
                 disabled={!selectedCandidateId || addManual.isPending}
                 loading={addManual.isPending}

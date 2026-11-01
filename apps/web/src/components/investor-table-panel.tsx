@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
 import { EventDateChips } from '@/components/event-date-chips';
 import { EmptyState } from '@/components/empty-state';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
@@ -302,8 +303,8 @@ export function InvestorTablePanel({
           {!organizationId ? (
             <label className="block text-sm">
               Investor
-              <select
-                className="mt-1 h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+              <Select
+                className="mt-1"
                 value={form.organizationId}
                 onChange={(e) =>
                   setForm((current) => ({
@@ -318,14 +319,14 @@ export function InvestorTablePanel({
                     {org.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           ) : null}
 
           <label className="block text-sm">
             Table / place
-            <select
-              className="mt-1 h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+            <Select
+              className="mt-1"
               value={form.placeId}
               onChange={(e) =>
                 setForm((current) => ({ ...current, placeId: e.target.value }))
@@ -338,7 +339,7 @@ export function InvestorTablePanel({
                   {place.location ? ` · ${place.location}` : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <div>

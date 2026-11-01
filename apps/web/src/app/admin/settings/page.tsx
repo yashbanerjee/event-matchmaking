@@ -6,6 +6,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useAdminQuery } from '@/lib/admin-query';
 import { apiFetch } from '@/lib/api';
@@ -428,8 +430,7 @@ export default function SettingsPage() {
           <label className="mb-1 block text-sm font-medium">
             Registration form
           </label>
-          <select
-            className="h-10 w-full rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+          <Select
             value={registration.formId}
             onChange={(e) =>
               setRegistration((r) => ({ ...r, formId: e.target.value }))
@@ -441,7 +442,7 @@ export default function SettingsPage() {
                 {form.name}
               </option>
             ))}
-          </select>
+          </Select>
           <p className="mt-1 text-xs text-[var(--muted)]">
             Latest published version is used. The Investor/Innovator role field is
             added automatically.
@@ -533,8 +534,7 @@ export default function SettingsPage() {
                       Enabled
                     </label>
                   ) : field.type === 'select' ? (
-                    <select
-                      className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+                    <Select
                       value={String(draft[field.key] ?? '')}
                       onChange={(e) =>
                         setDraft((d) => ({
@@ -548,11 +548,11 @@ export default function SettingsPage() {
                           {opt}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   ) : field.type === 'textarea' ? (
                     <div className="space-y-1">
-                      <textarea
-                        className="min-h-[120px] w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
+                      <Textarea
+                        className="min-h-[120px]"
                         placeholder={String(field.envDefault ?? '')}
                         value={String(draft[field.key] ?? '')}
                         onChange={(e) =>

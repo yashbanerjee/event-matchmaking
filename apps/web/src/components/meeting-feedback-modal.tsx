@@ -6,6 +6,8 @@ import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 const OUTCOMES = [
   { value: 'SUCCESSFUL_DISCUSSION', label: 'Successful discussion' },
@@ -52,8 +54,7 @@ function RatingSelect({
   return (
     <label className="grid gap-1.5 text-sm font-medium">
       {label}
-      <select
-        className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+      <Select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       >
@@ -62,7 +63,7 @@ function RatingSelect({
             {n} / 5
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -195,8 +196,7 @@ export function MeetingFeedbackModal({
 
         <label className="grid gap-1.5 text-sm font-medium">
           Outcome
-          <select
-            className="h-10 rounded-xl border border-[var(--border)] bg-white px-3 text-sm"
+          <Select
             value={form.outcome}
             onChange={(e) =>
               setForm({
@@ -210,13 +210,12 @@ export function MeetingFeedbackModal({
                 {item.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         <label className="grid gap-1.5 text-sm font-medium">
           Comments
-          <textarea
-            className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          <Textarea
             value={form.comments}
             onChange={(e) => setForm({ ...form, comments: e.target.value })}
             placeholder="What went well? Anything to improve?"

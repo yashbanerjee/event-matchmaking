@@ -14,6 +14,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { FormRenderer, formControlClass } from '@/components/form-renderer';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 
@@ -414,10 +416,9 @@ export default function FormBuilderPage() {
                   field.type,
                 ) ? (
                   <>
-                    <label className="grid gap-1 text-sm font-medium">
+                    <label className="grid gap-1.5 text-sm font-medium">
                       Linked filter group
-                      <select
-                        className={formControlClass}
+                      <Select
                         value={field.filterDimensionId ?? ''}
                         onChange={(event) => {
                           const dimensionId = event.target.value || null;
@@ -453,7 +454,7 @@ export default function FormBuilderPage() {
                             {dim.tags.filter((t) => t.isActive).length} tags)
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     {field.filterDimensionId ? (
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] p-2.5">
@@ -479,10 +480,9 @@ export default function FormBuilderPage() {
                         </p>
                       </div>
                     ) : (
-                      <label className="grid gap-1 text-sm font-medium">
+                      <label className="grid gap-1.5 text-sm font-medium">
                         Options (one per line, value|label)
-                        <textarea
-                          className={`${formControlClass} min-h-24 py-2`}
+                        <Textarea
                           value={(field.options ?? [])
                             .map((option) =>
                               option.value === option.label

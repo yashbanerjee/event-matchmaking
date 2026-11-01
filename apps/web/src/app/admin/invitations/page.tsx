@@ -7,6 +7,7 @@ import { getAccessToken } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 
 export default function InvitationsPage() {
   const qc = useQueryClient();
@@ -68,8 +69,7 @@ export default function InvitationsPage() {
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
-        <select
-          className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+        <Select
           value={form.organizationId}
           onChange={(e) => setForm({ ...form, organizationId: e.target.value })}
         >
@@ -79,9 +79,8 @@ export default function InvitationsPage() {
               {o.code} — {o.name}
             </option>
           ))}
-        </select>
-        <select
-          className="h-10 w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+        </Select>
+        <Select
           value={form.roleCode}
           onChange={(e) => setForm({ ...form, roleCode: e.target.value })}
         >
@@ -89,7 +88,7 @@ export default function InvitationsPage() {
           <option value="VENDOR_USER">Innovator user</option>
           <option value="ADMIN">Administrator</option>
           <option value="OPERATIONS_MANAGER">Operations manager</option>
-        </select>
+        </Select>
         <Button
           onClick={() => create.mutate()}
           loading={create.isPending}

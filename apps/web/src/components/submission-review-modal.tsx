@@ -3,7 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import type { FormSchemaDefinition } from '@em/shared';
-import { FormRenderer, formControlClass } from '@/components/form-renderer';
+import { FormRenderer } from '@/components/form-renderer';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -384,8 +385,8 @@ export function SubmissionReviewModal({
                           <span>{field.label}</span>
                         </label>
                         {checked ? (
-                          <textarea
-                            className={`${formControlClass} mt-2 min-h-16 py-2`}
+                          <Textarea
+                            className="mt-2 min-h-16"
                             placeholder="Comment…"
                             value={marks[field.id] ?? ''}
                             onChange={(event) =>
