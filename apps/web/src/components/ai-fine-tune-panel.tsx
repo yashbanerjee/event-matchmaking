@@ -152,7 +152,8 @@ function fieldToString(field: SettingField | undefined, fallback: string) {
     field.value !== undefined && field.value !== null && field.value !== ''
       ? field.value
       : (field.envDefault ?? fallback);
-  return String(raw ?? fallback);
+  const text = String(raw ?? fallback).trim();
+  return text || fallback;
 }
 
 function buildDraft(
@@ -617,10 +618,12 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               value={draft['ai.matchmakingPrompt']}
               disabled={disabled || save.isPending}
               onChange={(e) => setField('ai.matchmakingPrompt', e.target.value)}
+              placeholder={DEFAULT_MATCHMAKING_PROMPT}
               className="font-mono text-xs"
             />
             <span className="block text-xs text-[var(--muted)]">
-              Instructs the model. Keep JSON score + rationale format.
+              Default matchmaking prompt is shown here. Edit and save to override
+              it. Keep the JSON score + rationale format.
             </span>
           </label>
 
@@ -633,6 +636,7 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               onChange={(e) =>
                 setField('ai.matchmakingUserTemplate', e.target.value)
               }
+              placeholder={DEFAULT_MATCHMAKING_USER_TEMPLATE}
               className="font-mono text-xs"
             />
             <span className="block text-xs text-[var(--muted)]">

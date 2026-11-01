@@ -944,6 +944,12 @@ model Meeting {
   endsAt            DateTime
   timeZone          String        @default("UTC")
   durationMinutes   Int
+  /** Wall-clock when the investor pressed Start on site. */
+  actualStartedAt   DateTime?
+  /** Wall-clock when the investor pressed Stop / End on site. */
+  actualEndedAt     DateTime?
+  /** Recorded on-site duration in minutes (from Start → Stop). */
+  actualDurationMinutes Int?
   mode              MeetingMode   @default(VIRTUAL)
   venue             String?
   virtualDetails    Json          @default("{}")

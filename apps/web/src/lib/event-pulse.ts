@@ -109,3 +109,27 @@ export function canStartMeeting(status: string) {
 export function canEndMeeting(status: string) {
   return status === 'IN_PROGRESS';
 }
+
+/** Format elapsed / recorded meeting time for investor UI. */
+export function formatMeetingDuration(totalSeconds: number) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+export function meetingElapsedSeconds(
+  actualStartedAt?: string | null,
+  actualEndedAt?: string | null,
+  nowMs = Date.now(),
+) {
+  if (!actualStartedAt) return 0;
+  const start = new Date(actualStartedAt).getTime();
+  const end = actualEndedAt ? new Date(actualEndedAt).getTime() : nowMs;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.floor((end - start) / 1000);
+}

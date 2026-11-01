@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -250,7 +251,11 @@ export class MeetingsService {
     this.assertInvestorOrAdmin(user, meeting);
 
     if (meeting.status === 'IN_PROGRESS') {
-      return { id: meeting.id, status: 'IN_PROGRESS' as const };
+      return {
+        id: meeting.id,
+        status: 'IN_PROGRESS' as const,
+        actualStartedAt: meeting.actualStartedAt,
+      };
     }
 
     try {
@@ -259,10 +264,37 @@ export class MeetingsService {
       throw new BadRequestException((err as Error).message);
     }
 
+    const active = await this.prisma.meeting.findFirst({
+      where: {
+        companyOrgId: meeting.companyOrgId,
+        status: 'IN_PROGRESS',
+        id: { not: meetingId },
+      },
+      include: {
+        vendorOrg: { select: { id: true, name: true } },
+      },
+    });
+    if (active) {
+      throw new ConflictException({
+        code: 'MEETING_ALREADY_IN_PROGRESS',
+        message: `Stop your meeting with ${active.vendorOrg.name} before starting another.`,
+        activeMeetingId: active.id,
+        activeCounterpart: active.vendorOrg.name,
+        actualStartedAt: active.actualStartedAt,
+      });
+    }
+
+    const startedAt = new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.meeting.update({
         where: { id: meetingId },
-        data: { status: 'IN_PROGRESS', version: { increment: 1 } },
+        data: {
+          status: 'IN_PROGRESS',
+          actualStartedAt: startedAt,
+          actualEndedAt: null,
+          actualDurationMinutes: null,
+          version: { increment: 1 },
+        },
       });
       await tx.meetingStatusHistory.create({
         data: {
@@ -282,11 +314,11 @@ export class MeetingsService {
           userId: user.id,
           status: 'CONFIRMED',
           note: 'Started on site',
-          respondedAt: new Date(),
+          respondedAt: startedAt,
         },
         update: {
           status: 'CONFIRMED',
-          respondedAt: new Date(),
+          respondedAt: startedAt,
         },
       });
       return next;
@@ -297,6 +329,7 @@ export class MeetingsService {
       entityType: 'Meeting',
       entityId: meetingId,
       outcome: 'SUCCESS',
+      metadata: { actualStartedAt: startedAt.toISOString() },
     });
     return updated;
   }
@@ -306,7 +339,13 @@ export class MeetingsService {
     this.assertInvestorOrAdmin(user, meeting);
 
     if (meeting.status === 'COMPLETED') {
-      return { id: meeting.id, status: 'COMPLETED' as const };
+      return {
+        id: meeting.id,
+        status: 'COMPLETED' as const,
+        actualStartedAt: meeting.actualStartedAt,
+        actualEndedAt: meeting.actualEndedAt,
+        actualDurationMinutes: meeting.actualDurationMinutes,
+      };
     }
 
     try {
@@ -315,17 +354,30 @@ export class MeetingsService {
       throw new BadRequestException((err as Error).message);
     }
 
+    const endedAt = new Date();
+    const startedAt = meeting.actualStartedAt ?? endedAt;
+    const actualDurationMinutes = Math.max(
+      1,
+      Math.round((endedAt.getTime() - startedAt.getTime()) / 60_000),
+    );
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await tx.meeting.update({
         where: { id: meetingId },
-        data: { status: 'COMPLETED', version: { increment: 1 } },
+        data: {
+          status: 'COMPLETED',
+          actualStartedAt: startedAt,
+          actualEndedAt: endedAt,
+          actualDurationMinutes,
+          version: { increment: 1 },
+        },
       });
       await tx.meetingStatusHistory.create({
         data: {
           meetingId,
           fromStatus: meeting.status,
           toStatus: 'COMPLETED',
-          reason: 'Investor ended meeting',
+          reason: `Investor ended meeting (${actualDurationMinutes} min recorded)`,
           actorId: user.id,
         },
       });
@@ -337,6 +389,11 @@ export class MeetingsService {
       entityType: 'Meeting',
       entityId: meetingId,
       outcome: 'SUCCESS',
+      metadata: {
+        actualStartedAt: startedAt.toISOString(),
+        actualEndedAt: endedAt.toISOString(),
+        actualDurationMinutes,
+      },
     });
     return updated;
   }

@@ -43,7 +43,11 @@ export function WorkspaceBottomNav({ items }: { items: NavItem[] }) {
       <ul
         className={cn(
           'mx-auto grid max-w-lg gap-1',
-          items.length <= 2 ? 'grid-cols-2' : 'grid-cols-5',
+          items.length <= 2
+            ? 'grid-cols-2'
+            : items.length === 4
+              ? 'grid-cols-4'
+              : 'grid-cols-5',
         )}
       >
         {items.map((item) => {

@@ -19,7 +19,6 @@ const NAV_ITEMS = [
   { href: '/vendor/recommendations', label: 'Recommendations' },
   { href: '/vendor/requests', label: 'Requests' },
   { href: '/vendor/meetings', label: 'Meetings' },
-  { href: '/vendor/qr', label: 'QR' },
 ];
 
 function SidebarNav({
@@ -131,7 +130,6 @@ export function VendorShell({
             badge: openRequests,
           },
           { href: '/vendor/meetings', label: 'Meetings', icon: 'meetings' as const },
-          { href: '/vendor/qr', label: 'QR', icon: 'qr' as const },
         ];
 
   return (

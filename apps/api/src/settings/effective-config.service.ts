@@ -5,6 +5,10 @@ import {
   INTEGRATION_SETTING_FIELDS,
   type SettingFieldDef,
 } from './integration-settings.catalog';
+import {
+  DEFAULT_MATCHMAKING_PROMPT,
+  DEFAULT_MATCHMAKING_USER_TEMPLATE,
+} from '../integrations/ai/matchmaking-prompt';
 
 const EVENT_TIME_ZONE = 'Asia/Dubai';
 const DEFAULT_EVENT_DATES = ['2026-12-07', '2026-12-08', '2026-12-09'];
@@ -192,7 +196,17 @@ export class EffectiveConfigService {
 
   envFallback(field: SettingFieldDef): unknown {
     const raw = this.env.raw as Record<string, unknown>;
-    return raw[field.envKey];
+    const fromEnv = raw[field.envKey];
+    if (fromEnv !== undefined && fromEnv !== null && fromEnv !== '') {
+      return fromEnv;
+    }
+    if (field.key === 'ai.matchmakingPrompt') {
+      return DEFAULT_MATCHMAKING_PROMPT;
+    }
+    if (field.key === 'ai.matchmakingUserTemplate') {
+      return DEFAULT_MATCHMAKING_USER_TEMPLATE;
+    }
+    return fromEnv;
   }
 
   private async load(): Promise<Map<string, unknown>> {

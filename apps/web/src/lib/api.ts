@@ -5,6 +5,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public body?: unknown,
   ) {
     super(message);
   }
@@ -82,16 +83,18 @@ export async function apiFetch<T>(
 
   if (!res.ok) {
     let message = res.statusText;
+    let body: unknown;
     try {
-      const body = (await res.json()) as {
+      body = await res.json();
+      const payload = body as {
         message?: string | string[] | { message?: string; code?: string };
       };
-      if (Array.isArray(body.message)) {
-        message = body.message.join(', ');
-      } else if (typeof body.message === 'string') {
-        message = body.message;
-      } else if (body.message && typeof body.message === 'object') {
-        message = body.message.message ?? message;
+      if (Array.isArray(payload.message)) {
+        message = payload.message.join(', ');
+      } else if (typeof payload.message === 'string') {
+        message = payload.message;
+      } else if (payload.message && typeof payload.message === 'object') {
+        message = payload.message.message ?? message;
       }
     } catch {
       // ignore
@@ -99,7 +102,7 @@ export async function apiFetch<T>(
     if (res.status === 401) {
       redirectToLogin();
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, body);
   }
 
   if (res.status === 204) {

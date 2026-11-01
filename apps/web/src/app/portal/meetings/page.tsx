@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { statusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import { Pagination } from '@/components/ui/pagination';
 import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
@@ -25,7 +26,12 @@ import {
   MeetingFeedbackModal,
   meetingHasEnded,
 } from '@/components/meeting-feedback-modal';
-import { canEndMeeting, canStartMeeting } from '@/lib/event-pulse';
+import {
+  canEndMeeting,
+  canStartMeeting,
+  formatMeetingDuration,
+  meetingElapsedSeconds,
+} from '@/lib/event-pulse';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 
 type Meeting = {
@@ -33,6 +39,9 @@ type Meeting = {
   status: string;
   startsAt: string;
   endsAt?: string | null;
+  actualStartedAt?: string | null;
+  actualEndedAt?: string | null;
+  actualDurationMinutes?: number | null;
   hasSubmittedFeedback?: boolean;
   companyOrg: { name: string };
   vendorOrg: { name: string };
@@ -59,6 +68,16 @@ type RequestRow = {
 
 const PAGE_SIZE = 8;
 
+function useNowTick(enabled: boolean, intervalMs = 1000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [enabled, intervalMs]);
+  return now;
+}
+
 export default function PortalMeetingsPage() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -67,6 +86,9 @@ export default function PortalMeetingsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [feedbackFor, setFeedbackFor] = useState<Meeting | null>(null);
+  const [pendingStart, setPendingStart] = useState<Meeting | null>(null);
+  const [blockerMeeting, setBlockerMeeting] = useState<Meeting | null>(null);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -97,6 +119,7 @@ export default function PortalMeetingsPage() {
   const meetings = useQuery({
     queryKey: ['portal-meetings'],
     enabled: ready,
+    refetchInterval: 15_000,
     queryFn: () =>
       apiFetch<{ items: Meeting[] }>('/meetings?pageSize=100', {
         token: getAccessToken(),
@@ -136,6 +159,11 @@ export default function PortalMeetingsPage() {
   const total = filtered.length;
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const liveMeeting = (meetings.data?.items ?? []).find((m) =>
+    canEndMeeting(m.status),
+  );
+  const now = useNowTick(Boolean(liveMeeting || blockerMeeting));
+
   const confirm = useMutation({
     mutationFn: (id: string) =>
       apiFetch(`/meetings/${id}/confirm`, {
@@ -154,34 +182,127 @@ export default function PortalMeetingsPage() {
         token: getAccessToken(),
         body: JSON.stringify({}),
       }),
-    onSuccess: () =>
-      void qc.invalidateQueries({ queryKey: ['portal-meetings'] }),
+    onSuccess: () => {
+      setActionError('');
+      setPendingStart(null);
+      setBlockerMeeting(null);
+      void qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+    },
+    onError: (caught, meetingId) => {
+      if (!(caught instanceof ApiError) || caught.status !== 409) {
+        setActionError(
+          caught instanceof Error ? caught.message : 'Could not start meeting.',
+        );
+        return;
+      }
+      const payload =
+        caught.body &&
+        typeof caught.body === 'object' &&
+        'message' in caught.body
+          ? (caught.body as { message?: unknown }).message
+          : caught.body;
+      const details =
+        payload && typeof payload === 'object'
+          ? (payload as {
+              activeMeetingId?: string;
+              activeCounterpart?: string;
+              actualStartedAt?: string | null;
+            })
+          : null;
+      const active =
+        (meetings.data?.items ?? []).find(
+          (m) => m.id === details?.activeMeetingId,
+        ) ??
+        (details?.activeMeetingId
+          ? ({
+              id: details.activeMeetingId,
+              status: 'IN_PROGRESS',
+              startsAt: new Date().toISOString(),
+              actualStartedAt: details.actualStartedAt ?? null,
+              companyOrg: { name: 'Investor' },
+              vendorOrg: {
+                name: details.activeCounterpart ?? 'previous partner',
+              },
+            } satisfies Meeting)
+          : null);
+      const next =
+        pendingStart ??
+        (meetings.data?.items ?? []).find((m) => m.id === meetingId) ??
+        null;
+      if (active && next) {
+        setPendingStart(next);
+        setBlockerMeeting(active);
+        setActionError('');
+        return;
+      }
+      setActionError(caught.message);
+    },
   });
 
   const endMeeting = useMutation({
     mutationFn: async (meeting: Meeting) => {
-      await apiFetch(`/meetings/${meeting.id}/complete`, {
+      const result = await apiFetch<Meeting>(`/meetings/${meeting.id}/complete`, {
         method: 'POST',
         token: getAccessToken(),
         body: JSON.stringify({}),
       });
-      return meeting;
+      return { meeting, result };
     },
-    onSuccess: (meeting) => {
-      void qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+    onSuccess: async ({ meeting, result }) => {
+      setActionError('');
+      await qc.invalidateQueries({ queryKey: ['portal-meetings'] });
+      if (pendingStart && blockerMeeting?.id === meeting.id) {
+        const next = pendingStart;
+        setBlockerMeeting(null);
+        startMeeting.mutate(next.id);
+        return;
+      }
+      setBlockerMeeting(null);
       if (!meeting.hasSubmittedFeedback) {
-        setFeedbackFor({ ...meeting, status: 'COMPLETED' });
+        setFeedbackFor({
+          ...meeting,
+          status: 'COMPLETED',
+          actualStartedAt: result.actualStartedAt ?? meeting.actualStartedAt,
+          actualEndedAt: result.actualEndedAt ?? meeting.actualEndedAt,
+          actualDurationMinutes:
+            result.actualDurationMinutes ?? meeting.actualDurationMinutes,
+        });
       }
     },
+    onError: (caught) =>
+      setActionError(
+        caught instanceof Error ? caught.message : 'Could not stop meeting.',
+      ),
   });
 
-  const liveMeeting = (meetings.data?.items ?? []).find((m) =>
-    canEndMeeting(m.status),
-  );
+  function requestStart(meeting: Meeting) {
+    setActionError('');
+    const live = (meetings.data?.items ?? []).find(
+      (m) => canEndMeeting(m.status) && m.id !== meeting.id,
+    );
+    if (live) {
+      setPendingStart(meeting);
+      setBlockerMeeting(live);
+      return;
+    }
+    setPendingStart(null);
+    setBlockerMeeting(null);
+    startMeeting.mutate(meeting.id);
+  }
 
   if (!ready) return null;
 
   const orgId = me.data?.organizationIds[0] ?? '';
+  const liveElapsed = liveMeeting
+    ? formatMeetingDuration(
+        meetingElapsedSeconds(liveMeeting.actualStartedAt, null, now),
+      )
+    : null;
+  const blockerElapsed = blockerMeeting
+    ? formatMeetingDuration(
+        meetingElapsedSeconds(blockerMeeting.actualStartedAt, null, now),
+      )
+    : null;
 
   return (
     <PortalShell
@@ -191,7 +312,7 @@ export default function PortalMeetingsPage() {
       <PageHeader
         eyebrow="Your workspace"
         title="Meetings"
-        description="Start and end each meeting on the floor, then send feedback so the event pulse stays accurate."
+        description="Start and stop each meeting on the floor. We record the real time you spend so the event pulse stays accurate."
         actions={
           <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
             <button
@@ -233,7 +354,9 @@ export default function PortalMeetingsPage() {
                 {liveMeeting.vendorOrg.name}
               </p>
               <p className="text-sm text-[var(--muted)]">
-                End the session when you wrap, then leave feedback.
+                Recording time
+                {liveElapsed ? ` · ${liveElapsed}` : ''}. Stop when you wrap,
+                then leave feedback.
               </p>
             </div>
             <Button
@@ -243,7 +366,7 @@ export default function PortalMeetingsPage() {
                 endMeeting.variables?.id === liveMeeting.id
               }
             >
-              End meeting & feedback
+              Stop meeting
             </Button>
           </div>
         </Card>
@@ -269,12 +392,7 @@ export default function PortalMeetingsPage() {
         {meetings.error && (
           <p className="text-rose-700">{(meetings.error as Error).message}</p>
         )}
-        {startMeeting.error || endMeeting.error ? (
-          <p className="text-rose-700">
-            {(startMeeting.error as Error | undefined)?.message ||
-              (endMeeting.error as Error | undefined)?.message}
-          </p>
-        ) : null}
+        {actionError ? <p className="text-rose-700">{actionError}</p> : null}
 
         {viewMode === 'calendar' && !meetings.isLoading ? (
           <MeetingsCalendar
@@ -289,7 +407,7 @@ export default function PortalMeetingsPage() {
                 return;
               }
               if (canStartMeeting(meeting.status)) {
-                startMeeting.mutate(meeting.id);
+                requestStart(meeting);
                 return;
               }
               if (
@@ -317,6 +435,7 @@ export default function PortalMeetingsPage() {
                 <TR>
                   <TH>Innovator</TH>
                   <TH>Starts</TH>
+                  <TH>Recorded time</TH>
                   <TH>Meeting place</TH>
                   <TH>Status</TH>
                   <TH />
@@ -326,10 +445,19 @@ export default function PortalMeetingsPage() {
                 {pageItems.map((m) => {
                   const ended = meetingHasEnded(m);
                   const submitted = Boolean(m.hasSubmittedFeedback);
+                  const recorded =
+                    m.actualDurationMinutes != null
+                      ? `${m.actualDurationMinutes} min`
+                      : canEndMeeting(m.status) && m.actualStartedAt
+                        ? formatMeetingDuration(
+                            meetingElapsedSeconds(m.actualStartedAt, null, now),
+                          )
+                        : '—';
                   return (
                     <TR key={m.id} className="hover:bg-slate-50/80">
                       <TD className="font-medium">{m.vendorOrg.name}</TD>
                       <TD>{new Date(m.startsAt).toLocaleString()}</TD>
+                      <TD className="tabular-nums text-sm">{recorded}</TD>
                       <TD className="min-w-[11rem]">
                         <MeetingPlaceLink
                           place={m.place}
@@ -362,7 +490,7 @@ export default function PortalMeetingsPage() {
                               startMeeting.isPending &&
                               startMeeting.variables === m.id
                             }
-                            onClick={() => startMeeting.mutate(m.id)}
+                            onClick={() => requestStart(m)}
                           >
                             Start meeting
                           </Button>
@@ -376,7 +504,7 @@ export default function PortalMeetingsPage() {
                             }
                             onClick={() => endMeeting.mutate(m)}
                           >
-                            End meeting
+                            Stop meeting
                           </Button>
                         ) : null}
                         {ended &&
@@ -410,6 +538,72 @@ export default function PortalMeetingsPage() {
           </>
         ) : null}
       </Card>
+
+      <Modal
+        open={Boolean(blockerMeeting)}
+        title="Stop your previous meeting"
+        description="You already have a meeting in progress. Stop it first, then we can start the next one."
+        onClose={() => {
+          if (endMeeting.isPending || startMeeting.isPending) return;
+          setBlockerMeeting(null);
+          setPendingStart(null);
+        }}
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={endMeeting.isPending || startMeeting.isPending}
+              onClick={() => {
+                setBlockerMeeting(null);
+                setPendingStart(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              loading={
+                endMeeting.isPending &&
+                endMeeting.variables?.id === blockerMeeting?.id
+              }
+              onClick={() => {
+                if (!blockerMeeting) return;
+                endMeeting.mutate(blockerMeeting);
+              }}
+            >
+              {pendingStart
+                ? 'Stop previous & start next'
+                : 'Stop previous meeting'}
+            </Button>
+          </div>
+        }
+      >
+        {blockerMeeting ? (
+          <div className="space-y-3 text-sm">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                In progress now
+              </p>
+              <p className="mt-1 text-base font-semibold">
+                {blockerMeeting.vendorOrg.name}
+              </p>
+              <p className="mt-1 text-[var(--muted)]">
+                Elapsed {blockerElapsed ?? '0:00'}
+                {blockerMeeting.actualStartedAt
+                  ? ` · started ${new Date(blockerMeeting.actualStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  : ''}
+              </p>
+            </div>
+            {pendingStart ? (
+              <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Waiting to start
+                </p>
+                <p className="mt-1 font-medium">{pendingStart.vendorOrg.name}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
 
       <MeetingFeedbackModal
         open={Boolean(feedbackFor)}
