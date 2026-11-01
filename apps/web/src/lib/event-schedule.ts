@@ -1,6 +1,6 @@
 export const EVENT_TIME_ZONE = 'Asia/Dubai';
 export const EVENT_UTC_OFFSET = '+04:00';
-export const DEFAULT_EVENT_DATES = ['2026-12-07', '2026-12-08', '2026-12-09'];
+export const DEFAULT_EVENT_DATES = ['2026-11-02', '2026-11-03', '2026-11-04'];
 export const DEFAULT_EVENT_ACTIVE_START = '09:00';
 export const DEFAULT_EVENT_ACTIVE_END = '17:00';
 

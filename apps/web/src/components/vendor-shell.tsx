@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/vendor/recommendations', label: 'Recommendations' },
   { href: '/vendor/requests', label: 'Requests' },
   { href: '/vendor/meetings', label: 'Meetings' },
+  { href: '/vendor/investors', label: 'Investors' },
 ];
 
 function CountPill({
@@ -211,6 +212,11 @@ export function VendorShell({
             badge: openRequests,
           },
           { href: '/vendor/meetings', label: 'Meetings', icon: 'meetings' as const },
+          {
+            href: '/vendor/investors',
+            label: 'Investors',
+            icon: 'innovators' as const,
+          },
         ];
 
   return (

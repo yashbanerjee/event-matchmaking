@@ -32,7 +32,7 @@ async function main() {
     eventDatesSetting.value !== null &&
     'value' in eventDatesSetting.value
       ? String((eventDatesSetting.value as { value: unknown }).value)
-      : '2026-12-07,2026-12-08,2026-12-09';
+      : '2026-11-02,2026-11-03,2026-11-04';
   const eventDates = raw
     .split(',')
     .map((d) => d.trim())

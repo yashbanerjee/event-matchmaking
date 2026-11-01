@@ -129,7 +129,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   });
 
   // Meeting booking period (investors/innovators can only schedule inside this range)
-  const eventDates = ['2026-12-07', '2026-12-08', '2026-12-09'];
+  const eventDates = ['2026-11-02', '2026-11-03', '2026-11-04'];
   const windowStart = eventDates[0]!;
   const windowEnd = eventDates[eventDates.length - 1]!;
   await prisma.systemSetting.upsert({
@@ -857,7 +857,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     objectives: string;
     message: string;
   }> = [
-    // ── 2026-12-07 (7) ──
+    // ── 2026-11-02 (7) ──
     {
       dayIndex: 0,
       hour: 9,
@@ -940,7 +940,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       objectives: 'Climate-resilient irrigation for Sahel cooperatives.',
       message: 'Want a short intro on irrigation pilots this season.',
     },
-    // ── 2026-12-08 (7) ──
+    // ── 2026-11-03 (7) ──
     {
       dayIndex: 1,
       hour: 9,
@@ -1018,7 +1018,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       objectives: 'Sanitation franchise model for secondary cities.',
       message: 'Want to review sanitation franchise unit economics.',
     },
-    // ── 2026-12-09 (6) ──
+    // ── 2026-11-04 (6) ──
     {
       dayIndex: 2,
       hour: 9,

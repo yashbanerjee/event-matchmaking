@@ -127,7 +127,7 @@ describe('Lifecycle e2e', () => {
   });
 
   it('run matchmaking, publish, confirm, feedback', async () => {
-    const scheduleDate = '2026-12-07';
+    const scheduleDate = '2026-11-02';
     const run = await request(app.getHttpServer())
       .post('/api/v1/matchmaking/runs')
       .set('Authorization', `Bearer ${adminToken}`)

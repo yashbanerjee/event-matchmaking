@@ -170,9 +170,9 @@ type FieldType =
 
 /** Default event dates used until admin settings override availability options. */
 export const DEFAULT_AVAILABILITY_DATES: TagDef[] = [
-  { value: '2026-12-07', label: 'Sun 7 Dec 2026' },
-  { value: '2026-12-08', label: 'Mon 8 Dec 2026' },
-  { value: '2026-12-09', label: 'Tue 9 Dec 2026' },
+  { value: '2026-11-02', label: 'Mon 2 Nov 2026' },
+  { value: '2026-11-03', label: 'Tue 3 Nov 2026' },
+  { value: '2026-11-04', label: 'Wed 4 Nov 2026' },
 ];
 
 function field(

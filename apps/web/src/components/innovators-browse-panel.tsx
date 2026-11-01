@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/empty-state';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,7 @@ type FilterDimension = {
   }>;
 };
 
+/** Directory browse for counterpart orgs (innovators for investors, investors for innovators). */
 export function InnovatorsBrowsePanel({
   fromOrgId,
 }: {
@@ -177,6 +179,16 @@ export function InnovatorsBrowsePanel({
       .filter((dim) => dim.tags.length > 0);
   }, [dimensions.data, catalogTagValues]);
 
+  const tagLabelByValue = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const dim of activeDimensions) {
+      for (const tag of dim.tags) {
+        map.set(tag.value, tag.label);
+      }
+    }
+    return map;
+  }, [activeDimensions]);
+
   useEffect(() => {
     if (!activeDimensions.length || !selectedTags.length) return;
     const allowed = new Set(
@@ -190,17 +202,33 @@ export function InnovatorsBrowsePanel({
 
   const items = directory.data?.items ?? [];
   const total = directory.data?.total ?? 0;
-  const counterpartLabel = directory.data?.counterpartLabel ?? 'innovators';
+  const counterpartLabel = directory.data?.counterpartLabel ?? 'partners';
+  const singularLabel =
+    counterpartLabel === 'innovators'
+      ? 'Innovator'
+      : counterpartLabel === 'investors'
+        ? 'Investor'
+        : 'Partner';
   const profileItem = profileOrgId
     ? (items.find((item) => item.organizationId === profileOrgId) ?? null)
     : null;
 
-  const toggleTag = (value: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(value)
-        ? prev.filter((tag) => tag !== value)
-        : [...prev, value],
-    );
+  const selectedInDimension = (dim: FilterDimension) =>
+    selectedTags.find((value) => dim.tags.some((tag) => tag.value === value)) ??
+    '';
+
+  const setDimensionTag = (dim: FilterDimension, nextValue: string) => {
+    setSelectedTags((prev) => {
+      const withoutDim = prev.filter(
+        (value) => !dim.tags.some((tag) => tag.value === value),
+      );
+      if (!nextValue) return withoutDim;
+      return [...withoutDim, nextValue];
+    });
+  };
+
+  const removeTag = (value: string) => {
+    setSelectedTags((prev) => prev.filter((tag) => tag !== value));
   };
 
   const sendInterest = (organizationId: string) => {
@@ -213,65 +241,76 @@ export function InnovatorsBrowsePanel({
   return (
     <>
       <Card className="min-w-0 space-y-4 overflow-hidden p-4">
-        <div>
-          <h2 className="h-display text-base font-semibold tracking-tight">
-            All {counterpartLabel}
-          </h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="h-display text-base font-semibold tracking-tight">
+              All {counterpartLabel}
+            </h2>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              {directory.isLoading
+                ? `Loading ${counterpartLabel}…`
+                : `${total} ${counterpartLabel}`}
+            </p>
+          </div>
+          {selectedTags.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 px-2.5 text-xs"
+              onClick={() => setSelectedTags([])}
+            >
+              Clear filters
+            </Button>
+          ) : null}
         </div>
 
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={`Search ${counterpartLabel} by name or industry…`}
-          aria-label={`Search ${counterpartLabel}`}
-        />
-
-        {dimensions.isLoading ? (
-          <p className="text-sm text-[var(--muted)]">Loading filters…</p>
-        ) : activeDimensions.length > 0 ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-                Filter by tags
-              </p>
-              {selectedTags.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => setSelectedTags([])}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,1fr))]">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Search ${counterpartLabel} by name or industry…`}
+            aria-label={`Search ${counterpartLabel}`}
+          />
+          {dimensions.isLoading ? (
+            <p className="text-sm text-[var(--muted)] sm:col-span-2">
+              Loading filters…
+            </p>
+          ) : (
+            activeDimensions.map((dim) => (
+              <label key={dim.id} className="grid gap-1 text-xs font-medium">
+                <span className="text-[var(--muted)]">{dim.name}</span>
+                <Select
+                  value={selectedInDimension(dim)}
+                  onChange={(e) => setDimensionTag(dim, e.target.value)}
+                  aria-label={`Filter by ${dim.name}`}
                 >
-                  Clear filters
-                </Button>
-              ) : null}
-            </div>
-            {activeDimensions.map((dim) => (
-              <div key={dim.id} className="space-y-1.5">
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  {dim.name}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {dim.tags.map((tag) => {
-                    const active = selectedTags.includes(tag.value);
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => toggleTag(tag.value)}
-                        className={cn(
-                          'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-                          active
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-hover)]'
-                            : 'border-[var(--border)] bg-white text-[var(--muted)] hover:border-[var(--accent)]/40 hover:text-[var(--foreground)]',
-                        )}
-                        aria-pressed={active}
-                      >
-                        {tag.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                  <option value="">All</option>
+                  {dim.tags.map((tag) => (
+                    <option key={tag.id} value={tag.value}>
+                      {tag.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ))
+          )}
+        </div>
+
+        {selectedTags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {selectedTags.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => removeTag(value)}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--accent-hover)]"
+                title="Remove filter"
+              >
+                <span className="truncate">
+                  {tagLabelByValue.get(value) ?? value}
+                </span>
+                <span aria-hidden>×</span>
+              </button>
             ))}
           </div>
         ) : null}
@@ -310,95 +349,90 @@ export function InnovatorsBrowsePanel({
             }
           />
         ) : (
-          <div className="space-y-3">
-            <p className="text-xs text-[var(--muted)]">
-              {total} {counterpartLabel}
-            </p>
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {items.map((item, index) => (
-                <div
-                  key={item.organizationId}
-                  className={cn(
-                    'animate-rise min-w-0 overflow-hidden rounded-xl border p-3',
-                    item.featured
-                      ? 'border-[var(--accent)]/35 bg-[linear-gradient(180deg,#e7fcf8_0%,#ffffff_70%)]'
-                      : 'border-[var(--border)] bg-white',
-                  )}
-                  style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
-                >
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <button
-                      type="button"
-                      className="min-w-0 text-left"
-                      onClick={() => setProfileOrgId(item.organizationId)}
-                    >
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <p
-                          className="truncate font-semibold hover:underline"
-                          title={item.name}
-                        >
-                          {item.name}
-                        </p>
-                        {item.featured ? (
-                          <Badge variant="accent" className="shrink-0">
-                            Featured
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                        {item.industryLabel ||
-                          item.industry ||
-                          item.region ||
-                          'Innovator'}
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {items.map((item, index) => (
+              <div
+                key={item.organizationId}
+                className={cn(
+                  'animate-rise min-w-0 overflow-hidden rounded-xl border p-3',
+                  item.featured
+                    ? 'border-[var(--accent)]/35 bg-[linear-gradient(180deg,#e7fcf8_0%,#ffffff_70%)]'
+                    : 'border-[var(--border)] bg-white',
+                )}
+                style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    className="min-w-0 text-left"
+                    onClick={() => setProfileOrgId(item.organizationId)}
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p
+                        className="truncate font-semibold hover:underline"
+                        title={item.name}
+                      >
+                        {item.name}
                       </p>
-                    </button>
-                  </div>
-
-                  {displayTags(item).length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {displayTags(item)
-                        .slice(0, 6)
-                        .map((tag) => (
-                          <Badge
-                            key={`${item.organizationId}-${tag}`}
-                            variant="secondary"
-                            className="max-w-full truncate"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
+                      {item.featured ? (
+                        <Badge variant="accent" className="shrink-0">
+                          Featured
+                        </Badge>
+                      ) : null}
                     </div>
-                  ) : null}
+                    <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
+                      {item.industryLabel ||
+                        item.industry ||
+                        item.region ||
+                        singularLabel}
+                    </p>
+                  </button>
+                </div>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
+                {displayTags(item).length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {displayTags(item)
+                      .slice(0, 6)
+                      .map((tag) => (
+                        <Badge
+                          key={`${item.organizationId}-${tag}`}
+                          variant="secondary"
+                          className="max-w-full truncate"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => setProfileOrgId(item.organizationId)}
+                  >
+                    View profile
+                  </Button>
+                  {fromOrgId ? (
                     <Button
                       type="button"
-                      variant="outline"
                       className="h-8 px-2.5 text-xs"
-                      onClick={() => setProfileOrgId(item.organizationId)}
-                    >
-                      View profile
-                    </Button>
-                    {fromOrgId ? (
-                      <Button
-                        type="button"
-                        className="h-8 px-2.5 text-xs"
-                        disabled={
-                          interestOrgId === item.organizationId &&
-                          expressInterest.isPending
-                        }
-                        onClick={() => sendInterest(item.organizationId)}
-                      >
-                        {interestOrgId === item.organizationId &&
+                      disabled={
+                        interestOrgId === item.organizationId &&
                         expressInterest.isPending
-                          ? 'Sending…'
-                          : "I'm interested"}
-                      </Button>
-                    ) : null}
-                  </div>
+                      }
+                      onClick={() => sendInterest(item.organizationId)}
+                    >
+                      {interestOrgId === item.organizationId &&
+                      expressInterest.isPending
+                        ? 'Sending…'
+                        : "I'm interested"}
+                    </Button>
+                  ) : null}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>

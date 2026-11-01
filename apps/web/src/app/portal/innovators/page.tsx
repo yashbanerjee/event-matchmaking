@@ -49,7 +49,7 @@ export default function PortalInnovatorsPage() {
         <PageHeader
           eyebrow="Investor"
           title="Innovators"
-          description="Browse every verified innovator and filter with all available tags."
+          description="Browse every verified innovator. Use the dropdowns to filter by category tags."
         />
         <InnovatorsBrowsePanel fromOrgId={me.data?.organizationIds?.[0]} />
       </div>

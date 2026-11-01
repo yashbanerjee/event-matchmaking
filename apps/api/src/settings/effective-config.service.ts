@@ -11,7 +11,7 @@ import {
 } from '../integrations/ai/matchmaking-prompt';
 
 const EVENT_TIME_ZONE = 'Asia/Dubai';
-const DEFAULT_EVENT_DATES = ['2026-12-07', '2026-12-08', '2026-12-09'];
+const DEFAULT_EVENT_DATES = ['2026-11-02', '2026-11-03', '2026-11-04'];
 const DEFAULT_ACTIVE_START = '09:00';
 const DEFAULT_ACTIVE_END = '17:00';
 

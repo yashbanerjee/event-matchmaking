@@ -98,7 +98,7 @@ export const envSchema = z.object({
   MEETING_EVENT_DATES: z
     .string()
     .optional()
-    .default('2026-12-07,2026-12-08,2026-12-09'),
+    .default('2026-11-02,2026-11-03,2026-11-04'),
   MEETING_ACTIVE_START: z.string().optional().default('09:00'),
   MEETING_ACTIVE_END: z.string().optional().default('17:00'),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
