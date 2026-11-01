@@ -802,13 +802,12 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     innovatorOrgs.push({ orgId: org.id, userId: user.id, def: innovator });
   }
 
-  // ── Meeting requests + meetings (full flow samples) ──────────────────────
-  const now = new Date();
-  const daysFromNow = (days: number, hour = 16, minute = 0) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + days);
-    d.setHours(hour, minute, 0, 0);
-    return d;
+  // ── Meetings on admin event dates only (20 across the 3 days) ─────────────
+  const meetingDurationMinutes = 15;
+  const eventDateTime = (date: string, hour: number, minute: number) => {
+    const hh = String(hour).padStart(2, '0');
+    const mm = String(minute).padStart(2, '0');
+    return new Date(`${date}T${hh}:${mm}:00+04:00`);
   };
 
   async function createMeeting(input: {
@@ -817,13 +816,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     startsAt: Date;
     durationMinutes: number;
     placeId: string;
-    status:
-      | 'CONFIRMED'
-      | 'AWAITING_CONFIRMATION'
-      | 'COMPLETED'
-      | 'PROPOSED'
-      | 'IN_PROGRESS'
-      | 'NO_SHOW';
+    status: 'CONFIRMED' | 'AWAITING_CONFIRMATION';
     objectives: string;
     score: number;
   }) {
@@ -849,282 +842,328 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
     });
   }
 
-  // 1) Confirmed meeting @ investor 1 home table (Coca Cola Arena)
-  {
-    const startsAt = daysFromNow(5, 11, 0);
-    const meeting = await createMeeting({
-      companyOrgId: investorOrgs[0]!.orgId,
-      vendorOrgId: innovatorOrgs[0]!.orgId,
-      startsAt,
-      durationMinutes: 45,
-      placeId: placeIds[tableCodeForInvestor(0)]!,
-      status: 'CONFIRMED',
-      objectives:
-        'Discuss NRW reduction pilots and utility offtake for leak-detection systems.',
-      score: 92,
-    });
-    await prisma.meetingRequest.create({
-      data: {
-        fromOrgId: investorOrgs[0]!.orgId,
-        toOrgId: innovatorOrgs[0]!.orgId,
-        requestedById: investorOrgs[0]!.userId,
-        status: 'SCHEDULED',
-        message:
-          'Interested in piloting leak detection with Gulf utilities this year.',
-        proposedStartsAt: startsAt,
-        proposedEndsAt: meeting.endsAt,
-        proposedByOrgId: investorOrgs[0]!.orgId,
-        placeId: placeIds[tableCodeForInvestor(0)]!,
-        meetingId: meeting.id,
-      },
-    });
-    await prisma.meetingConfirmation.createMany({
-      data: [
-        {
-          meetingId: meeting.id,
-          userId: investorOrgs[0]!.userId,
-          status: 'CONFIRMED',
-          respondedAt: new Date(),
-        },
-        {
-          meetingId: meeting.id,
-          userId: innovatorOrgs[0]!.userId,
-          status: 'CONFIRMED',
-          respondedAt: new Date(),
-        },
-      ],
-    });
-  }
-
-  // 2) Completed meeting + feedback @ investor 2 home table
-  {
-    const startsAt = daysFromNow(-2, 10, 0);
-    const meeting = await createMeeting({
-      companyOrgId: investorOrgs[1]!.orgId,
-      vendorOrgId: innovatorOrgs[1]!.orgId,
-      startsAt,
-      durationMinutes: 30,
-      placeId: placeIds[tableCodeForInvestor(1)]!,
-      status: 'COMPLETED',
-      objectives:
-        'Review wastewater reuse economics for irrigation projects in the Sahel.',
-      score: 88,
-    });
-    await prisma.meetingRequest.create({
-      data: {
-        fromOrgId: investorOrgs[1]!.orgId,
-        toOrgId: innovatorOrgs[1]!.orgId,
-        requestedById: investorOrgs[1]!.userId,
-        status: 'SCHEDULED',
-        message: 'Need bankable reuse plants with municipal offtake.',
-        proposedStartsAt: startsAt,
-        proposedEndsAt: meeting.endsAt,
-        proposedByOrgId: innovatorOrgs[1]!.orgId,
-        placeId: placeIds[tableCodeForInvestor(1)]!,
-        meetingId: meeting.id,
-      },
-    });
-    await prisma.meetingFeedback.create({
-      data: {
-        meetingId: meeting.id,
-        organizationId: investorOrgs[1]!.orgId,
-        reviewerUserId: investorOrgs[1]!.userId,
-        attendanceConfirmed: true,
-        meetingQuality: 5,
-        relevance: 5,
-        businessPotential: 4,
-        communicationQuality: 5,
-        interestLevel: 5,
-        followUpRequired: true,
-        outcome: 'FOLLOW_UP_REQUIRED',
-        comments:
-          'Strong alignment on reuse economics; follow up on Sahel municipal offtake term sheet.',
-        isConfidential: true,
-      },
-    });
-  }
-
-  // 3) Awaiting confirmation @ investor 3 home table
-  {
-    const startsAt = daysFromNow(8, 14, 30);
-    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
-    const meeting = await createMeeting({
-      companyOrgId: investorOrgs[2]!.orgId,
-      vendorOrgId: innovatorOrgs[2]!.orgId,
-      startsAt,
-      durationMinutes: 30,
-      placeId: placeIds[tableCodeForInvestor(2)]!,
-      status: 'AWAITING_CONFIRMATION',
-      objectives:
-        'Discuss modular desal deployment for remote communities in Jordan and UAE.',
-      score: 81,
-    });
-    await prisma.meetingRequest.create({
-      data: {
-        fromOrgId: investorOrgs[2]!.orgId,
-        toOrgId: innovatorOrgs[2]!.orgId,
-        requestedById: investorOrgs[2]!.userId,
-        status: 'AWAITING_CONFIRMATION',
-        message:
-          'Interested in co-financing a three-site solar desal bundle with your EPC partners.',
-        proposedStartsAt: startsAt,
-        proposedEndsAt: endsAt,
-        proposedByOrgId: investorOrgs[2]!.orgId,
-        placeId: placeIds[tableCodeForInvestor(2)]!,
-        meetingId: meeting.id,
-      },
-    });
-  }
-
-  // 4) Awaiting confirmation @ investor 1 home table
-  {
-    const startsAt = daysFromNow(9, 17, 0);
-    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
-    await prisma.meetingRequest.create({
-      data: {
-        fromOrgId: investorOrgs[0]!.orgId,
-        toOrgId: innovatorOrgs[1]!.orgId,
-        requestedById: investorOrgs[0]!.userId,
-        status: 'AWAITING_CONFIRMATION',
-        message:
-          'Exploring blended finance for Sahel reuse scale-up after our NRW pilot learnings.',
-        proposedStartsAt: startsAt,
-        proposedEndsAt: endsAt,
-        proposedByOrgId: investorOrgs[0]!.orgId,
-        placeId: placeIds[tableCodeForInvestor(0)]!,
-      },
-    });
-  }
-
-  // 5) Awaiting confirmation @ investor 2 home table
-  {
-    const startsAt = daysFromNow(12, 15, 0);
-    const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
-    await prisma.meetingRequest.create({
-      data: {
-        fromOrgId: investorOrgs[1]!.orgId,
-        toOrgId: innovatorOrgs[0]!.orgId,
-        requestedById: investorOrgs[1]!.userId,
-        status: 'AWAITING_CONFIRMATION',
-        message:
-          'Follow-up on smart metering tender — would like a joint utility intro in the Gulf.',
-        proposedStartsAt: startsAt,
-        proposedEndsAt: endsAt,
-        proposedByOrgId: investorOrgs[1]!.orgId,
-        placeId: placeIds[tableCodeForInvestor(1)]!,
-      },
-    });
-  }
-
-  // 6) Extra confirmed calendar meeting @ investor 3 home table
-  await createMeeting({
-    companyOrgId: investorOrgs[2]!.orgId,
-    vendorOrgId: innovatorOrgs[0]!.orgId,
-    startsAt: daysFromNow(3, 13, 0),
-    durationMinutes: 30,
-    placeId: placeIds[tableCodeForInvestor(2)]!,
-    status: 'CONFIRMED',
-    objectives:
-      'Explore nature-based watershed program co-investment in West Africa.',
-    score: 74,
-  });
-
-  // 7–12) Today's floor pulse: each meeting on that investor's home table
-  const todayMeetings: Array<{
-    investor: number;
-    innovator: number;
+  /**
+   * Exactly 20 meetings inside ops.eventDates / active hours (09:00–17:00 GST).
+   * Day 1: 7 · Day 2: 7 · Day 3: 6. One home-table slot per investor where possible.
+   */
+  const seededMeetings: Array<{
+    dayIndex: number;
     hour: number;
     minute: number;
-    status: 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_SHOW';
+    investor: number;
+    innovator: number;
+    status: 'CONFIRMED' | 'AWAITING_CONFIRMATION';
     score: number;
-    quality?: number;
-    outcome?: 'SUCCESSFUL_DISCUSSION' | 'INTERESTED_IN_PARTNERSHIP' | 'NOT_A_FIT';
+    objectives: string;
+    message: string;
   }> = [
+    // ── 2026-12-07 (7) ──
     {
-      investor: 0,
-      innovator: 3,
+      dayIndex: 0,
       hour: 9,
       minute: 0,
-      status: 'COMPLETED',
-      score: 86,
-      quality: 5,
-      outcome: 'SUCCESSFUL_DISCUSSION',
-    },
-    {
-      investor: 1,
-      innovator: 4,
-      hour: 10,
-      minute: 0,
-      status: 'COMPLETED',
-      score: 79,
-      quality: 4,
-      outcome: 'INTERESTED_IN_PARTNERSHIP',
-    },
-    {
-      investor: 3,
-      innovator: 6,
-      hour: 11,
-      minute: 0,
-      status: 'NO_SHOW',
-      score: 68,
-    },
-    {
       investor: 0,
       innovator: 0,
-      hour: 12,
-      minute: 0,
-      status: 'IN_PROGRESS',
-      score: 91,
+      status: 'CONFIRMED',
+      score: 92,
+      objectives:
+        'Discuss NRW reduction pilots and utility offtake for leak-detection systems.',
+      message:
+        'Interested in piloting leak detection with Gulf utilities this year.',
     },
     {
-      investor: 2,
+      dayIndex: 0,
+      hour: 9,
+      minute: 30,
+      investor: 1,
       innovator: 1,
-      hour: 15,
+      status: 'CONFIRMED',
+      score: 88,
+      objectives:
+        'Review wastewater reuse economics for irrigation projects in the Sahel.',
+      message: 'Need bankable reuse plants with municipal offtake.',
+    },
+    {
+      dayIndex: 0,
+      hour: 10,
       minute: 0,
+      investor: 2,
+      innovator: 2,
+      status: 'CONFIRMED',
+      score: 85,
+      objectives:
+        'Discuss modular desal deployment for remote communities in Jordan and UAE.',
+      message:
+        'Interested in co-financing a three-site solar desal bundle with your EPC partners.',
+    },
+    {
+      dayIndex: 0,
+      hour: 11,
+      minute: 0,
+      investor: 3,
+      innovator: 3,
+      status: 'CONFIRMED',
+      score: 84,
+      objectives: 'Explore smart metering for municipal NRW programs.',
+      message: 'Looking for digital water tools ready for Gulf utilities.',
+    },
+    {
+      dayIndex: 0,
+      hour: 13,
+      minute: 0,
+      investor: 4,
+      innovator: 4,
+      status: 'CONFIRMED',
+      score: 81,
+      objectives: 'Watershed protection co-investment for East Africa.',
+      message: 'Interested in nature-based catchment programs.',
+    },
+    {
+      dayIndex: 0,
+      hour: 14,
+      minute: 30,
+      investor: 5,
+      innovator: 5,
+      status: 'AWAITING_CONFIRMATION',
+      score: 79,
+      objectives: 'Blended finance for school WASH infrastructure.',
+      message: 'Exploring grant + equity stack for WASH scale-up.',
+    },
+    {
+      dayIndex: 0,
+      hour: 16,
+      minute: 0,
+      investor: 6,
+      innovator: 6,
       status: 'CONFIRMED',
       score: 77,
+      objectives: 'Climate-resilient irrigation for Sahel cooperatives.',
+      message: 'Want a short intro on irrigation pilots this season.',
+    },
+    // ── 2026-12-08 (7) ──
+    {
+      dayIndex: 1,
+      hour: 9,
+      minute: 0,
+      investor: 7,
+      innovator: 7,
+      status: 'CONFIRMED',
+      score: 90,
+      objectives: 'Policy platform partnership for transboundary water.',
+      message: 'Exploring a policy desk collaboration for MENA.',
     },
     {
-      investor: 4,
-      innovator: 11,
-      hour: 16,
-      minute: 30,
+      dayIndex: 1,
+      hour: 9,
+      minute: 45,
+      investor: 8,
+      innovator: 8,
       status: 'CONFIRMED',
-      score: 73,
+      score: 86,
+      objectives: 'Treatment technology pilot for industrial reuse.',
+      message: 'Need treatment tech partners for industrial parks.',
+    },
+    {
+      dayIndex: 1,
+      hour: 10,
+      minute: 30,
+      investor: 9,
+      innovator: 9,
+      status: 'CONFIRMED',
+      score: 83,
+      objectives: 'Community WASH delivery model diligence.',
+      message: 'Diligence session on community WASH unit economics.',
+    },
+    {
+      dayIndex: 1,
+      hour: 11,
+      minute: 15,
+      investor: 10,
+      innovator: 10,
+      status: 'CONFIRMED',
+      score: 82,
+      objectives: 'Data / AI tools for utility leakage mapping.',
+      message: 'Interested in AI leakage mapping for NRW.',
+    },
+    {
+      dayIndex: 1,
+      hour: 13,
+      minute: 0,
+      investor: 11,
+      innovator: 11,
+      status: 'AWAITING_CONFIRMATION',
+      score: 78,
+      objectives: 'Drought resilience program design.',
+      message: 'Exploring drought-climate financing instruments.',
+    },
+    {
+      dayIndex: 1,
+      hour: 14,
+      minute: 30,
+      investor: 12,
+      innovator: 12,
+      status: 'CONFIRMED',
+      score: 80,
+      objectives: 'Desal + renewables package for coastal cities.',
+      message: 'Discuss solar desal package for coastal utilities.',
+    },
+    {
+      dayIndex: 1,
+      hour: 16,
+      minute: 0,
+      investor: 13,
+      innovator: 13,
+      status: 'CONFIRMED',
+      score: 76,
+      objectives: 'Sanitation franchise model for secondary cities.',
+      message: 'Want to review sanitation franchise unit economics.',
+    },
+    // ── 2026-12-09 (6) ──
+    {
+      dayIndex: 2,
+      hour: 9,
+      minute: 0,
+      investor: 14,
+      innovator: 14,
+      status: 'CONFIRMED',
+      score: 87,
+      objectives: 'Groundwater monitoring network partnership.',
+      message: 'Looking for groundwater monitoring partners.',
+    },
+    {
+      dayIndex: 2,
+      hour: 10,
+      minute: 0,
+      investor: 15,
+      innovator: 15,
+      status: 'CONFIRMED',
+      score: 84,
+      objectives: 'Reuse offtake structures for industrial parks.',
+      message: 'Need offtake structures for industrial water reuse.',
+    },
+    {
+      dayIndex: 2,
+      hour: 11,
+      minute: 0,
+      investor: 16,
+      innovator: 16,
+      status: 'AWAITING_CONFIRMATION',
+      score: 75,
+      objectives: 'Youth-led WASH innovation showcase follow-up.',
+      message: 'Follow-up after the youth WASH showcase.',
+    },
+    {
+      dayIndex: 2,
+      hour: 13,
+      minute: 0,
+      investor: 17,
+      innovator: 17,
+      status: 'CONFIRMED',
+      score: 81,
+      objectives: 'Flood early-warning systems for river basins.',
+      message: 'Discuss flood early-warning deployment partners.',
+    },
+    {
+      dayIndex: 2,
+      hour: 14,
+      minute: 30,
+      investor: 18,
+      innovator: 18,
+      status: 'CONFIRMED',
+      score: 79,
+      objectives: 'Circular water economy for industrial clusters.',
+      message: 'Interested in circular water for industrial clusters.',
+    },
+    {
+      dayIndex: 2,
+      hour: 16,
+      minute: 0,
+      investor: 19,
+      innovator: 19,
+      status: 'CONFIRMED',
+      score: 74,
+      objectives: 'Closing session: regional scale-up opportunities.',
+      message: 'Closing conversation on regional scale-up.',
     },
   ];
 
-  for (const row of todayMeetings) {
-    const startsAt = daysFromNow(0, row.hour, row.minute);
+  if (seededMeetings.length !== 20) {
+    throw new Error(
+      `Expected 20 seeded meetings, got ${seededMeetings.length}`,
+    );
+  }
+
+  const meetingsByDay: Record<string, number> = {};
+  for (const row of seededMeetings) {
+    const date = eventDates[row.dayIndex];
+    if (!date) {
+      throw new Error(`Missing event date for dayIndex ${row.dayIndex}`);
+    }
+    if (row.hour < 9 || row.hour > 16 || (row.hour === 16 && row.minute > 45)) {
+      throw new Error(
+        `Meeting outside active hours 09:00–17:00: ${date} ${row.hour}:${row.minute}`,
+      );
+    }
+    const investor = investorOrgs[row.investor];
+    const innovator = innovatorOrgs[row.innovator];
+    if (!investor || !innovator) {
+      throw new Error(
+        `Missing org for investor ${row.investor} / innovator ${row.innovator}`,
+      );
+    }
+    const placeId = placeIds[tableCodeForInvestor(row.investor)];
+    if (!placeId) {
+      throw new Error(`Missing place for investor index ${row.investor}`);
+    }
+
+    const startsAt = eventDateTime(date, row.hour, row.minute);
     const meeting = await createMeeting({
-      companyOrgId: investorOrgs[row.investor]!.orgId,
-      vendorOrgId: innovatorOrgs[row.innovator]!.orgId,
+      companyOrgId: investor.orgId,
+      vendorOrgId: innovator.orgId,
       startsAt,
-      durationMinutes: 30,
-      placeId: placeIds[tableCodeForInvestor(row.investor)]!,
+      durationMinutes: meetingDurationMinutes,
+      placeId,
       status: row.status,
-      objectives: 'On-site investor / innovator session.',
+      objectives: row.objectives,
       score: row.score,
     });
-    if (row.quality && row.outcome) {
-      await prisma.meetingFeedback.create({
-        data: {
-          meetingId: meeting.id,
-          organizationId: investorOrgs[row.investor]!.orgId,
-          reviewerUserId: investorOrgs[row.investor]!.userId,
-          attendanceConfirmed: true,
-          meetingQuality: row.quality,
-          relevance: row.quality,
-          businessPotential: Math.max(3, row.quality - 1),
-          communicationQuality: row.quality,
-          interestLevel: row.quality,
-          followUpRequired: row.outcome === 'INTERESTED_IN_PARTNERSHIP',
-          outcome: row.outcome,
-          comments: 'Recorded from the event floor.',
-          isConfidential: false,
-        },
+
+    await prisma.meetingRequest.create({
+      data: {
+        fromOrgId: investor.orgId,
+        toOrgId: innovator.orgId,
+        requestedById: investor.userId,
+        status:
+          row.status === 'CONFIRMED' ? 'SCHEDULED' : 'AWAITING_CONFIRMATION',
+        message: row.message,
+        proposedStartsAt: startsAt,
+        proposedEndsAt: meeting.endsAt,
+        proposedByOrgId: investor.orgId,
+        placeId,
+        meetingId: meeting.id,
+      },
+    });
+
+    if (row.status === 'CONFIRMED') {
+      await prisma.meetingConfirmation.createMany({
+        data: [
+          {
+            meetingId: meeting.id,
+            userId: investor.userId,
+            status: 'CONFIRMED',
+            respondedAt: new Date(),
+          },
+          {
+            meetingId: meeting.id,
+            userId: innovator.userId,
+            status: 'CONFIRMED',
+            respondedAt: new Date(),
+          },
+        ],
       });
     }
+
+    meetingsByDay[date] = (meetingsByDay[date] ?? 0) + 1;
   }
 
   console.log(`
@@ -1133,6 +1172,10 @@ UN Water demo roster seeded (${CLIENTS.length} investors, ${GUESTS.length} innov
 Password for all demo users: ${SAMPLE_PASSWORD}
 
 Venue: ${ARENA_LOCATION} — ${TABLE_COUNT} tables (CCA_T01…CCA_T${String(TABLE_COUNT).padStart(2, '0')}), one per investor.
+Event dates (admin settings): ${eventDates.join(', ')} (09:00–17:00 Asia/Dubai)
+Meetings seeded: 20 total — ${eventDates
+    .map((d) => `${d}: ${meetingsByDay[d] ?? 0}`)
+    .join(' · ')} (${meetingDurationMinutes} min each)
 
 Suggested strong match pair (NRW / digital water):
   Investor: ${CLIENTS[1]!.email}  /  ${SAMPLE_PASSWORD}

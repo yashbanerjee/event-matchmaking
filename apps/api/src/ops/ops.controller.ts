@@ -18,11 +18,86 @@ export class OpsController {
   async feedback(
     @Query('page') page = '1',
     @Query('pageSize') pageSize = '20',
+    @Query('role') role?: string,
+    @Query('q') q?: string,
   ) {
     const p = Number(page) || 1;
     const size = Math.min(Number(pageSize) || 20, 100);
+    const roleKey = (role ?? '').trim().toUpperCase();
+    const orgType =
+      roleKey === 'COMPANY' ||
+      roleKey === 'INVESTOR' ||
+      roleKey === 'CLIENT'
+        ? ('COMPANY' as const)
+        : roleKey === 'VENDOR' ||
+            roleKey === 'INNOVATOR' ||
+            roleKey === 'GUEST'
+          ? ('VENDOR' as const)
+          : null;
+    const search = (q ?? '').trim().replace(/\s+/g, ' ');
+    const where = {
+      ...(orgType ? { organization: { type: orgType } } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                organization: {
+                  name: { contains: search, mode: 'insensitive' as const },
+                },
+              },
+              {
+                reviewer: {
+                  OR: [
+                    {
+                      email: {
+                        contains: search,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                    {
+                      firstName: {
+                        contains: search,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                    {
+                      lastName: {
+                        contains: search,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                meeting: {
+                  OR: [
+                    {
+                      companyOrg: {
+                        name: {
+                          contains: search,
+                          mode: 'insensitive' as const,
+                        },
+                      },
+                    },
+                    {
+                      vendorOrg: {
+                        name: {
+                          contains: search,
+                          mode: 'insensitive' as const,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }
+        : {}),
+    };
     const [items, total] = await Promise.all([
       this.prisma.meetingFeedback.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (p - 1) * size,
         take: size,
@@ -50,7 +125,7 @@ export class OpsController {
           },
         },
       }),
-      this.prisma.meetingFeedback.count(),
+      this.prisma.meetingFeedback.count({ where }),
     ]);
     return { items, page: p, pageSize: size, total };
   }
