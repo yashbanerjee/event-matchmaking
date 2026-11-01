@@ -20,6 +20,7 @@ import {
   applyMatchmakingUserTemplate,
   DEFAULT_MATCHMAKING_CHAT_MODEL,
   DEFAULT_MATCHMAKING_PROMPT,
+  DEFAULT_MATCHMAKING_USER_TEMPLATE,
 } from './matchmaking-prompt';
 import type { PairScoringMethod } from './ai.provider';
 
@@ -40,6 +41,22 @@ export class AiService implements OnModuleInit {
 
   /** Wire JAV as the default Ethara matchmaking AI if settings are still unset/off. */
   private async ensureIntegratedJavDefaults() {
+    const readCurrent = (raw: unknown) => {
+      if (raw && typeof raw === 'object' && 'value' in (raw as object)) {
+        return (raw as { value: unknown }).value;
+      }
+      return raw;
+    };
+
+    const writeSetting = async (key: string, value: Prisma.InputJsonValue) => {
+      const payload = { value } as Prisma.InputJsonValue;
+      await this.prisma.systemSetting.upsert({
+        where: { key },
+        create: { key, value: payload },
+        update: { value: payload },
+      });
+    };
+
     const ensure = async (key: string, value: Prisma.InputJsonValue) => {
       const payload = { value } as Prisma.InputJsonValue;
       const existing = await this.prisma.systemSetting.findUnique({
@@ -51,18 +68,12 @@ export class AiService implements OnModuleInit {
         });
         return;
       }
-      const raw = existing.value as { value?: unknown } | unknown;
-      const current =
-        raw && typeof raw === 'object' && 'value' in (raw as object)
-          ? (raw as { value: unknown }).value
-          : raw;
+      const current = readCurrent(existing.value);
       const empty =
         current === undefined ||
         current === null ||
         current === '' ||
-        current === 'none' ||
-        current === false ||
-        current === 'false';
+        current === 'none';
       const legacyModel =
         key === 'ai.javChatModel' &&
         (current === 'gpt-4o-mini' ||
@@ -72,14 +83,14 @@ export class AiService implements OnModuleInit {
       const legacyMode =
         key === 'ai.matchmakingMode' && current === 'embedding';
       const shouldUpgrade =
-        empty &&
-        (key === 'ai.enabled' ||
-          key === 'ai.primaryProvider' ||
-          key === 'ai.javChatModel' ||
-          key === 'ai.matchmakingMode' ||
-          key === 'ai.javBaseUrl')
-          ? true
-          : legacyModel || legacyMode;
+        (empty &&
+          (key === 'ai.enabled' ||
+            key === 'ai.primaryProvider' ||
+            key === 'ai.javChatModel' ||
+            key === 'ai.matchmakingMode' ||
+            key === 'ai.javBaseUrl')) ||
+        legacyModel ||
+        legacyMode;
       if (shouldUpgrade) {
         await this.prisma.systemSetting.update({
           where: { key },
@@ -95,9 +106,45 @@ export class AiService implements OnModuleInit {
     await ensure('ai.javChatModel', DEFAULT_MATCHMAKING_CHAT_MODEL);
     await ensure('ai.matchmakingMode', 'llm');
     await ensure('ai.matchmakingBlendWeight', 0.3);
-    await ensure('ops.recommendationScoreThreshold', 50);
+    await ensure('ops.recommendationScoreThreshold', 75);
     await ensure('ai.pairScoringMethod', 'structured_json');
-    await ensure('ai.includeOnboardingInProfile', false);
+    await ensure('ai.includeOnboardingInProfile', true);
+    await ensure('ai.matchmakingPrompt', DEFAULT_MATCHMAKING_PROMPT);
+    await ensure(
+      'ai.matchmakingUserTemplate',
+      DEFAULT_MATCHMAKING_USER_TEMPLATE,
+    );
+
+    const solidDefaultsVersion = 2;
+    const versionKey = 'ops.aiSolidDefaultsVersion';
+    const versionRow = await this.prisma.systemSetting.findUnique({
+      where: { key: versionKey },
+    });
+    const currentVersion = Number(readCurrent(versionRow?.value) ?? 0);
+    if (!Number.isFinite(currentVersion) || currentVersion < solidDefaultsVersion) {
+      await writeSetting('ops.recommendationScoreThreshold', 75);
+      await writeSetting('ai.matchmakingBlendWeight', 0.3);
+      await writeSetting('ai.pairScoringMethod', 'structured_json');
+      await writeSetting('ai.includeOnboardingInProfile', true);
+      await writeSetting('ai.matchmakingMode', 'llm');
+      await writeSetting('ai.matchmakingPrompt', DEFAULT_MATCHMAKING_PROMPT);
+      await writeSetting(
+        'ai.matchmakingUserTemplate',
+        DEFAULT_MATCHMAKING_USER_TEMPLATE,
+      );
+      await writeSetting('ops.tagCategoryThresholds', {
+        challenge: 25,
+        solution: 0,
+        geography: 20,
+        commercial: 0,
+        stage: 15,
+        ticket: 0,
+      });
+      await writeSetting(versionKey, solidDefaultsVersion);
+      this.logger.log(
+        `Applied solid AI recommendation defaults (v${solidDefaultsVersion})`,
+      );
+    }
 
     await this.prisma.featureFlag.upsert({
       where: { key: 'ai_enabled' },

@@ -117,6 +117,9 @@ export default function CompaniesPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dateSort, setDateSort] = useState<'createdAt_desc' | 'createdAt_asc'>(
+    'createdAt_desc',
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [csvText, setCsvText] = useState(
@@ -150,9 +153,9 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, dateSort]);
 
-  const queryKey = ['companies', page, debouncedSearch] as const;
+  const queryKey = ['companies', page, debouncedSearch, dateSort] as const;
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey,
@@ -161,6 +164,7 @@ export default function CompaniesPage() {
         type: 'COMPANY',
         page: String(page),
         pageSize: String(PAGE_SIZE),
+        sort: dateSort,
       });
       if (debouncedSearch) params.set('q', debouncedSearch);
       return apiFetch<OrgList>(`/organizations?${params}`, {
@@ -449,12 +453,29 @@ export default function CompaniesPage() {
       <Card>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold">Directory</h2>
-          <Input
-            className="max-w-xs"
-            placeholder="Search name or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Select
+              className="sm:w-52"
+              value={dateSort}
+              onChange={(e) =>
+                setDateSort(
+                  e.target.value === 'createdAt_asc'
+                    ? 'createdAt_asc'
+                    : 'createdAt_desc',
+                )
+              }
+              aria-label="Sort by date"
+            >
+              <option value="createdAt_desc">Date: high to low</option>
+              <option value="createdAt_asc">Date: low to high</option>
+            </Select>
+            <Input
+              className="max-w-xs"
+              placeholder="Search name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
 
         {isLoading && <p className="text-[var(--muted)]">Loading…</p>}

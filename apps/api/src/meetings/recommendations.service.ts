@@ -51,9 +51,9 @@ export class RecommendationsService {
   private async getRecommendationThreshold(): Promise<number> {
     const raw = await this.config.getNumber(
       'ops.recommendationScoreThreshold',
-      50,
+      75,
     );
-    if (!Number.isFinite(raw)) return 50;
+    if (!Number.isFinite(raw)) return 75;
     return Math.max(0, Math.min(100, raw));
   }
 

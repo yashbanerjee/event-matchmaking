@@ -318,13 +318,13 @@ export class MatchmakingService {
         ? await this.config.getString('ai.matchmakingMode', 'llm')
         : 'embedding';
       const includeOnboarding = useAi
-        ? await this.config.getBoolean('ai.includeOnboardingInProfile', false)
+        ? await this.config.getBoolean('ai.includeOnboardingInProfile', true)
         : false;
       const recommendationThreshold = Math.max(
         0,
         Math.min(
           100,
-          await this.config.getNumber('ops.recommendationScoreThreshold', 50),
+          await this.config.getNumber('ops.recommendationScoreThreshold', 75),
         ),
       );
       const tagCategoryThresholds = resolveTagCategoryThresholds(
@@ -400,11 +400,13 @@ export class MatchmakingService {
           };
 
           if (useAi) {
-            void includeOnboarding;
             const cards = buildMatchmakingPairCards({
               company: companyFeatures,
               vendor: vendorFeatures,
               tagLabels,
+              companyNormalized: company.normalizedProfile,
+              vendorNormalized: vendor.normalizedProfile,
+              includeOnboardingResponses: includeOnboarding,
             });
             const left = cards.investor;
             const right = cards.innovator;

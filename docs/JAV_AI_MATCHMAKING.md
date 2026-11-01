@@ -225,18 +225,21 @@ JAV does **not** invent meetings by itself. Scheduling still uses the blended sc
 
 ## 8. Configuration (operators)
 
-Under **Admin → Settings / Integrations** (AI group):
+Under **Admin → Matchmaking → Fine-tune AI** (or Settings → AI):
 
-| Setting | Purpose |
-| --- | --- |
-| AI enabled | Master switch |
-| Primary provider | Set to `jav` |
-| OpenRouter API key | Authentication for Jev |
-| Jev model id | Default `~typesafe/jev-latest` |
-| Matchmaking AI mode | `llm` (recommended), `hybrid`, or `embedding` |
-| AI blend weight | How much AI affects the final score (default 0.3) |
-| Matchmaking system prompt | Optional instructions for how Jev should judge fit |
-| Jev temperature | Lower = more stable scores (typical 0.2) |
+| Setting | Solid default | Purpose |
+| --- | --- | --- |
+| AI enabled | on | Master switch |
+| Pair scoring method | `structured_json` | JSON `score` + 2–3 sentence `rationale` |
+| Include onboarding in profile | on | Richer AI text from form answers (no personal contact) |
+| Recommendation score threshold | **75** | Only strong matches on Recommendations (full list on Innovators) |
+| AI blend weight | **0.3** | ~70% tags + 30% AI (keep ~0.25–0.35) |
+| Tag category floors | challenge 25 / geography 20 / stage 15 | Hard requirements stay tag-gated |
+| Matchmaking AI mode | `llm` | Model scores pairs |
+| Water/climate system prompt | shipped default | Tune once for the event theme, then leave |
+| OpenRouter API key | required | Authentication |
+
+Approving a form submission or innovator **recomputes** peer recommendations so AI scores refresh automatically.
 
 Without a valid API key, AI calls fail soft and the platform continues with rules (and/or local text fallback).
 

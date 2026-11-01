@@ -295,7 +295,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'RECOMMENDATION_SCORE_THRESHOLD',
     label: 'Recommendation score threshold',
     description:
-      'Only show recommendations with a total match score at or above this value (0–100). AI matches all profile and tag details except personal contact fields (name, phone, LinkedIn, job title, etc.).',
+      'Only show Recommendations at or above this score (default 75). Full innovator directory stays available under Innovators. Personal contact fields are never sent to AI.',
     group: 'ai',
     type: 'number',
   },
@@ -331,7 +331,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_MATCHMAKING_BLEND_WEIGHT',
     label: 'AI blend weight',
     description:
-      'How much AI contributes to the final score (0–1). Example 0.3 = 70% rules + 30% AI.',
+      'How much AI contributes to the final score (0–1). Default 0.3 (70% tags + 30% AI). Keep ~0.25–0.35 so tags still dominate hard fit.',
     group: 'ai',
     type: 'number',
   },
@@ -374,9 +374,9 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
   {
     key: 'ai.includeOnboardingInProfile',
     envKey: 'AI_INCLUDE_ONBOARDING_IN_PROFILE',
-    label: 'Include raw onboarding answers in AI profile text',
+    label: 'Include onboarding answers in AI profile text',
     description:
-      'Leave off. Matchmaking already uses structured match fields (topics, regions, capabilities, funding). Personal details are never sent to AI.',
+      'Default on. Adds safe free-text from onboarding (thesis, impact, goals) on top of structured match fields. Personal contact details are never sent to AI.',
     group: 'ai',
     type: 'boolean',
   },

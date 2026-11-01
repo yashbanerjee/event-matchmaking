@@ -12,27 +12,29 @@ import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 
 /** Keep in sync with apps/api DEFAULT_MATCHMAKING_* for reset-to-default. */
-const DEFAULT_MATCHMAKING_PROMPT = `You are Ethara's event matchmaking analyst for investor–innovator meetings at a water-sector networking event.
+const DEFAULT_MATCHMAKING_PROMPT = `You are Ethara's matchmaking analyst for short investor–innovator meetings at a water and climate networking event.
 
-Given an INVESTOR profile and an INNOVATOR profile built from match fields only (topics, regions, capabilities, funding, thesis/solution — never personal contact details), judge how valuable a short in-person meeting would be.
+Hard constraints (region, stage, ticket, required topics) are already filtered by the tag engine. Your job is narrative fit: thesis vs solution, deployment evidence, capital instrument alignment, and whether a 15-minute meeting is worth both sides' time.
+
+Never use or invent personal contact details (names of people, emails, phones, LinkedIn). Rely only on organization/match fields in the profiles.
 
 Respond with JSON only — no markdown fences:
 {
   "score": <integer 0-100>,
-  "rationale": "<2-3 sentences for admins: why this meeting makes sense, citing specific fields from the profiles. Do not invent facts.>",
+  "rationale": "<2-3 sentences citing specific profile fields. Do not invent facts.>",
   "reasons": ["<short bullet 1>", "<short bullet 2>", "<optional bullet 3>"],
   "mismatch": "<one sentence on the main risk or gap, or empty string if none>",
   "agenda": "<one sentence suggested focus for a 15-minute meeting>"
 }
 
-The "reasons" array must have 2–4 concise bullets an event admin can scan quickly (each under 120 characters).
+The "reasons" array must have 2–4 concise bullets (each under 120 characters).
 
-Scoring guide:
+Scoring guide (be decisive — weak pairs should score below 70):
 - 0–25 poor fit
 - 26–50 weak fit
 - 51–70 moderate fit
-- 71–85 strong fit
-- 86–100 excellent fit`;
+- 71–85 strong fit (recommend a meeting)
+- 86–100 excellent fit (prioritize)`;
 
 const DEFAULT_MATCHMAKING_USER_TEMPLATE = `Investor profile:
 {{investorProfile}}
@@ -40,13 +42,15 @@ const DEFAULT_MATCHMAKING_USER_TEMPLATE = `Investor profile:
 Innovator profile:
 {{innovatorProfile}}
 
-Score how well they should meet for a short networking session at the event.`;
+Score how well they should meet for a short water/climate networking session. Return JSON with score and a 2–3 sentence rationale.`;
 
 const FINE_TUNE_KEYS = [
   'ops.recommendationScoreThreshold',
   'ops.investorRecommendationLimit',
   'ops.innovatorRecommendationLimit',
   'ai.matchmakingBlendWeight',
+  'ai.pairScoringMethod',
+  'ai.includeOnboardingInProfile',
   'ai.javTemperature',
   'ai.matchmakingMode',
   'ai.javChatModel',
@@ -87,11 +91,11 @@ const DEFAULT_WEIGHTS: Record<TagCategoryKey, string> = {
 };
 
 const DEFAULT_TAG_THRESHOLDS: Record<TagCategoryKey, string> = {
-  challenge: '0',
+  challenge: '25',
   solution: '0',
-  geography: '0',
+  geography: '20',
   commercial: '0',
-  stage: '0',
+  stage: '15',
   ticket: '0',
 };
 
@@ -106,10 +110,12 @@ type SettingField = {
 type FineTuneDraft = Record<FineTuneKey, string>;
 
 const DEFAULTS: FineTuneDraft = {
-  'ops.recommendationScoreThreshold': '50',
+  'ops.recommendationScoreThreshold': '75',
   'ops.investorRecommendationLimit': '10',
   'ops.innovatorRecommendationLimit': '5',
   'ai.matchmakingBlendWeight': '0.3',
+  'ai.pairScoringMethod': 'structured_json',
+  'ai.includeOnboardingInProfile': 'true',
   'ai.javTemperature': '0.2',
   'ai.matchmakingMode': 'llm',
   'ai.javChatModel': 'qwen/qwen-2.5-72b-instruct',
@@ -180,6 +186,14 @@ function buildDraft(
     'ai.matchmakingBlendWeight': fieldToString(
       byKey.get('ai.matchmakingBlendWeight'),
       DEFAULTS['ai.matchmakingBlendWeight'],
+    ),
+    'ai.pairScoringMethod': fieldToString(
+      byKey.get('ai.pairScoringMethod'),
+      DEFAULTS['ai.pairScoringMethod'],
+    ),
+    'ai.includeOnboardingInProfile': fieldToString(
+      byKey.get('ai.includeOnboardingInProfile'),
+      DEFAULTS['ai.includeOnboardingInProfile'],
     ),
     'ai.javTemperature': fieldToString(
       byKey.get('ai.javTemperature'),
@@ -387,6 +401,19 @@ export function AiFineTunePanel({ disabled = false }: Props) {
               value: blend,
             },
             {
+              key: 'ai.pairScoringMethod',
+              value:
+                draft['ai.pairScoringMethod'] === 'jev_decisions'
+                  ? 'jev_decisions'
+                  : 'structured_json',
+            },
+            {
+              key: 'ai.includeOnboardingInProfile',
+              value:
+                draft['ai.includeOnboardingInProfile'] === 'true' ||
+                draft['ai.includeOnboardingInProfile'] === '1',
+            },
+            {
               key: 'ai.javTemperature',
               value: temperature,
             },
@@ -504,7 +531,8 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 }
               />
               <span className="block text-xs text-[var(--muted)]">
-                Only show recommendations at or above this score.
+                Default 75 — strong matches only on Recommendations (full list
+                stays under Innovators).
               </span>
             </label>
 
@@ -562,7 +590,48 @@ export function AiFineTunePanel({ disabled = false }: Props) {
                 }
               />
               <span className="block text-xs text-[var(--muted)]">
-                0.3 = 70% rules + 30% AI.
+                Keep ~0.25–0.35 (default 0.3 = 70% tags + 30% AI).
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className="text-[var(--muted)]">Pair scoring method</span>
+              <Select
+                value={draft['ai.pairScoringMethod']}
+                disabled={disabled || save.isPending}
+                onChange={(e) =>
+                  setField('ai.pairScoringMethod', e.target.value)
+                }
+              >
+                <option value="structured_json">
+                  structured_json (score + rationale)
+                </option>
+                <option value="jev_decisions">jev_decisions (legacy)</option>
+              </Select>
+              <span className="block text-xs text-[var(--muted)]">
+                Prefer structured_json for 2–3 sentence match reasons.
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className="text-[var(--muted)]">Richer AI profiles</span>
+              <Select
+                value={
+                  draft['ai.includeOnboardingInProfile'] === 'true' ||
+                  draft['ai.includeOnboardingInProfile'] === '1'
+                    ? 'true'
+                    : 'false'
+                }
+                disabled={disabled || save.isPending}
+                onChange={(e) =>
+                  setField('ai.includeOnboardingInProfile', e.target.value)
+                }
+              >
+                <option value="true">On — include onboarding text</option>
+                <option value="false">Off — tags only</option>
+              </Select>
+              <span className="block text-xs text-[var(--muted)]">
+                On by default. Personal contact fields are never sent.
               </span>
             </label>
 
@@ -600,8 +669,9 @@ export function AiFineTunePanel({ disabled = false }: Props) {
             <div>
               <h3 className="text-sm font-semibold">Tag category thresholds</h3>
               <p className="text-xs text-[var(--muted)]">
-                Minimum score (0–100) required in each tag category before a pair
-                can become a recommendation. Set 0 to ignore that category.
+                Hard floors before AI can recommend a pair (defaults: challenge
+                25, geography 20, stage 15). Tags catch region/stage; AI judges
+                narrative fit. Set 0 to ignore a category.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

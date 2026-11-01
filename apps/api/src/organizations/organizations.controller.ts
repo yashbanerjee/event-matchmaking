@@ -167,12 +167,14 @@ export class OrganizationsController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('q') q?: string,
+    @Query('sort') sort?: string,
   ) {
     return this.orgs.list({
       type,
       page: page ? Number(page) : 1,
       pageSize: pageSize ? Number(pageSize) : 20,
       q,
+      sort,
     });
   }
 

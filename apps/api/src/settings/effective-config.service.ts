@@ -212,6 +212,21 @@ export class EffectiveConfigService {
     if (field.key === 'ops.innovatorRecommendationLimit') {
       return 5;
     }
+    if (field.key === 'ops.recommendationScoreThreshold') {
+      return 75;
+    }
+    if (field.key === 'ai.matchmakingBlendWeight') {
+      return 0.3;
+    }
+    if (field.key === 'ai.pairScoringMethod') {
+      return 'structured_json';
+    }
+    if (field.key === 'ai.includeOnboardingInProfile') {
+      return true;
+    }
+    if (field.key === 'ai.matchmakingMode') {
+      return 'llm';
+    }
     return fromEnv;
   }
 

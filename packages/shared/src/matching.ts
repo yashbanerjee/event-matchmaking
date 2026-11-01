@@ -75,12 +75,13 @@ export const tagCategoryThresholdsSchema = z.object({
 
 export type TagCategoryThresholds = z.infer<typeof tagCategoryThresholdsSchema>;
 
+/** Soft tag floors so hard requirements are not left to AI alone. */
 export const defaultTagCategoryThresholds: TagCategoryThresholds = {
-  challenge: 0,
+  challenge: 25,
   solution: 0,
-  geography: 0,
+  geography: 20,
   commercial: 0,
-  stage: 0,
+  stage: 15,
   ticket: 0,
 };
 

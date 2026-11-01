@@ -686,7 +686,7 @@ export class PeerRecommendationsService {
       : 'embedding';
     const includeOnboarding = await this.config.getBoolean(
       'ai.includeOnboardingInProfile',
-      false,
+      true,
     );
     const blend = aiEnabled
       ? Math.max(
@@ -1063,13 +1063,13 @@ export class PeerRecommendationsService {
       input.tagLabels,
     );
 
-    void input.companyNorm;
-    void input.vendorNorm;
-    void input.includeOnboarding;
     const cards = buildMatchmakingPairCards({
       company: input.companyFeatures,
       vendor: input.vendorFeatures,
       tagLabels: input.tagLabels,
+      companyNormalized: input.companyNorm,
+      vendorNormalized: input.vendorNorm,
+      includeOnboardingResponses: input.includeOnboarding,
     });
     const left = cards.investor;
     const right = cards.innovator;
@@ -1201,9 +1201,9 @@ export class PeerRecommendationsService {
   private async getRecommendationThreshold(): Promise<number> {
     const raw = await this.config.getNumber(
       'ops.recommendationScoreThreshold',
-      50,
+      75,
     );
-    if (!Number.isFinite(raw)) return 50;
+    if (!Number.isFinite(raw)) return 75;
     return Math.max(0, Math.min(100, raw));
   }
 

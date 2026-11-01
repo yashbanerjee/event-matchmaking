@@ -691,10 +691,17 @@ export class OrganizationsService {
     page?: number;
     pageSize?: number;
     q?: string;
+    /** createdAt_desc (newest first) | createdAt_asc (oldest first) */
+    sort?: string;
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(Math.max(1, params.pageSize ?? 20), 100);
     const q = params.q?.trim().replace(/\s+/g, ' ') ?? '';
+    const sortKey = (params.sort ?? '').trim().toLowerCase();
+    const orderBy =
+      sortKey === 'createdat_asc' || sortKey === 'date_asc'
+        ? ({ createdAt: 'asc' } as const)
+        : ({ createdAt: 'desc' } as const);
     const where = {
       ...(params.type ? { type: params.type } : {}),
       status: { not: 'ARCHIVED' as const },
@@ -742,8 +749,7 @@ export class OrganizationsService {
     const [items, total] = await Promise.all([
       this.prisma.organization.findMany({
         where,
-        // Name-first when searching; newest-first for the default directory.
-        orderBy: q ? { name: 'asc' } : { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
