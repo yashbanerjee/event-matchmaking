@@ -92,7 +92,7 @@ function RegisterFields({
           </p>
         ) : null}
         <Button className="w-full" type="submit">
-          Create account and continue
+          Create account and open form
         </Button>
       </form>
       <p className="mt-5 text-center text-sm text-[var(--muted)]">

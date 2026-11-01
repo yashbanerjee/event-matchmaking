@@ -107,11 +107,20 @@ export class OrganizationsService {
       industry?: string;
     },
   ) {
-    const defaults = await this.resolveOnboardingForm('COMPANY');
+    const defaults = input.formId
+      ? null
+      : await this.resolveOnboardingForm('COMPANY');
+    const formId = input.formId ?? defaults?.formId;
+    const formVersionId = input.formVersionId ?? defaults?.formVersionId;
+    if (!formId || !formVersionId) {
+      throw new BadRequestException(
+        'Select a published investor form before sending the invitation',
+      );
+    }
     return this.inviteOrganization(actor, {
       ...input,
-      formId: input.formId ?? defaults?.formId,
-      formVersionId: input.formVersionId ?? defaults?.formVersionId,
+      formId,
+      formVersionId,
       type: OrganizationType.COMPANY,
       roleCode: 'COMPANY_USER',
       industry: input.industry,
@@ -133,10 +142,17 @@ export class OrganizationsService {
     const defaults = input.formId
       ? null
       : await this.resolveOnboardingForm('VENDOR');
+    const formId = input.formId ?? defaults?.formId;
+    const formVersionId = input.formVersionId ?? defaults?.formVersionId;
+    if (!formId || !formVersionId) {
+      throw new BadRequestException(
+        'Select a published innovator form before sending the invitation',
+      );
+    }
     return this.inviteOrganization(actor, {
       ...input,
-      formId: input.formId ?? defaults?.formId,
-      formVersionId: input.formVersionId ?? defaults?.formVersionId,
+      formId,
+      formVersionId,
       type: OrganizationType.VENDOR,
       roleCode: 'VENDOR_USER',
     });

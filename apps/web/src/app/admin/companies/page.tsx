@@ -64,6 +64,7 @@ type FormListItem = {
   id: string;
   code: string;
   name: string;
+  targetType?: string | null;
   versions: Array<{ id: string; version: number; status: string }>;
 };
 
@@ -181,7 +182,9 @@ export default function CompaniesPage() {
         return published
           ? {
               id: f.id,
+              code: f.code,
               name: f.name,
+              targetType: f.targetType ?? null,
               formVersionId: published.id,
               version: published.version,
             }
@@ -189,26 +192,56 @@ export default function CompaniesPage() {
       })
       .filter(Boolean) as Array<{
       id: string;
+      code: string;
       name: string;
+      targetType: string | null;
       formVersionId: string;
       version: number;
     }>;
   }, [forms.data]);
 
+  const investorForms = useMemo(() => {
+    const preferred = publishedForms.filter(
+      (f) =>
+        f.targetType === 'COMPANY' ||
+        f.code.toUpperCase().includes('INVESTOR'),
+    );
+    return preferred.length > 0 ? preferred : publishedForms;
+  }, [publishedForms]);
+
   const items = data?.items ?? [];
 
-  const resetAddForm = () => {
+  const resetAddForm = (preset?: {
+    formId?: string;
+    formVersionId?: string;
+  }) => {
     setForm({
       name: '',
       email: '',
       phone: '',
       phoneCountryCode: '+971',
       industry: 'Manufacturing',
-      formId: '',
-      formVersionId: '',
+      formId: preset?.formId ?? '',
+      formVersionId: preset?.formVersionId ?? '',
       sendInvitation: true,
     });
   };
+
+  useEffect(() => {
+    if ((!addOpen && !csvOpen) || form.formId || investorForms.length === 0) {
+      return;
+    }
+    const preferred =
+      investorForms.find((f) =>
+        f.code.toUpperCase().includes('INVESTOR'),
+      ) ?? investorForms[0];
+    if (!preferred) return;
+    setForm((prev) => ({
+      ...prev,
+      formId: preferred.id,
+      formVersionId: preferred.formVersionId,
+    }));
+  }, [addOpen, csvOpen, form.formId, investorForms]);
 
   const invite = useMutation({
     mutationFn: () =>
@@ -223,6 +256,8 @@ export default function CompaniesPage() {
             ? form.phoneCountryCode
             : undefined,
           industry: form.industry.trim() || undefined,
+          formId: form.formId || undefined,
+          formVersionId: form.formVersionId || undefined,
         }),
       }),
     onSuccess: () => {
@@ -310,7 +345,11 @@ export default function CompaniesPage() {
           await apiFetch('/organizations/companies/invite', {
             method: 'POST',
             token: getAccessToken(),
-            body: JSON.stringify(row),
+            body: JSON.stringify({
+              ...row,
+              formId: form.formId || undefined,
+              formVersionId: form.formVersionId || undefined,
+            }),
           });
           succeeded += 1;
           results.push({ email: row.email, ok: true });
@@ -359,6 +398,7 @@ export default function CompaniesPage() {
   }
 
   function submitAdd() {
+    if (!form.formId || !form.formVersionId) return;
     if (form.sendInvitation) {
       invite.mutate();
       return;
@@ -367,6 +407,7 @@ export default function CompaniesPage() {
   }
 
   const addPending = invite.isPending || startAdminFill.isPending;
+  const formSelected = Boolean(form.formId && form.formVersionId);
 
   return (
     <div className="space-y-6">
@@ -544,8 +585,7 @@ export default function CompaniesPage() {
               disabled={
                 !form.name.trim() ||
                 !form.email.trim() ||
-                (!form.sendInvitation &&
-                  (!form.formId || !form.formVersionId))
+                !formSelected
               }
             >
               {addPending
@@ -582,44 +622,45 @@ export default function CompaniesPage() {
             </div>
           </div>
 
-          {!form.sendInvitation ? (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                Select form (required)
-              </label>
-              <Select
-                value={
-                  form.formId ? `${form.formId}::${form.formVersionId}` : ''
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Select form (required)
+            </label>
+            <Select
+              value={
+                form.formId ? `${form.formId}::${form.formVersionId}` : ''
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                if (!value) {
+                  setForm({ ...form, formId: '', formVersionId: '' });
+                  return;
                 }
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (!value) {
-                    setForm({ ...form, formId: '', formVersionId: '' });
-                    return;
-                  }
-                  const [formId, formVersionId] = value.split('::');
-                  setForm({
-                    ...form,
-                    formId: formId ?? '',
-                    formVersionId: formVersionId ?? '',
-                  });
-                }}
-              >
-                <option value="">Select form</option>
-                {publishedForms.map((f) => (
-                  <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
-                    {f.name} (v{f.version})
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--muted)]">
-              Invitation email uses a distinct investor link. They create an
-              account, then complete the investor onboarding form. You can edit
-              that form in Admin → Forms.
-            </p>
-          )}
+                const [formId, formVersionId] = value.split('::');
+                setForm({
+                  ...form,
+                  formId: formId ?? '',
+                  formVersionId: formVersionId ?? '',
+                });
+              }}
+            >
+              <option value="">Select form</option>
+              {investorForms.map((f) => (
+                <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
+                  {f.name} (v{f.version})
+                </option>
+              ))}
+            </Select>
+            {forms.isLoading ? (
+              <p className="mt-1 text-xs text-[var(--muted)]">Loading forms…</p>
+            ) : (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {form.sendInvitation
+                  ? 'Invitation link opens this form after the investor creates an account.'
+                  : 'You will fill this form next and verify the investor.'}
+              </p>
+            )}
+          </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
@@ -747,7 +788,7 @@ export default function CompaniesPage() {
             <Button
               onClick={() => importCsv.mutate()}
               loading={importCsv.isPending}
-              disabled={!csvText.trim()}
+              disabled={!csvText.trim() || !formSelected}
             >
               {importCsv.isPending ? 'Importing…' : 'Import & invite'}
             </Button>
@@ -755,10 +796,36 @@ export default function CompaniesPage() {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-[var(--muted)]">
-            Each row receives an invitation email. Onboarding forms are assigned
-            automatically from published investor forms.
-          </p>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              Select form for all rows (required)
+            </label>
+            <Select
+              value={
+                form.formId ? `${form.formId}::${form.formVersionId}` : ''
+              }
+              onChange={(e) => {
+                const value = e.target.value;
+                if (!value) {
+                  setForm({ ...form, formId: '', formVersionId: '' });
+                  return;
+                }
+                const [formId, formVersionId] = value.split('::');
+                setForm({
+                  ...form,
+                  formId: formId ?? '',
+                  formVersionId: formVersionId ?? '',
+                });
+              }}
+            >
+              <option value="">Select form</option>
+              {investorForms.map((f) => (
+                <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
+                  {f.name} (v{f.version})
+                </option>
+              ))}
+            </Select>
+          </div>
           <Textarea
             className="min-h-48 font-mono text-xs"
             value={csvText}

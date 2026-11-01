@@ -179,6 +179,7 @@ export default function VendorsPage() {
               id: f.id,
               name: f.name,
               code: f.code,
+              targetType: f.targetType ?? null,
               formVersionId: published.id,
               version: published.version,
             }
@@ -188,12 +189,38 @@ export default function VendorsPage() {
       id: string;
       name: string;
       code: string;
+      targetType: string | null;
       formVersionId: string;
       version: number;
     }>;
   }, [forms.data]);
 
+  const innovatorForms = useMemo(() => {
+    const preferred = publishedForms.filter(
+      (f) =>
+        f.targetType === 'VENDOR' ||
+        f.code.toUpperCase().includes('INNOVATOR'),
+    );
+    return preferred.length > 0 ? preferred : publishedForms;
+  }, [publishedForms]);
+
   const items = data?.items ?? [];
+
+  useEffect(() => {
+    if ((!addOpen && !csvOpen) || form.formId || innovatorForms.length === 0) {
+      return;
+    }
+    const preferred =
+      innovatorForms.find((f) =>
+        f.code.toUpperCase().includes('INNOVATOR'),
+      ) ?? innovatorForms[0];
+    if (!preferred) return;
+    setForm((prev) => ({
+      ...prev,
+      formId: preferred.id,
+      formVersionId: preferred.formVersionId,
+    }));
+  }, [addOpen, csvOpen, form.formId, innovatorForms]);
 
   const invite = useMutation({
     mutationFn: () =>
@@ -208,8 +235,8 @@ export default function VendorsPage() {
           email: form.email,
           phone: form.phone || undefined,
           phoneCountryCode: form.phone ? form.phoneCountryCode : undefined,
-          formId: form.formId || undefined,
-          formVersionId: form.formVersionId || undefined,
+          formId: form.formId,
+          formVersionId: form.formVersionId,
         }),
       }),
     onSuccess: () => {
@@ -266,7 +293,7 @@ export default function VendorsPage() {
       <PageHeader
         eyebrow="Organizations"
         title="Innovators"
-        description="Invite innovators by email with an optional onboarding form link."
+        description="Invite innovators by email and choose which onboarding form they complete."
         actions={
           <>
             <Button variant="outline" onClick={() => setCsvOpen(true)}>
@@ -423,7 +450,7 @@ export default function VendorsPage() {
       <Modal
         open={addOpen}
         title="Invite innovator"
-        description="Send an email with a registration link. Optionally attach a form for profile details."
+        description="Send an email with a registration link and the selected onboarding form."
         onClose={() => setAddOpen(false)}
         wide
         footer={
@@ -434,7 +461,12 @@ export default function VendorsPage() {
             <Button
               onClick={() => invite.mutate()}
               loading={invite.isPending}
-              disabled={!form.name.trim() || !form.email.trim()}
+              disabled={
+                !form.name.trim() ||
+                !form.email.trim() ||
+                !form.formId ||
+                !form.formVersionId
+              }
             >
               {invite.isPending ? 'Sending…' : 'Add & send email'}
             </Button>
@@ -444,7 +476,7 @@ export default function VendorsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Select form link
+              Select form (required)
             </label>
             <Select
               value={
@@ -466,15 +498,20 @@ export default function VendorsPage() {
                 });
               }}
             >
-              <option value="">No form (invite only)</option>
-              {publishedForms.map((f) => (
+              <option value="">Select form</option>
+              {innovatorForms.map((f) => (
                 <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
                   {f.name} (v{f.version})
                 </option>
               ))}
             </Select>
-            {forms.isLoading && (
+            {forms.isLoading ? (
               <p className="mt-1 text-xs text-[var(--muted)]">Loading forms…</p>
+            ) : (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Invitation link opens this form after the innovator creates an
+                account.
+              </p>
             )}
           </div>
 
@@ -545,7 +582,9 @@ export default function VendorsPage() {
             <Button
               onClick={() => importCsv.mutate()}
               loading={importCsv.isPending}
-              disabled={!csvText.trim()}
+              disabled={
+                !csvText.trim() || !form.formId || !form.formVersionId
+              }
             >
               {importCsv.isPending ? 'Importing…' : 'Import & invite'}
             </Button>
@@ -555,7 +594,7 @@ export default function VendorsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              Optional form for all rows
+              Select form for all rows (required)
             </label>
             <Select
               value={
@@ -575,8 +614,8 @@ export default function VendorsPage() {
                 });
               }}
             >
-              <option value="">No form</option>
-              {publishedForms.map((f) => (
+              <option value="">Select form</option>
+              {innovatorForms.map((f) => (
                 <option key={f.id} value={`${f.id}::${f.formVersionId}`}>
                   {f.name} (v{f.version})
                 </option>

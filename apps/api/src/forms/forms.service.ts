@@ -785,8 +785,9 @@ export class FormsService {
         where: { id: correction.submissionId },
         data: {
           responses: merged as Prisma.InputJsonValue,
-          status: 'SUBMITTED',
+          status: 'APPROVED',
           submittedAt: new Date(),
+          reviewedAt: new Date(),
           reviewNotes: null,
         },
       });
@@ -796,11 +797,24 @@ export class FormsService {
       });
       await tx.vendor.updateMany({
         where: { organizationId: correction.submission.organizationId },
-        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          matchingEligible: true,
+        },
       });
       await tx.company.updateMany({
         where: { organizationId: correction.submission.organizationId },
-        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          matchingEligible: true,
+        },
+      });
+      await tx.organization.update({
+        where: { id: correction.submission.organizationId },
+        data: { status: 'APPROVED' },
       });
       await this.outbox.enqueue(tx, {
         aggregateType: 'FormSubmission',
@@ -813,7 +827,11 @@ export class FormsService {
     });
 
     await this.normalizeProfile(updated.id);
-    return { submissionId: updated.id, status: updated.status };
+    this.peerRecs.scheduleRecompute(
+      correction.submission.organizationId,
+      'onboarding.correction.verified',
+    );
+    return { submissionId: updated.id, status: 'APPROVED' };
   }
 
   async submit(
@@ -882,29 +900,34 @@ export class FormsService {
           formVersionId: input.formVersionId,
           organizationId: input.organizationId,
           submittedById: actor.id,
-          status: 'SUBMITTED',
+          status: 'APPROVED',
           responses: input.responses as Prisma.InputJsonValue,
           submittedAt: new Date(),
+          reviewedAt: new Date(),
         },
       });
 
+      // Invite/self-serve onboarding: completing the form verifies immediately.
       await tx.vendor.updateMany({
-        where: {
-          organizationId: input.organizationId,
-          approvalStatus: {
-            in: ['INVITED', 'RESEND_FOR_IMPROVEMENTS', 'PENDING'],
-          },
+        where: { organizationId: input.organizationId },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          matchingEligible: true,
         },
-        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
       });
       await tx.company.updateMany({
-        where: {
-          organizationId: input.organizationId,
-          approvalStatus: {
-            in: ['INVITED', 'RESEND_FOR_IMPROVEMENTS', 'PENDING', 'IN_REVIEW'],
-          },
+        where: { organizationId: input.organizationId },
+        data: {
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          matchingEligible: true,
         },
-        data: { approvalStatus: 'WAITING_FOR_REVIEW' },
+      });
+      await tx.organization.update({
+        where: { id: input.organizationId },
+        data: { status: 'APPROVED' },
       });
 
       await this.outbox.enqueue(tx, {
@@ -919,6 +942,10 @@ export class FormsService {
     });
 
     await this.normalizeProfile(submission.id);
+    this.peerRecs.scheduleRecompute(
+      input.organizationId,
+      'onboarding.form.verified',
+    );
 
     return submission;
   }
@@ -1756,9 +1783,7 @@ export class FormsService {
           } as unknown as Prisma.InputJsonValue,
           profileVersion: { increment: 1 },
           onboardingComplete: true,
-          matchingEligible:
-            org.vendor.approvalStatus === 'VERIFIED' ||
-            org.vendor.approvalStatus === 'APPROVED',
+          matchingEligible: true,
         },
       });
     }

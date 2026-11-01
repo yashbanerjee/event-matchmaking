@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { VendorShell } from '@/components/vendor-shell';
 import { apiFetch } from '@/lib/api';
@@ -15,6 +15,7 @@ export default function VendorLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -49,6 +50,16 @@ export default function VendorLayout({
     queryKey: ['portal-onboarding'],
     queryFn: () => fetchOnboarding(),
   });
+
+  useEffect(() => {
+    if (!onboarding.data) return;
+    if (onboarding.data.pendingCount <= 0) return;
+    const onForms =
+      pathname === '/vendor/forms' || pathname.startsWith('/vendor/forms/');
+    if (!onForms) {
+      router.replace('/vendor/forms');
+    }
+  }, [onboarding.data, pathname, router]);
 
   return (
     <VendorShell

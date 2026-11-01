@@ -5,7 +5,7 @@ export default function InvestorRegisterPage() {
     <InvitationRegisterPage
       role="investor"
       headline="Join as an investor"
-      body="Create your account, then complete the water mandate form so we can match you with innovators."
+      body="Create your account, complete the assigned form first, then your verified investor dashboard opens."
     />
   );
 }

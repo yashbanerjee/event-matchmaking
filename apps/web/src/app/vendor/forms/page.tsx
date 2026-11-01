@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '@/components/empty-state';
@@ -29,6 +29,16 @@ export default function VendorFormsPage() {
 
   const items = onboarding.data?.items ?? [];
 
+  useEffect(() => {
+    if (!onboarding.data) return;
+    const pending = onboarding.data.items.find(
+      (item) => item.action === 'submit' || item.action === 'correct',
+    );
+    if (pending) {
+      router.replace(`/vendor/forms/${pending.assignmentId}`);
+    }
+  }, [onboarding.data, router]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return items;
@@ -48,8 +58,8 @@ export default function VendorFormsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Forms"
-        title="Assigned forms"
-        description="Review each form row with status and the date it was filled, then open it to submit or update."
+        title="Complete your profile"
+        description="Finish your assigned form to unlock the innovator dashboard. After submit you are verified automatically."
         actions={
           <Input
             className="max-w-xs"

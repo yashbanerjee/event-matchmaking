@@ -108,11 +108,14 @@ export default function PortalOnboardingPage() {
     onSuccess: async () => {
       setMessage(
         selected?.action === 'correct'
-          ? 'Updates submitted. Waiting for admin review.'
-          : 'Form submitted. Waiting for admin review.',
+          ? 'Updates submitted. Your profile is verified.'
+          : 'Form submitted. You are verified — opening your dashboard…',
       );
       setError('');
       await qc.invalidateQueries({ queryKey: ['portal-onboarding'] });
+      if (selected?.action !== 'correct') {
+        window.setTimeout(() => router.replace('/portal'), 600);
+      }
     },
     onError: (caught) =>
       setError(
@@ -126,12 +129,14 @@ export default function PortalOnboardingPage() {
     <PortalShell email={me.data?.email} pendingForms={onboarding.data?.pendingCount}>
       <PageHeader
         eyebrow="Onboarding"
-        title="Your forms"
-        description="Complete assigned profile forms. After you submit, details stay locked until admin requests specific updates."
+        title="Complete your profile"
+        description="Finish this form to unlock your investor dashboard. After submit you are verified automatically."
         actions={
-          <Button variant="outline" onClick={() => router.push('/portal')}>
-            Meetings
-          </Button>
+          (onboarding.data?.pendingCount ?? 0) > 0 ? null : (
+            <Button variant="outline" onClick={() => router.push('/portal')}>
+              Open dashboard
+            </Button>
+          )
         }
       />
 

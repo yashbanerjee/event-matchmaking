@@ -5,7 +5,7 @@ export default function InnovatorRegisterPage() {
     <InvitationRegisterPage
       role="innovator"
       headline="Join as an innovator"
-      body="Create your account, then complete the solution form so we can match you with investors."
+      body="Create your account, complete the assigned form first, then your verified innovator dashboard opens."
     />
   );
 }

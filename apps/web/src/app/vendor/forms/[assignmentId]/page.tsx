@@ -91,11 +91,14 @@ export default function VendorFormDetailPage() {
     onSuccess: async () => {
       setMessage(
         selected?.action === 'correct'
-          ? 'Updates submitted. Waiting for admin review.'
-          : 'Form submitted. Waiting for admin review.',
+          ? 'Updates submitted. Your profile is verified.'
+          : 'Form submitted. You are verified — opening your dashboard…',
       );
       setError('');
       await qc.invalidateQueries({ queryKey: ['portal-onboarding'] });
+      if (selected?.action !== 'correct') {
+        window.setTimeout(() => router.replace('/vendor'), 600);
+      }
     },
     onError: (caught) =>
       setError(

@@ -8,6 +8,7 @@ import {
   Home,
   Inbox,
   QrCode,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -16,12 +17,13 @@ type NavItem = {
   label: string;
   exact?: boolean;
   badge?: number;
-  icon: 'home' | 'forms' | 'requests' | 'meetings' | 'qr';
+  icon: 'home' | 'forms' | 'recommendations' | 'requests' | 'meetings' | 'qr';
 };
 
 const ICONS = {
   home: Home,
   forms: ClipboardList,
+  recommendations: Sparkles,
   requests: Inbox,
   meetings: CalendarDays,
   qr: QrCode,

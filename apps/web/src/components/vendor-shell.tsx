@@ -15,7 +15,7 @@ import { WorkspaceBottomNav } from './workspace-bottom-nav';
 
 const NAV_ITEMS = [
   { href: '/vendor', label: 'Home', exact: true },
-  { href: '/vendor/forms', label: 'Forms' },
+  { href: '/vendor/recommendations', label: 'Recommendations' },
   { href: '/vendor/requests', label: 'Requests' },
   { href: '/vendor/meetings', label: 'Meetings' },
   { href: '/vendor/qr', label: 'QR' },
@@ -23,11 +23,9 @@ const NAV_ITEMS = [
 
 function SidebarNav({
   pathname,
-  pendingForms,
   openRequests,
 }: {
   pathname: string;
-  pendingForms: number;
   openRequests: number;
 }) {
   return (
@@ -39,12 +37,7 @@ function SidebarNav({
         const active = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const badge =
-          item.href === '/vendor/forms'
-            ? pendingForms
-            : item.href === '/vendor/requests'
-              ? openRequests
-              : 0;
+        const badge = item.href === '/vendor/requests' ? openRequests : 0;
         return (
           <Link
             key={item.href}
@@ -149,11 +142,7 @@ export function VendorShell({
           ) : null}
         </div>
 
-        <SidebarNav
-          pathname={pathname}
-          pendingForms={pendingForms}
-          openRequests={openRequests}
-        />
+        <SidebarNav pathname={pathname} openRequests={openRequests} />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">
           <DemoNotice tone="dark" className="px-1 lg:hidden" />
@@ -180,10 +169,9 @@ export function VendorShell({
         items={[
           { href: '/vendor', label: 'Home', exact: true, icon: 'home' },
           {
-            href: '/vendor/forms',
-            label: 'Forms',
-            icon: 'forms',
-            badge: pendingForms,
+            href: '/vendor/recommendations',
+            label: 'Matches',
+            icon: 'recommendations',
           },
           {
             href: '/vendor/requests',
