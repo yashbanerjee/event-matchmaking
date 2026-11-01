@@ -52,7 +52,14 @@ export function FormRenderer({
   const sections = [...schema.sections].sort((a, b) => a.order - b.order);
   return (
     <div className="grid gap-4">
-      {sections.map((section) => (
+      {sections.map((section) => {
+        const sectionFields = schema.fields
+          .filter((field) => field.sectionId === section.id)
+          .sort((a, b) => a.order - b.order)
+          .filter((field) => (visible ? visible.has(field.id) : true))
+          .filter((field) => isFieldVisible(field, values, byId));
+        if (sectionFields.length === 0) return null;
+        return (
         <section
           key={section.id}
           className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"
@@ -64,12 +71,7 @@ export function FormRenderer({
             </p>
           ) : null}
           <div className="grid gap-4">
-            {schema.fields
-              .filter((field) => field.sectionId === section.id)
-              .sort((a, b) => a.order - b.order)
-              .filter((field) => (visible ? visible.has(field.id) : true))
-              .filter((field) => isFieldVisible(field, values, byId))
-              .map((field) => (
+            {sectionFields.map((field) => (
                 <div
                   key={field.id}
                   onClick={() => onSelectField?.(field.id)}
@@ -100,7 +102,8 @@ export function FormRenderer({
               ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }

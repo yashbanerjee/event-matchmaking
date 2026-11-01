@@ -219,24 +219,11 @@ export class PeerRecommendationsService {
     );
 
     // Admin pins first, then by score. COMPUTED rows must meet score + tag floors.
-    const visible = items
-      .filter((row) => {
-        if (row.source === 'MANUAL') return true;
-        if (row.totalScore < threshold) return false;
-        const breakdown =
-          row.scoreBreakdown &&
-          typeof row.scoreBreakdown === 'object' &&
-          !Array.isArray(row.scoreBreakdown)
-            ? (row.scoreBreakdown as Record<string, unknown>)
-            : {};
-        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
-          .ok;
-      })
-      .sort((a, b) => {
-        if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
-        return b.totalScore - a.totalScore;
-      })
-      .slice(0, max);
+    const visible = this.filterVisibleRecommendations(
+      items,
+      threshold,
+      tagCategoryThresholds,
+    ).slice(0, max);
 
     return {
       organization: org,
@@ -514,6 +501,10 @@ export class PeerRecommendationsService {
   }) {
     const page = Math.max(1, input.page ?? 1);
     const pageSize = Math.min(Math.max(input.pageSize ?? 20, 1), 50);
+    const threshold = await this.getRecommendationThreshold();
+    const tagCategoryThresholds = resolveTagCategoryThresholds(
+      await this.config.getRaw('ops.tagCategoryThresholds'),
+    );
     const where: Prisma.OrganizationWhereInput = {
       status: { not: 'ARCHIVED' },
       type: input.type ? input.type : { in: ['COMPANY', 'VENDOR'] },
@@ -550,43 +541,82 @@ export class PeerRecommendationsService {
           company: { select: { matchingEligible: true, featured: true } },
           vendor: { select: { matchingEligible: true, featured: true } },
           peerRecommendationsFrom: {
-            orderBy: { totalScore: 'desc' },
-            take: PEER_RECOMMENDATIONS_MAX_PER_ORG,
+            orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
+            // Fetch extra so threshold/tag floors can drop low scores and
+            // still leave enough visible matches for the overview chips.
+            take: Math.max(PEER_RECOMMENDATIONS_MAX_PER_ORG * 6, 30),
             include: {
               toOrg: {
                 select: { id: true, name: true, type: true, industry: true },
               },
             },
           },
-          _count: {
-            select: { peerRecommendationsFrom: true },
-          },
         },
       }),
     ]);
 
     return {
-      items: orgs.map((org) => ({
-        organizationId: org.id,
-        name: org.name,
-        type: org.type,
-        industry: org.industry,
-        featured: Boolean(org.company?.featured || org.vendor?.featured),
-        recommendationCount: org._count.peerRecommendationsFrom,
-        topRecommendations: org.peerRecommendationsFrom.map((row) => ({
-          toOrg: row.toOrg,
-          source: row.source,
-          totalScore: row.totalScore,
-          aiScore: row.aiScore,
-          aiDescription: row.aiDescription,
-          reasons: row.reasons as string[],
-          computedAt: row.computedAt,
-        })),
-      })),
+      items: orgs.map((org) => {
+        const visible = this.filterVisibleRecommendations(
+          org.peerRecommendationsFrom,
+          threshold,
+          tagCategoryThresholds,
+        ).slice(0, PEER_RECOMMENDATIONS_MAX_PER_ORG);
+        return {
+          organizationId: org.id,
+          name: org.name,
+          type: org.type,
+          industry: org.industry,
+          featured: Boolean(org.company?.featured || org.vendor?.featured),
+          recommendationCount: visible.length,
+          scoreThreshold: threshold,
+          topRecommendations: visible.map((row) => ({
+            toOrg: row.toOrg,
+            source: row.source,
+            totalScore: row.totalScore,
+            aiScore: row.aiScore,
+            aiDescription: row.aiDescription,
+            reasons: row.reasons as string[],
+            computedAt: row.computedAt,
+          })),
+        };
+      }),
+      scoreThreshold: threshold,
       page,
       pageSize,
       total,
     };
+  }
+
+  /** Same visibility rules as Manage / participant Recommendations. */
+  private filterVisibleRecommendations<
+    T extends {
+      source: string;
+      totalScore: number;
+      scoreBreakdown?: unknown;
+    },
+  >(
+    rows: T[],
+    threshold: number,
+    tagCategoryThresholds: TagCategoryThresholds,
+  ): T[] {
+    return rows
+      .filter((row) => {
+        if (row.source === 'MANUAL') return true;
+        if (row.totalScore < threshold) return false;
+        const breakdown =
+          row.scoreBreakdown &&
+          typeof row.scoreBreakdown === 'object' &&
+          !Array.isArray(row.scoreBreakdown)
+            ? (row.scoreBreakdown as Record<string, unknown>)
+            : {};
+        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
+          .ok;
+      })
+      .sort((a, b) => {
+        if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
+        return b.totalScore - a.totalScore;
+      });
   }
 
   async recomputeForOrganization(organizationId: string) {

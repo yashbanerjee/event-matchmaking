@@ -20,6 +20,12 @@ import {
   type EventSchedule,
 } from '@/lib/event-schedule';
 import type { OnboardingItem } from '@/lib/portal-onboarding';
+import {
+  applyIdentityResponses,
+  fullNameFromIdentity,
+  withoutIdentityFields,
+  withoutKnownIdentityFields,
+} from '@/lib/registration-identity';
 import { formatVendorStatus, statusTone } from '@/lib/status';
 import { cn } from '@/lib/utils';
 
@@ -125,6 +131,16 @@ export function OnboardingFormWorkspace({
   const selected =
     items.find((item) => item.assignmentId === selectedId) ?? items[0] ?? null;
 
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: () =>
+      apiFetch<{
+        email: string;
+        firstName?: string | null;
+        lastName?: string | null;
+      }>('/auth/me', { token: getAccessToken() }),
+  });
+
   const bookingWindow = useQuery({
     queryKey: ['meeting-booking-window'],
     queryFn: () =>
@@ -174,8 +190,28 @@ export function OnboardingFormWorkspace({
     selected,
   ]);
 
+  const identity = useMemo(
+    () => ({
+      firstName: me.data?.firstName ?? '',
+      lastName: me.data?.lastName ?? '',
+      email: me.data?.email ?? '',
+      organizationName: selected?.organizationName ?? '',
+    }),
+    [
+      me.data?.email,
+      me.data?.firstName,
+      me.data?.lastName,
+      selected?.organizationName,
+    ],
+  );
+
   const profileSchema = useMemo(() => {
     if (!selected) return null;
+    if (selected.action === 'submit') {
+      return me.isSuccess
+        ? withoutKnownIdentityFields(selected.schema, identity)
+        : withoutIdentityFields(selected.schema);
+    }
     return {
       ...selected.schema,
       fields: selected.schema.fields.filter(
@@ -184,7 +220,7 @@ export function OnboardingFormWorkspace({
           !field.key.startsWith('availability_'),
       ),
     };
-  }, [selected]);
+  }, [identity, me.isSuccess, selected]);
 
   const editableFieldIds = useMemo(() => {
     if (!selected) return undefined;
@@ -215,7 +251,11 @@ export function OnboardingFormWorkspace({
         throw new Error('Pick at least one event day and a valid time window.');
       }
 
-      const base = responsesByFieldKey(selected.schema, values);
+      const base = applyIdentityResponses(
+        selected.schema,
+        responsesByFieldKey(selected.schema, values),
+        identity,
+      );
       const payloadWindows: Record<string, DayWindow> = {};
       for (const date of selectedDates) {
         payloadWindows[date] = windows[date] ?? {
@@ -364,6 +404,22 @@ export function OnboardingFormWorkspace({
                   ? 'Profile details used for matchmaking'
                   : 'Choose event days and hours — same flow as event registration'}
               </p>
+              {selected.action === 'submit' &&
+              (fullNameFromIdentity(identity) || identity.email) ? (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  Using{' '}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {[
+                      fullNameFromIdentity(identity),
+                      identity.email,
+                      identity.organizationName,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                  . Name, email, and organization are already on your account.
+                </p>
+              ) : null}
             </div>
             {canEdit ? (
               <p className="rounded-full bg-[var(--card-elevated)] px-3 py-1 text-xs font-semibold text-[var(--muted)]">

@@ -20,6 +20,10 @@ import { apiFetch } from '@/lib/api';
 import { setTokens } from '@/lib/auth-store';
 import { BRAND } from '@/lib/brand';
 import { resolveParticipantHome } from '@/lib/portal-onboarding';
+import {
+  applyIdentityResponses,
+  withoutIdentityFields,
+} from '@/lib/registration-identity';
 import { cn } from '@/lib/utils';
 
 type PublicConfig = {
@@ -183,18 +187,11 @@ function EventRegisterForm() {
     enabled: Boolean(role),
   });
 
-  const schema = useMemo(() => {
-    const next = config.data?.schema;
-    if (!next) return null;
-    return {
-      ...next,
-      fields: next.fields.filter(
-        (f) =>
-          f.key !== 'participant_role' &&
-          !f.key.startsWith('availability_'),
-      ),
-    };
-  }, [config.data?.schema]);
+  const fullSchema = config.data?.schema ?? null;
+  const schema = useMemo(
+    () => (fullSchema ? withoutIdentityFields(fullSchema) : null),
+    [fullSchema],
+  );
 
   const schedule = config.data ?? status.data;
   const eventDates = schedule?.eventDates ?? [];
@@ -207,7 +204,19 @@ function EventRegisterForm() {
       if (!schema || !role) {
         throw new Error('Select a role and complete the form first');
       }
-      const formResponses = responsesByFieldKey(schema, values);
+      if (!firstName.trim() || !lastName.trim()) {
+        throw new Error('Enter your first and last name');
+      }
+      const formResponses = applyIdentityResponses(
+        fullSchema ?? schema,
+        responsesByFieldKey(schema, values),
+        {
+          firstName,
+          lastName,
+          email,
+          organizationName,
+        },
+      );
       const windows: Record<string, { start: string; end: string }> = {};
       for (const date of selectedDates) {
         windows[date] = availabilityWindows[date] ?? {
@@ -257,26 +266,6 @@ function EventRegisterForm() {
     onSuccess: (res) => {
       setError('');
       setRegistrationToken(res.registrationToken);
-      // Prefill account name from personal details when possible.
-      if (!firstName.trim() || !lastName.trim()) {
-        const contact =
-          typeof values[
-            schema?.fields.find((f) => f.key === 'contact_name')?.id ?? ''
-          ] === 'string'
-            ? String(
-                values[
-                  schema?.fields.find((f) => f.key === 'contact_name')?.id ?? ''
-                ],
-              ).trim()
-            : '';
-        if (contact) {
-          const parts = contact.split(/\s+/);
-          if (!firstName.trim() && parts[0]) setFirstName(parts[0]);
-          if (!lastName.trim() && parts.length > 1) {
-            setLastName(parts.slice(1).join(' '));
-          }
-        }
-      }
       setStep(4);
     },
     onError: (caught) => setError((caught as Error).message),
@@ -454,6 +443,28 @@ function EventRegisterForm() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">
+                    First name
+                  </label>
+                  <Input
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="First name"
+                    autoComplete="given-name"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Last name
+                  </label>
+                  <Input
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last name"
+                    autoComplete="family-name"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
                     Work email
                   </label>
                   <Input
@@ -509,6 +520,8 @@ function EventRegisterForm() {
                 className="w-full sm:w-auto sm:min-w-52"
                 size="lg"
                 disabled={
+                  !firstName.trim() ||
+                  !lastName.trim() ||
                   !email.trim() ||
                   !role ||
                   !organizationName.trim() ||
@@ -641,27 +654,18 @@ function EventRegisterForm() {
               className="mx-auto max-w-md space-y-4"
               style={{ animation: 'rise-in 0.45s ease-out both' }}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    First name
-                  </label>
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    autoComplete="given-name"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    Last name
-                  </label>
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    autoComplete="family-name"
-                  />
-                </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/80 px-4 py-3 text-sm leading-relaxed text-[var(--muted)]">
+                Account for{' '}
+                <span className="font-semibold text-[var(--foreground)]">
+                  {[firstName.trim(), lastName.trim()].filter(Boolean).join(' ') ||
+                    'your profile'}
+                </span>
+                {email.trim() ? (
+                  <>
+                    {' '}
+                    · {email.trim()}
+                  </>
+                ) : null}
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
@@ -692,12 +696,7 @@ function EventRegisterForm() {
                 className="w-full"
                 size="lg"
                 loading={complete.isPending}
-                disabled={
-                  !firstName.trim() ||
-                  !lastName.trim() ||
-                  password.length < 4 ||
-                  password !== confirmPassword
-                }
+                disabled={password.length < 4 || password !== confirmPassword}
                 onClick={() => {
                   if (password !== confirmPassword) {
                     setError('Passwords do not match');

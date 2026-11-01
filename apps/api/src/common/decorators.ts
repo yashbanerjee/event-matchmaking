@@ -17,6 +17,8 @@ export const RequireRoles = (...roles: RoleCode[]) =>
 export interface AuthUser {
   id: string;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
   roles: RoleCode[];
   permissions: PermissionCode[];
   organizationIds: string[];
