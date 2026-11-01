@@ -62,6 +62,7 @@ export class FiltersController {
       profileKey?: string;
       isActive?: boolean;
       sortOrder?: number;
+      selectionMode?: 'single' | 'multi';
     },
   ) {
     return this.filters.updateDimension(user, id, body);

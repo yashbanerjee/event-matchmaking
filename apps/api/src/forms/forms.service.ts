@@ -76,10 +76,13 @@ export class FormsService {
     ];
     if (!dimensionIds.length) return schema;
 
-    const tags = await this.prisma.filterTag.findMany({
-      where: { dimensionId: { in: dimensionIds }, isActive: true },
-      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
-    });
+    const [tags, selectionModes] = await Promise.all([
+      this.prisma.filterTag.findMany({
+        where: { dimensionId: { in: dimensionIds }, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      }),
+      this.getFilterSelectionModes(),
+    ]);
     const byDimension = new Map<string, { value: string; label: string }[]>();
     for (const tag of tags) {
       const list = byDimension.get(tag.dimensionId) ?? [];
@@ -91,10 +94,35 @@ export class FormsService {
       ...schema,
       fields: schema.fields.map((field) => {
         if (!field.filterDimensionId) return field;
-        const options = byDimension.get(field.filterDimensionId) ?? [];
-        return { ...field, options };
+        const live = byDimension.get(field.filterDimensionId) ?? [];
+        const options = live.length ? live : (field.options ?? []);
+        const mode = selectionModes[field.filterDimensionId];
+        const type =
+          mode === 'single'
+            ? ('select' as const)
+            : mode === 'multi'
+              ? ('multiselect' as const)
+              : field.type === 'select' || field.type === 'multiselect'
+                ? field.type
+                : ('multiselect' as const);
+        return { ...field, options, type };
       }),
     };
+  }
+
+  private async getFilterSelectionModes(): Promise<
+    Record<string, 'single' | 'multi'>
+  > {
+    const row = await this.prisma.systemSetting.findUnique({
+      where: { key: 'filters.selectionModes' },
+    });
+    const value = (row?.value as { value?: unknown } | null)?.value;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const out: Record<string, 'single' | 'multi'> = {};
+    for (const [id, mode] of Object.entries(value as Record<string, unknown>)) {
+      if (mode === 'single' || mode === 'multi') out[id] = mode;
+    }
+    return out;
   }
 
   async createForm(

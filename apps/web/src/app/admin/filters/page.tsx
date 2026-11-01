@@ -30,6 +30,7 @@ type FilterDimension = {
   description: string | null;
   profileKey: string;
   isActive: boolean;
+  selectionMode?: 'single' | 'multi';
   tags: FilterTag[];
 };
 
@@ -124,6 +125,20 @@ export default function AdminFiltersPage() {
       apiFetch(`/filters/tags/${id}`, {
         method: 'DELETE',
         token: getAccessToken(),
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['filter-dimensions'] }),
+  });
+
+  const updateSelectionMode = useMutation({
+    mutationFn: (input: {
+      id: string;
+      selectionMode: 'single' | 'multi';
+    }) =>
+      apiFetch(`/filters/dimensions/${input.id}`, {
+        method: 'PATCH',
+        token: getAccessToken(),
+        body: JSON.stringify({ selectionMode: input.selectionMode }),
       }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ['filter-dimensions'] }),
@@ -227,6 +242,58 @@ export default function AdminFiltersPage() {
                     </p>
                   ) : null}
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-elevated)]/70 p-4">
+                <p className="text-sm font-medium">Form dropdown type</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Controls whether registration forms show a single-select or
+                  multi-select dropdown for these tags.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      {
+                        id: 'single' as const,
+                        title: 'Single select',
+                        body: 'User picks one option from a dropdown.',
+                      },
+                      {
+                        id: 'multi' as const,
+                        title: 'Multi select',
+                        body: 'User can pick several options from a dropdown.',
+                      },
+                    ] as const
+                  ).map((option) => {
+                    const active =
+                      (selected.selectionMode ?? 'multi') === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() =>
+                          updateSelectionMode.mutate({
+                            id: selected.id,
+                            selectionMode: option.id,
+                          })
+                        }
+                        className={`rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${
+                          active
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)]/70 ring-1 ring-[var(--accent)]/30'
+                            : 'border-[var(--border)] bg-white hover:border-[var(--accent)]/40'
+                        }`}
+                      >
+                        <p className="font-semibold">{option.title}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          {option.body}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {updateSelectionMode.isPending ? (
+                  <p className="mt-2 text-xs text-[var(--muted)]">Saving…</p>
+                ) : null}
               </div>
 
               <form onSubmit={submitTag} className="space-y-2">

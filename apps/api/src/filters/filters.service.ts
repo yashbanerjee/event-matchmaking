@@ -25,6 +25,12 @@ function slugify(raw: string) {
     .slice(0, 80);
 }
 
+/** Default form control for known filter groups. */
+function defaultSelectionMode(code: string): 'single' | 'multi' {
+  if (code === 'industry' || code === 'investment_stages') return 'single';
+  return 'multi';
+}
+
 @Injectable()
 export class FiltersService {
   constructor(
@@ -32,17 +38,25 @@ export class FiltersService {
     private readonly audit: AuditService,
   ) {}
 
-  listDimensions(params?: { activeOnly?: boolean }) {
-    return this.prisma.filterDimension.findMany({
-      where: params?.activeOnly ? { isActive: true } : undefined,
-      include: {
-        tags: {
-          where: params?.activeOnly ? { isActive: true } : undefined,
-          orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+  async listDimensions(params?: { activeOnly?: boolean }) {
+    const [rows, modes] = await Promise.all([
+      this.prisma.filterDimension.findMany({
+        where: params?.activeOnly ? { isActive: true } : undefined,
+        include: {
+          tags: {
+            where: params?.activeOnly ? { isActive: true } : undefined,
+            orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+          },
         },
-      },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      this.getSelectionModes(),
+    ]);
+
+    return rows.map((row) => ({
+      ...row,
+      selectionMode: modes[row.id] ?? defaultSelectionMode(row.code),
+    }));
   }
 
   async createDimension(
@@ -83,7 +97,10 @@ export class FiltersService {
       outcome: 'SUCCESS',
     });
 
-    return created;
+    return {
+      ...created,
+      selectionMode: defaultSelectionMode(created.code),
+    };
   }
 
   async updateDimension(
@@ -95,6 +112,7 @@ export class FiltersService {
       profileKey?: string;
       isActive?: boolean;
       sortOrder?: number;
+      selectionMode?: 'single' | 'multi';
     },
   ) {
     const existing = await this.prisma.filterDimension.findUnique({
@@ -106,6 +124,13 @@ export class FiltersService {
       throw new BadRequestException(
         `profileKey must be one of: ${[...PROFILE_KEYS].join(', ')}`,
       );
+    }
+    if (
+      input.selectionMode !== undefined &&
+      input.selectionMode !== 'single' &&
+      input.selectionMode !== 'multi'
+    ) {
+      throw new BadRequestException('selectionMode must be single or multi');
     }
 
     const updated = await this.prisma.filterDimension.update({
@@ -126,6 +151,15 @@ export class FiltersService {
       },
     });
 
+    let selectionMode =
+      input.selectionMode ??
+      (await this.getSelectionModes())[id] ??
+      defaultSelectionMode(existing.code);
+
+    if (input.selectionMode) {
+      selectionMode = await this.setSelectionMode(id, input.selectionMode);
+    }
+
     await this.audit.record({
       actorId: actor.id,
       action: 'filter_dimension.update',
@@ -134,7 +168,35 @@ export class FiltersService {
       outcome: 'SUCCESS',
     });
 
-    return updated;
+    return { ...updated, selectionMode };
+  }
+
+  private async getSelectionModes(): Promise<
+    Record<string, 'single' | 'multi'>
+  > {
+    const row = await this.prisma.systemSetting.findUnique({
+      where: { key: 'filters.selectionModes' },
+    });
+    const value = (row?.value as { value?: unknown } | null)?.value;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const out: Record<string, 'single' | 'multi'> = {};
+    for (const [dimId, mode] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (mode === 'single' || mode === 'multi') out[dimId] = mode;
+    }
+    return out;
+  }
+
+  private async setSelectionMode(id: string, mode: 'single' | 'multi') {
+    const current = await this.getSelectionModes();
+    current[id] = mode;
+    await this.prisma.systemSetting.upsert({
+      where: { key: 'filters.selectionModes' },
+      create: { key: 'filters.selectionModes', value: { value: current } },
+      update: { value: { value: current } },
+    });
+    return mode;
   }
 
   async createTag(

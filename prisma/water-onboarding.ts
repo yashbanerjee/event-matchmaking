@@ -784,6 +784,34 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
   // Delete every other form so the product only has these two.
   await deleteFormsExcept(prisma, [...KEEP_FORM_CODES]);
 
+  // Default dropdown modes for filter tags on registration forms.
+  const selectionModes: Record<string, 'single' | 'multi'> = {};
+  for (const [code, mode] of Object.entries({
+    industry: 'single',
+    investment_stages: 'single',
+    category: 'multi',
+    pv: 'multi',
+    event_categories: 'multi',
+    preferred_categories: 'multi',
+    venues: 'multi',
+    capabilities: 'multi',
+    ethara_services: 'multi',
+    commercial_tags: 'multi',
+  } as const)) {
+    const id = dimensionIds[code];
+    if (id) selectionModes[id] = mode;
+  }
+  if (Object.keys(selectionModes).length) {
+    await prisma.systemSetting.upsert({
+      where: { key: 'filters.selectionModes' },
+      create: {
+        key: 'filters.selectionModes',
+        value: { value: selectionModes },
+      },
+      update: { value: { value: selectionModes } },
+    });
+  }
+
   const dualFormSettings = [
     {
       key: 'registration.investorFormId',

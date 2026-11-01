@@ -321,11 +321,17 @@ function Control({
                 ? `Select ${field.label.toLowerCase()}`
                 : 'Select')}
         </option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
+        {options.length === 0 ? (
+          <option value="" disabled>
+            No options yet — add tags in Admin → Filters
           </option>
-        ))}
+        ) : (
+          options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))
+        )}
       </Select>
     );
   }
@@ -347,7 +353,19 @@ function Control({
       </div>
     );
   }
-  if (field.type === 'multiselect' || field.type === 'checkbox') {
+  if (field.type === 'multiselect') {
+    return (
+      <MultiSelectDropdown
+        id={id}
+        field={field}
+        value={value}
+        editable={editable}
+        describedBy={describedBy}
+        onChange={onChange}
+      />
+    );
+  }
+  if (field.type === 'checkbox') {
     const selected = Array.isArray(value) ? value.map(String) : [];
     return (
       <div className="grid gap-1">
@@ -582,6 +600,121 @@ function FileField({
             onChange={(event) => void pick(event)}
           />
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MultiSelectDropdown({
+  id,
+  field,
+  value,
+  editable,
+  describedBy,
+  onChange,
+}: {
+  id: string;
+  field: FormField;
+  value: unknown;
+  editable: boolean;
+  describedBy?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const options = field.options ?? [];
+  const selected = Array.isArray(value) ? value.map(String) : [];
+  const selectedLabels = options
+    .filter((option) => selected.includes(option.value))
+    .map((option) => option.label);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  if (!options.length) {
+    return (
+      <p className="rounded-xl border border-dashed border-[var(--border)] px-3 py-2 text-sm text-[var(--muted)]">
+        No options yet. Add tags under Admin → Filters.
+      </p>
+    );
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        id={id}
+        type="button"
+        disabled={!editable}
+        aria-describedby={describedBy}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          controlClassName,
+          'flex w-full items-center justify-between gap-2 text-left',
+          !selectedLabels.length && 'text-[var(--muted)]',
+        )}
+      >
+        <span className="min-w-0 truncate">
+          {selectedLabels.length
+            ? selectedLabels.join(', ')
+            : field.placeholder?.trim() || 'Select one or more'}
+        </span>
+        <span className="shrink-0 text-[var(--muted)]">{open ? '▴' : '▾'}</span>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-multiselectable
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--border)] bg-white p-2 shadow-[var(--shadow)]"
+        >
+          {options.map((option) => {
+            const checked = selected.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--card-elevated)]',
+                  checked && 'bg-[var(--accent-soft)]/60',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  disabled={!editable}
+                  checked={checked}
+                  onChange={(event) =>
+                    onChange(
+                      event.target.checked
+                        ? [...selected, option.value]
+                        : selected.filter((item) => item !== option.value),
+                    )
+                  }
+                />
+                <span>{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+      {selectedLabels.length ? (
+        <p className="mt-1 text-xs text-[var(--muted)]">
+          {selectedLabels.length} selected
+        </p>
       ) : null}
     </div>
   );

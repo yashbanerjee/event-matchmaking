@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
+import { cn } from '@/lib/utils';
 
 type FormDetail = {
   id: string;
@@ -64,6 +65,7 @@ export default function FormBuilderPage() {
           name: string;
           code: string;
           profileKey: string;
+          selectionMode?: 'single' | 'multi';
           tags: Array<{ value: string; label: string; isActive: boolean }>;
         }>
       >('/filters/dimensions?activeOnly=1', {
@@ -185,6 +187,7 @@ export default function FormBuilderPage() {
     name: string;
     code: string;
     profileKey: string;
+    selectionMode?: 'single' | 'multi';
     tags: Array<{ value: string; label: string; isActive: boolean }>;
   }) {
     if (!sectionId) return;
@@ -198,12 +201,17 @@ export default function FormBuilderPage() {
       return;
     }
     const id = crypto.randomUUID();
+    const selectionMode =
+      dimension.selectionMode === 'single' ? 'single' : 'multi';
     const next: FormField = {
       id,
       key: uniqueKey(dimension.profileKey || dimension.code || dimension.name),
-      type: 'select',
+      type: selectionMode === 'single' ? 'select' : 'multiselect',
       label: dimension.name,
-      description: `Choose one ${dimension.name.toLowerCase()} option`,
+      description:
+        selectionMode === 'single'
+          ? `Choose one ${dimension.name.toLowerCase()} option`
+          : `Choose one or more ${dimension.name.toLowerCase()} options`,
       required: true,
       placeholder: `Select ${dimension.name.toLowerCase()}`,
       options,
@@ -431,12 +439,19 @@ export default function FormBuilderPage() {
                               value: tag.value,
                               label: tag.label,
                             }));
+                          const mode =
+                            dimension &&
+                            'selectionMode' in dimension &&
+                            dimension.selectionMode === 'single'
+                              ? 'single'
+                              : 'multi';
                           updateField(field.id, {
                             filterDimensionId: dimensionId,
-                            type: dimensionId ? 'select' : field.type,
                             ...(dimension
                               ? {
                                   options,
+                                  type:
+                                    mode === 'single' ? 'select' : 'multiselect',
                                   label: field.label || dimension.name,
                                   placeholder: `Select ${dimension.name.toLowerCase()}`,
                                   key: normalizeInternalKey(
@@ -452,6 +467,9 @@ export default function FormBuilderPage() {
                           <option key={dim.id} value={dim.id}>
                             {dim.name} (
                             {dim.tags.filter((t) => t.isActive).length} tags)
+                            {'selectionMode' in dim && dim.selectionMode
+                              ? ` · ${dim.selectionMode}`
+                              : ''}
                           </option>
                         ))}
                       </Select>
@@ -459,24 +477,60 @@ export default function FormBuilderPage() {
                     {field.filterDimensionId ? (
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--card-elevated)] p-2.5">
                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                          Dropdown type
+                        </p>
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          {(
+                            [
+                              { id: 'select' as const, label: 'Single select' },
+                              {
+                                id: 'multiselect' as const,
+                                label: 'Multi select',
+                              },
+                            ] as const
+                          ).map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={cn(
+                                'rounded-lg border px-2 py-1.5 text-xs font-medium',
+                                field.type === option.id
+                                  ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                                  : 'border-[var(--border)] bg-white',
+                              )}
+                              onClick={() =>
+                                updateField(field.id, { type: option.id })
+                              }
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                           Dropdown options
                         </p>
                         <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
-                          {(field.options ?? []).map((option) => (
-                            <li
-                              key={option.value}
-                              className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-1"
-                            >
-                              <span>{option.label}</span>
-                              <code className="text-[11px] text-[var(--muted)]">
-                                {option.value}
-                              </code>
+                          {(field.options ?? []).length === 0 ? (
+                            <li className="text-[var(--muted)]">
+                              No tags yet. Add them under Admin → Filters.
                             </li>
-                          ))}
+                          ) : (
+                            (field.options ?? []).map((option) => (
+                              <li
+                                key={option.value}
+                                className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-1"
+                              >
+                                <span>{option.label}</span>
+                                <code className="text-[11px] text-[var(--muted)]">
+                                  {option.value}
+                                </code>
+                              </li>
+                            ))
+                          )}
                         </ul>
                         <p className="mt-2 text-xs text-[var(--muted)]">
-                          Innovators/investors pick one value from this dropdown.
-                          Save or publish to refresh tags from Filters.
+                          Change Single/Multi here or under Admin → Filters.
+                          Save or publish to refresh tags.
                         </p>
                       </div>
                     ) : (
