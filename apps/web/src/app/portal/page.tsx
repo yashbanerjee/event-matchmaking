@@ -7,9 +7,7 @@ import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
 import { PageHeader } from '@/components/page-header';
 import { PortalShell } from '@/components/portal-shell';
-import { RecommendationsPanel } from '@/components/recommendations-panel';
 import {
-  OverviewFormCards,
   OverviewMeetingCards,
   OverviewRequestCards,
   OverviewStatStrip,
@@ -17,7 +15,6 @@ import {
 } from '@/components/overview-home';
 import { fetchOnboarding } from '@/lib/portal-onboarding';
 import { ensurePushSubscription } from '@/lib/push-subscribe';
-import { labelForFormItem, statusForFormItem } from '@/lib/vendor-forms';
 
 type Meeting = {
   id: string;
@@ -126,22 +123,6 @@ export default function PortalPage() {
       }));
   }, [meetings.data?.items]);
 
-  const formCards = useMemo(
-    () =>
-      (onboarding.data?.items ?? []).map((item) => {
-        const status = statusForFormItem(item);
-        return {
-          id: item.assignmentId,
-          name: item.formName,
-          statusLabel: labelForFormItem(item),
-          statusToneKey: status,
-          filledOn: item.submission?.submittedAt ?? null,
-          href: `/portal/onboarding`,
-        };
-      }),
-    [onboarding.data?.items],
-  );
-
   const confirmed = (meetings.data?.items ?? []).filter(
     (m) => m.status === 'CONFIRMED',
   ).length;
@@ -169,10 +150,6 @@ export default function PortalPage() {
             },
             { label: 'Open requests', value: openRequestItems.length },
             { label: 'Confirmed', value: confirmed },
-            {
-              label: 'Forms',
-              value: onboarding.data?.items.length ?? 0,
-            },
           ]}
         />
 
@@ -194,14 +171,6 @@ export default function PortalPage() {
             meetingsHref="/portal/meetings"
           />
         </div>
-
-        <OverviewFormCards items={formCards} formsHref="/portal/onboarding" />
-
-        <RecommendationsPanel
-          fromOrgId={me.data?.organizationIds?.[0]}
-          title="Recommended innovators"
-          description="Admin suggestions plus innovators matched to your categories and capabilities."
-        />
       </div>
     </PortalShell>
   );

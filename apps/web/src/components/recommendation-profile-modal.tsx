@@ -104,7 +104,7 @@ export function RecommendationProfileModal({
           : 'Loading public profile details…'
       }
       onClose={onClose}
-      wide
+      size="full"
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-[var(--muted)]">

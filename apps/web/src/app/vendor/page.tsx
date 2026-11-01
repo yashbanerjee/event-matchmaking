@@ -3,9 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { PageHeader } from '@/components/page-header';
-import { RecommendationsPanel } from '@/components/recommendations-panel';
 import {
-  OverviewFormCards,
   OverviewMeetingCards,
   OverviewRequestCards,
   OverviewStatStrip,
@@ -13,8 +11,6 @@ import {
 } from '@/components/overview-home';
 import { apiFetch } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth-store';
-import { fetchOnboarding } from '@/lib/portal-onboarding';
-import { labelForFormItem, statusForFormItem } from '@/lib/vendor-forms';
 
 type Meeting = {
   id: string;
@@ -46,11 +42,6 @@ export default function VendorOverviewPage() {
       }),
   });
 
-  const onboarding = useQuery({
-    queryKey: ['portal-onboarding'],
-    queryFn: () => fetchOnboarding(),
-  });
-
   const meetings = useQuery({
     queryKey: ['vendor-meetings'],
     queryFn: () =>
@@ -68,7 +59,6 @@ export default function VendorOverviewPage() {
   });
 
   const orgIds = me.data?.organizationIds ?? [];
-  const formItems = onboarding.data?.items ?? [];
   const meetingItems = meetings.data?.items ?? [];
 
   const openRequestItems = useMemo(
@@ -80,14 +70,6 @@ export default function VendorOverviewPage() {
       ),
     [requests.data?.items],
   );
-
-  const formStats = useMemo(() => {
-    const pending = formItems.filter((item) => item.action !== 'view').length;
-    return {
-      total: formItems.length,
-      pending,
-    };
-  }, [formItems]);
 
   const meetingStats = useMemo(() => {
     const confirmed = meetingItems.filter(
@@ -117,22 +99,6 @@ export default function VendorOverviewPage() {
       }));
   }, [meetingItems]);
 
-  const formCards = useMemo(
-    () =>
-      formItems.map((item) => {
-        const status = statusForFormItem(item);
-        return {
-          id: item.assignmentId,
-          name: item.formName,
-          statusLabel: labelForFormItem(item),
-          statusToneKey: status,
-          filledOn: item.submission?.submittedAt ?? null,
-          href: `/vendor/forms/${item.assignmentId}`,
-        };
-      }),
-    [formItems],
-  );
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -149,7 +115,6 @@ export default function VendorOverviewPage() {
             accent: true,
           },
           { label: 'Open requests', value: openRequestItems.length },
-          { label: 'Forms pending', value: formStats.pending },
           { label: 'Confirmed', value: meetingStats.confirmed },
         ]}
       />
@@ -172,14 +137,6 @@ export default function VendorOverviewPage() {
           meetingsHref="/vendor/meetings"
         />
       </div>
-
-      <OverviewFormCards items={formCards} formsHref="/vendor/forms" />
-
-      <RecommendationsPanel
-        fromOrgId={me.data?.organizationIds?.[0]}
-        title="Recommended investors"
-        description="Admin suggestions plus investors matched to your categories and capabilities."
-      />
     </div>
   );
 }

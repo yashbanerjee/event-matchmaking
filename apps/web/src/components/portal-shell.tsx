@@ -66,10 +66,11 @@ function SidebarNav({
 
 export function PortalShell({
   email,
-  pendingForms = 0,
+  pendingForms: _pendingForms = 0,
   children,
 }: {
   email?: string;
+  /** Kept for callers; forms are no longer in primary nav. */
   pendingForms?: number;
   children: React.ReactNode;
 }) {

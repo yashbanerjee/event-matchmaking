@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { Button } from './button';
 
 export function ConfirmDialog({
@@ -19,9 +20,9 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-x-0 bottom-0 top-[max(0px,env(safe-area-inset-top))] z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+  if (!open || typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 p-4 backdrop-blur-[2px] sm:items-center">
       <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-lg">
         <h2 className="text-lg font-semibold">{title}</h2>
         {description ? (
@@ -36,6 +37,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
