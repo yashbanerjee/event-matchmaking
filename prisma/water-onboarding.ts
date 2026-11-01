@@ -72,32 +72,32 @@ export const WATER_STAGE_TAGS: TagDef[] = [
   { value: 'buyout', label: 'Mature / buyout stage' },
 ];
 
-/** Role tags used when admins schedule meetings manually. */
+/** Role tags used when admins schedule meetings manually (stable slug values). */
 export const SCHEDULING_CATEGORY_TAGS: TagDef[] = [
-  { value: 'Investor', label: 'Investor' },
-  { value: 'Founder', label: 'Founder' },
-  { value: 'Developer', label: 'Developer' },
-  { value: 'Inventor', label: 'Inventor' },
+  { value: 'investor', label: 'Investor' },
+  { value: 'founder', label: 'Founder' },
+  { value: 'developer', label: 'Developer' },
+  { value: 'inventor', label: 'Inventor' },
 ];
 
 export const SCHEDULING_INDUSTRY_TAGS: TagDef[] = [
-  { value: 'Food', label: 'Food' },
-  { value: 'Automation', label: 'Automation' },
-  { value: 'Water', label: 'Water' },
-  { value: 'Energy', label: 'Energy' },
-  { value: 'Agriculture', label: 'Agriculture' },
-  { value: 'Climate', label: 'Climate' },
-  { value: 'Technology', label: 'Technology' },
-  { value: 'Other', label: 'Other' },
+  { value: 'food', label: 'Food' },
+  { value: 'automation', label: 'Automation' },
+  { value: 'water', label: 'Water' },
+  { value: 'energy', label: 'Energy' },
+  { value: 'agriculture', label: 'Agriculture' },
+  { value: 'climate', label: 'Climate' },
+  { value: 'technology', label: 'Technology' },
+  { value: 'other', label: 'Other' },
 ];
 
 export const SCHEDULING_PURPOSE_TAGS: TagDef[] = [
-  { value: 'To meet investors', label: 'To meet investors' },
-  { value: 'To raise funding for my product', label: 'To raise funding for my product' },
-  { value: 'To explore new opportunities', label: 'To explore new opportunities' },
-  { value: 'To find innovators', label: 'To find innovators' },
-  { value: 'To find pilot partners', label: 'To find pilot partners' },
-  { value: 'To co-invest', label: 'To co-invest' },
+  { value: 'to_meet_investors', label: 'To meet investors' },
+  { value: 'to_raise_funding_for_my_product', label: 'To raise funding for my product' },
+  { value: 'to_explore_new_opportunities', label: 'To explore new opportunities' },
+  { value: 'to_find_innovators', label: 'To find innovators' },
+  { value: 'to_find_pilot_partners', label: 'To find pilot partners' },
+  { value: 'to_co_invest', label: 'To co-invest' },
 ];
 
 export const WATER_DIMENSIONS = [
@@ -290,11 +290,11 @@ function schedulingTagFields(
   return [
     field(sectionId, startOrder, {
       key: 'role_category',
-      type: 'multiselect',
+      type: 'select',
       label: `${startOrder}. Who are you at this event?`,
       required: true,
-      description: 'Pick all that apply. Used when arranging meetings.',
-      options: tagOptions.category ?? SCHEDULING_CATEGORY_TAGS,
+      description: 'Choose one option. Used when arranging meetings.',
+      options: dedupeTagOptions(tagOptions.category ?? SCHEDULING_CATEGORY_TAGS),
       filterDimensionId: dimensionIds.category,
     }),
     field(sectionId, startOrder + 1, {
@@ -303,19 +303,72 @@ function schedulingTagFields(
       label: `${startOrder + 1}. What industry are you in?`,
       required: true,
       description: 'Choose the closest match.',
-      options: tagOptions.industry ?? SCHEDULING_INDUSTRY_TAGS,
+      options: dedupeTagOptions(tagOptions.industry ?? SCHEDULING_INDUSTRY_TAGS),
       filterDimensionId: dimensionIds.industry,
     }),
     field(sectionId, startOrder + 2, {
       key: 'visit_purpose',
-      type: 'multiselect',
+      type: 'select',
       label: `${startOrder + 2}. Why are you coming to this event?`,
       required: true,
       description: 'This helps the team book the right meetings for you.',
-      options: tagOptions.pv ?? SCHEDULING_PURPOSE_TAGS,
+      options: dedupeTagOptions(tagOptions.pv ?? SCHEDULING_PURPOSE_TAGS),
       filterDimensionId: dimensionIds.pv,
     }),
   ];
+}
+
+/** Keep one option per label (case-insensitive) so dropdowns do not show duplicates. */
+function dedupeTagOptions(tags: TagDef[]): TagDef[] {
+  const seen = new Set<string>();
+  const out: TagDef[] = [];
+  for (const tag of tags) {
+    const key = tag.label.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out;
+}
+
+/** Prefer slug-style values; deactivate other active tags with the same label. */
+async function dedupeDimensionTagsByLabel(
+  prisma: PrismaClient,
+  dimensionId: string,
+) {
+  const tags = await prisma.filterTag.findMany({
+    where: { dimensionId, isActive: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  });
+  const keepByLabel = new Map<string, string>();
+  const deactivateIds: string[] = [];
+
+  for (const tag of tags) {
+    const labelKey = tag.label.trim().toLowerCase();
+    if (!labelKey) continue;
+    const existing = keepByLabel.get(labelKey);
+    if (!existing) {
+      keepByLabel.set(labelKey, tag.id);
+      continue;
+    }
+    // Prefer lowercase/slug values when choosing which duplicate to keep.
+    const current = tags.find((t) => t.id === existing)!;
+    const preferIncoming =
+      /^[a-z0-9_]+$/.test(tag.value) && !/^[a-z0-9_]+$/.test(current.value);
+    if (preferIncoming) {
+      deactivateIds.push(existing);
+      keepByLabel.set(labelKey, tag.id);
+    } else {
+      deactivateIds.push(tag.id);
+    }
+  }
+
+  if (deactivateIds.length) {
+    await prisma.filterTag.updateMany({
+      where: { id: { in: deactivateIds } },
+      data: { isActive: false },
+    });
+  }
 }
 
 /**
@@ -343,47 +396,47 @@ export function buildInvestorOnboardingFields(
     }),
     field(match, 10, {
       key: 'categories',
-      type: 'multiselect',
+      type: 'select',
       label: '10. Which water topics do you care about?',
       required: true,
-      description: 'Select all that matter for your meetings.',
-      options: tagOptions.event_categories,
+      description: 'Choose the main topic for your meetings.',
+      options: dedupeTagOptions(tagOptions.event_categories ?? []),
       filterDimensionId: dimensionIds.event_categories,
     }),
     field(match, 11, {
       key: 'regions',
-      type: 'multiselect',
+      type: 'select',
       label: '11. Which regions are you interested in?',
       required: true,
-      description: 'Where you want to work or invest.',
-      options: tagOptions.venues,
+      description: 'Choose your main region.',
+      options: dedupeTagOptions(tagOptions.venues ?? []),
       filterDimensionId: dimensionIds.venues,
     }),
     field(match, 12, {
       key: 'capabilities',
-      type: 'multiselect',
+      type: 'select',
       label: '12. What kinds of solutions do you want to see?',
       required: true,
-      description: 'Helps match you with the right innovators.',
-      options: tagOptions.capabilities,
+      description: 'Choose one option.',
+      options: dedupeTagOptions(tagOptions.capabilities ?? []),
       filterDimensionId: dimensionIds.capabilities,
     }),
     field(capital, 13, {
       key: 'commercial_tags',
-      type: 'multiselect',
+      type: 'select',
       label: '13. What kind of funding or partnership can you offer?',
       required: true,
-      description: 'Select all that apply.',
-      options: tagOptions.commercial_tags,
+      description: 'Choose one option.',
+      options: dedupeTagOptions(tagOptions.commercial_tags ?? []),
       filterDimensionId: dimensionIds.commercial_tags,
     }),
     field(capital, 14, {
       key: 'investment_stages',
-      type: 'multiselect',
+      type: 'select',
       label: '14. What stage of company do you prefer?',
       required: true,
       description: 'Early idea, growing business, or large project.',
-      options: tagOptions.investment_stages,
+      options: dedupeTagOptions(tagOptions.investment_stages ?? []),
       filterDimensionId: dimensionIds.investment_stages,
     }),
     field(capital, 15, {
@@ -452,29 +505,29 @@ export function buildInnovatorOnboardingFields(
     }),
     field(match, 10, {
       key: 'categories',
-      type: 'multiselect',
+      type: 'select',
       label: '10. Which water topics does your work cover?',
       required: true,
-      description: 'Select all that apply.',
-      options: tagOptions.event_categories,
+      description: 'Choose the main topic.',
+      options: dedupeTagOptions(tagOptions.event_categories ?? []),
       filterDimensionId: dimensionIds.event_categories,
     }),
     field(match, 11, {
       key: 'regions',
-      type: 'multiselect',
+      type: 'select',
       label: '11. Where can you work or deliver?',
       required: true,
-      description: 'Regions where you can operate.',
-      options: tagOptions.venues,
+      description: 'Choose your main region.',
+      options: dedupeTagOptions(tagOptions.venues ?? []),
       filterDimensionId: dimensionIds.venues,
     }),
     field(match, 12, {
       key: 'capabilities',
-      type: 'multiselect',
+      type: 'select',
       label: '12. What can you offer?',
       required: true,
-      description: 'Your skills, technology, or services.',
-      options: tagOptions.capabilities,
+      description: 'Choose one option.',
+      options: dedupeTagOptions(tagOptions.capabilities ?? []),
       filterDimensionId: dimensionIds.capabilities,
     }),
     field(ask, 13, {
@@ -483,16 +536,16 @@ export function buildInnovatorOnboardingFields(
       label: '13. What stage is your solution at?',
       required: true,
       description: 'Be honest — this helps find the right investors.',
-      options: tagOptions.investment_stages,
+      options: dedupeTagOptions(tagOptions.investment_stages ?? []),
       filterDimensionId: dimensionIds.investment_stages,
     }),
     field(ask, 14, {
       key: 'commercial_tags',
-      type: 'multiselect',
+      type: 'select',
       label: '14. What kind of help are you looking for?',
       required: true,
-      description: 'Funding, partners, contracts, or technical help.',
-      options: tagOptions.commercial_tags,
+      description: 'Choose one option.',
+      options: dedupeTagOptions(tagOptions.commercial_tags ?? []),
       filterDimensionId: dimensionIds.commercial_tags,
     }),
     field(ask, 15, {
@@ -641,18 +694,21 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     await upsertDimensionWithTags(prisma, dim, dimensionIds, tagOptions, false);
   }
 
-  // Reload live scheduling tags (includes any admin-added options).
+  // Deactivate duplicate tags (same label, different values) then reload.
   for (const code of ['category', 'industry', 'pv'] as const) {
     const dimId = dimensionIds[code];
     if (!dimId) continue;
+    await dedupeDimensionTagsByLabel(prisma, dimId);
     const liveTags = await prisma.filterTag.findMany({
       where: { dimensionId: dimId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
     });
-    tagOptions[code] = liveTags.map((t) => ({
-      value: t.value,
-      label: t.label,
-    }));
+    tagOptions[code] = dedupeTagOptions(
+      liveTags.map((t) => ({
+        value: t.value,
+        label: t.label,
+      })),
+    );
   }
 
   for (const dim of WATER_DIMENSIONS) {
@@ -767,7 +823,7 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     description:
       'Simple questions plus booking tags for investors (availability on next step).',
     targetType: 'COMPANY',
-    hash: 'investor-form-v6',
+    hash: 'investor-form-v7',
     schema: investorBuilt,
   });
 
@@ -777,29 +833,17 @@ export async function seedWaterFiltersAndForms(prisma: PrismaClient) {
     description:
       'Simple questions plus booking tags for innovators (availability on next step).',
     targetType: 'VENDOR',
-    hash: 'innovator-form-v6',
+    hash: 'innovator-form-v7',
     schema: innovatorBuilt,
   });
 
   // Delete every other form so the product only has these two.
   await deleteFormsExcept(prisma, [...KEEP_FORM_CODES]);
 
-  // Default dropdown modes for filter tags on registration forms.
+  // All registration tag dropdowns are single-select.
   const selectionModes: Record<string, 'single' | 'multi'> = {};
-  for (const [code, mode] of Object.entries({
-    industry: 'single',
-    investment_stages: 'single',
-    category: 'multi',
-    pv: 'multi',
-    event_categories: 'multi',
-    preferred_categories: 'multi',
-    venues: 'multi',
-    capabilities: 'multi',
-    ethara_services: 'multi',
-    commercial_tags: 'multi',
-  } as const)) {
-    const id = dimensionIds[code];
-    if (id) selectionModes[id] = mode;
+  for (const code of Object.keys(dimensionIds)) {
+    selectionModes[dimensionIds[code]] = 'single';
   }
   if (Object.keys(selectionModes).length) {
     await prisma.systemSetting.upsert({

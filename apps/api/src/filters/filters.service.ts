@@ -26,9 +26,8 @@ function slugify(raw: string) {
 }
 
 /** Default form control for known filter groups. */
-function defaultSelectionMode(code: string): 'single' | 'multi' {
-  if (code === 'industry' || code === 'investment_stages') return 'single';
-  return 'multi';
+function defaultSelectionMode(_code: string): 'single' | 'multi' {
+  return 'single';
 }
 
 @Injectable()

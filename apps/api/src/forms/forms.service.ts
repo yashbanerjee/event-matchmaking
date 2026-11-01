@@ -95,16 +95,11 @@ export class FormsService {
       fields: schema.fields.map((field) => {
         if (!field.filterDimensionId) return field;
         const live = byDimension.get(field.filterDimensionId) ?? [];
-        const options = live.length ? live : (field.options ?? []);
-        const mode = selectionModes[field.filterDimensionId];
+        const raw = live.length ? live : (field.options ?? []);
+        const options = dedupeOptionsByLabel(raw);
+        const mode = selectionModes[field.filterDimensionId] ?? 'single';
         const type =
-          mode === 'single'
-            ? ('select' as const)
-            : mode === 'multi'
-              ? ('multiselect' as const)
-              : field.type === 'select' || field.type === 'multiselect'
-                ? field.type
-                : ('multiselect' as const);
+          mode === 'multi' ? ('multiselect' as const) : ('select' as const);
         return { ...field, options, type };
       }),
     };
@@ -2088,6 +2083,20 @@ function normalizeHm(value: string | null): string | null {
   const minutes = Number(match[2]);
   if (hours > 23 || minutes > 59) return null;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function dedupeOptionsByLabel(
+  options: { value: string; label: string }[],
+): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  const out: { value: string; label: string }[] = [];
+  for (const option of options) {
+    const key = option.label.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(option);
+  }
+  return out;
 }
 
 function parseAvailabilityByDate(
