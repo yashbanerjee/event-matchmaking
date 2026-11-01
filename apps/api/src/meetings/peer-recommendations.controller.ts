@@ -89,6 +89,13 @@ export class PeerRecommendationsController {
     return this.peers.removeManual(user, organizationId, toOrgId);
   }
 
+  @Post('recompute-all')
+  @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
+  async recomputeAll() {
+    const result = await this.peers.scheduleRecomputeAllEligible('admin.bulk');
+    return { ok: true, ...result };
+  }
+
   @Post('org/:organizationId/recompute')
   @RequirePermissions(PERMISSIONS.ORGS_MANAGE)
   async recompute(@Param('organizationId') organizationId: string) {

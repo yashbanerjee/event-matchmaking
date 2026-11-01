@@ -1226,9 +1226,8 @@ export class MatchmakingService {
       });
     }
 
-    const peerDeleted = await this.prisma.orgPeerRecommendation.deleteMany({
-      where: { source: 'COMPUTED' },
-    });
+    // Do not wipe OrgPeerRecommendation here — those are profile matches for
+    // investor↔innovator Recommendations, not schedule-date artefacts.
 
     await this.audit.record({
       actorId: actor.id,
@@ -1240,7 +1239,6 @@ export class MatchmakingService {
         scheduleDate,
         cancelledMeetings: cancelled.cancelled,
         deletedRuns: runIds.length,
-        clearedPeerRecommendations: peerDeleted.count,
       },
     });
 
@@ -1248,7 +1246,7 @@ export class MatchmakingService {
       scheduleDate,
       cancelledMeetings: cancelled.cancelled,
       deletedRuns: runIds.length,
-      clearedPeerRecommendations: peerDeleted.count,
+      clearedPeerRecommendations: 0,
     };
   }
 

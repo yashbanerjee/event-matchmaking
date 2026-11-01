@@ -125,6 +125,44 @@ export class PeerRecommendationsService {
   }
 
   /**
+   * Queue recomputes for every verified investor and innovator so both sides
+   * get opposite-type Recommendations (not only the org that opened the page).
+   */
+  async scheduleRecomputeAllEligible(reason = 'admin.bulk') {
+    const [companies, vendors] = await Promise.all([
+      this.prisma.company.findMany({
+        where: {
+          matchingEligible: true,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          organization: { status: { not: 'ARCHIVED' } },
+        },
+        select: { organizationId: true },
+      }),
+      this.prisma.vendor.findMany({
+        where: {
+          matchingEligible: true,
+          approvalStatus: 'VERIFIED',
+          verificationStatus: 'VERIFIED',
+          onboardingComplete: true,
+          organization: { status: { not: 'ARCHIVED' } },
+        },
+        select: { organizationId: true },
+      }),
+    ]);
+    const ids = [
+      ...new Set([
+        ...companies.map((row) => row.organizationId),
+        ...vendors.map((row) => row.organizationId),
+      ]),
+    ];
+    for (const organizationId of ids) {
+      this.scheduleRecompute(organizationId, reason);
+    }
+    return { queued: ids.length };
+  }
+
+  /**
    * Start AI/tag scoring when the viewer opens recommendations and nothing
    * has been computed for the current profile yet.
    */

@@ -91,6 +91,7 @@ function AdminRecommendationsPageInner() {
   const [candidateSearch, setCandidateSearch] = useState('');
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const orgId = searchParams.get('orgId');
@@ -162,6 +163,22 @@ function AdminRecommendationsPageInner() {
     onSuccess: async (_data, organizationId) => invalidateOrg(organizationId),
   });
 
+  const recomputeAll = useMutation({
+    mutationFn: () =>
+      apiFetch<{ queued: number }>('/peer-recommendations/recompute-all', {
+        method: 'POST',
+        token: getAccessToken(),
+        body: JSON.stringify({}),
+      }),
+    onSuccess: async (data) => {
+      setBulkMessage(
+        `Queued refresh for ${data.queued} organizations. Investor lists show innovators; innovator lists show investors. Refresh this page in a minute.`,
+      );
+      await qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
+    },
+    onError: (err) => setActionError((err as Error).message),
+  });
+
   const addManual = useMutation({
     mutationFn: () => {
       if (!detailOrgId || !selectedCandidateId) {
@@ -218,8 +235,32 @@ function AdminRecommendationsPageInner() {
       <PageHeader
         eyebrow="Match & meet"
         title="Recommendations"
-        description="Qwen 2.5 (OpenRouter) scores each pair and writes match reasons. Up to 5 picks per org — recompute to refresh."
+        description="Investors only get innovator matches, and innovators only get investor matches. Up to 5 picks per org."
+        actions={
+          <Button
+            variant="outline"
+            loading={recomputeAll.isPending}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  'Queue a refresh for every verified investor and innovator? This can take a few minutes.',
+                )
+              ) {
+                return;
+              }
+              recomputeAll.mutate();
+            }}
+          >
+            {recomputeAll.isPending ? 'Queuing…' : 'Refresh all matches'}
+          </Button>
+        }
       />
+
+      {bulkMessage ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {bulkMessage}
+        </p>
+      ) : null}
 
       <Card className="space-y-4 p-4">
         <div className="inline-flex rounded-xl border border-[var(--border)] bg-white p-1">
