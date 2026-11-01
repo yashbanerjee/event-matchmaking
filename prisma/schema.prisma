@@ -393,6 +393,8 @@ model Organization {
   availabilityWindows AvailabilityWindow[]
   peerRecommendationsFrom OrgPeerRecommendation[] @relation("PeerRecFrom")
   peerRecommendationsTo   OrgPeerRecommendation[] @relation("PeerRecTo")
+  peerDismissalsFrom      OrgPeerRecommendationDismissal[] @relation("PeerDismissFrom")
+  peerDismissalsTo        OrgPeerRecommendationDismissal[] @relation("PeerDismissTo")
   placeAssignments    InvestorPlaceAssignment[]
 
   @@index([type, status])
@@ -435,6 +437,22 @@ model OrgPeerRecommendation {
   @@index([perspective, computedAt])
   @@index([fromOrgId, source])
   @@map("org_peer_recommendations")
+}
+
+/// Investor/innovator marked a peer as not interested — hidden from their feed forever.
+model OrgPeerRecommendationDismissal {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromOrgId String   @db.Uuid
+  toOrgId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  fromOrg Organization @relation("PeerDismissFrom", fields: [fromOrgId], references: [id], onDelete: Cascade)
+  toOrg   Organization @relation("PeerDismissTo", fields: [toOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([fromOrgId, toOrgId])
+  @@index([fromOrgId])
+  @@index([toOrgId])
+  @@map("org_peer_recommendation_dismissals")
 }
 
 model OrganizationMember {

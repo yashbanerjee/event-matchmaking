@@ -88,6 +88,7 @@ export class RecommendationsService {
       PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
     );
     const { computing } = await this.peers.ensureComputed(perspectiveOrg.id);
+    const dismissedIds = await this.listDismissedPeerIds(perspectiveOrg.id);
 
     const stored = await this.fromStored({
       fromOrgId: perspectiveOrg.id,
@@ -95,7 +96,7 @@ export class RecommendationsService {
       peerType,
       max,
       tagLabels,
-      excludeOrgIds: orgIds,
+      excludeOrgIds: [...orgIds, ...dismissedIds],
     });
     if (stored) {
       return { ...stored, perspective, recommendationLimit: roleLimit, computing };
@@ -108,6 +109,74 @@ export class RecommendationsService {
       recommendationLimit: roleLimit,
       computing,
     };
+  }
+
+  /** Hide a peer from this actor's recommendation feed permanently. */
+  async dismissPeer(actor: AuthUser, toOrgId: string) {
+    const orgIds = actor.organizationIds ?? [];
+    if (!orgIds.length) {
+      throw new ForbiddenException('Organization membership required');
+    }
+    if (orgIds.includes(toOrgId)) {
+      throw new BadRequestException('Cannot dismiss your own organization');
+    }
+
+    const myOrgs = await this.prisma.organization.findMany({
+      where: { id: { in: orgIds } },
+      select: { id: true, type: true },
+    });
+    const companyOrg = myOrgs.find((o) => o.type === 'COMPANY');
+    const vendorOrg = myOrgs.find((o) => o.type === 'VENDOR');
+    const perspectiveOrg = companyOrg ?? vendorOrg;
+    if (!perspectiveOrg) {
+      throw new ForbiddenException('No investor or innovator organization found');
+    }
+
+    const peer = await this.prisma.organization.findUnique({
+      where: { id: toOrgId },
+      select: { id: true, type: true, status: true },
+    });
+    if (!peer || peer.status === 'ARCHIVED') {
+      throw new NotFoundException('Organization not found');
+    }
+    const expectedPeerType =
+      perspectiveOrg.type === 'COMPANY' ? 'VENDOR' : 'COMPANY';
+    if (peer.type !== expectedPeerType) {
+      throw new BadRequestException(
+        perspectiveOrg.type === 'COMPANY'
+          ? 'Investors can only dismiss innovators'
+          : 'Innovators can only dismiss investors',
+      );
+    }
+
+    await this.prisma.orgPeerRecommendationDismissal.upsert({
+      where: {
+        fromOrgId_toOrgId: {
+          fromOrgId: perspectiveOrg.id,
+          toOrgId,
+        },
+      },
+      create: {
+        fromOrgId: perspectiveOrg.id,
+        toOrgId,
+      },
+      update: {},
+    });
+
+    // Drop the stored row so a free recommendation slot opens for someone else.
+    await this.prisma.orgPeerRecommendation.deleteMany({
+      where: { fromOrgId: perspectiveOrg.id, toOrgId },
+    });
+
+    return { ok: true, fromOrgId: perspectiveOrg.id, toOrgId };
+  }
+
+  private async listDismissedPeerIds(fromOrgId: string): Promise<string[]> {
+    const rows = await this.prisma.orgPeerRecommendationDismissal.findMany({
+      where: { fromOrgId },
+      select: { toOrgId: true },
+    });
+    return rows.map((row) => row.toOrgId);
   }
 
   /**
@@ -163,6 +232,8 @@ export class RecommendationsService {
           .filter(Boolean),
       ),
     ];
+    const dismissedIds = await this.listDismissedPeerIds(perspectiveOrg.id);
+    const excludeOrgIds = [...orgIds, ...dismissedIds];
 
     const [tagLabels, tagIndex] = await Promise.all([
       this.filters.listTagLabelIndex(),
@@ -177,7 +248,7 @@ export class RecommendationsService {
           approvalStatus: 'VERIFIED',
           verificationStatus: 'VERIFIED',
           onboardingComplete: true,
-          organizationId: { notIn: orgIds },
+          organizationId: { notIn: excludeOrgIds },
           organization: {
             status: { not: 'ARCHIVED' },
             ...(q
@@ -261,7 +332,7 @@ export class RecommendationsService {
         matchingEligible: true,
         approvalStatus: 'VERIFIED',
         verificationStatus: 'VERIFIED',
-        organizationId: { notIn: orgIds },
+        organizationId: { notIn: excludeOrgIds },
         organization: {
           status: { not: 'ARCHIVED' },
           ...(q

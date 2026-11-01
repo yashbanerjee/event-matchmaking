@@ -61,14 +61,20 @@ function SuggestionGrid({
   items,
   fromOrgId,
   pendingOrgId,
+  dismissingOrgId,
+  showNotInterested,
   onInterest,
+  onNotInterested,
   onViewProfile,
   featured,
 }: {
   items: Recommendation[];
   fromOrgId?: string;
   pendingOrgId?: string | null;
+  dismissingOrgId?: string | null;
+  showNotInterested?: boolean;
   onInterest: (item: Recommendation) => void;
+  onNotInterested?: (item: Recommendation) => void;
   onViewProfile: (item: Recommendation) => void;
   featured?: boolean;
 }) {
@@ -170,6 +176,7 @@ function SuggestionGrid({
               disabled={
                 !fromOrgId ||
                 Boolean(pendingOrgId) ||
+                Boolean(dismissingOrgId) ||
                 pendingOrgId === item.organizationId
               }
               loading={pendingOrgId === item.organizationId}
@@ -177,6 +184,21 @@ function SuggestionGrid({
             >
               I&apos;m interested
             </Button>
+            {showNotInterested ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={
+                  !fromOrgId ||
+                  Boolean(pendingOrgId) ||
+                  Boolean(dismissingOrgId)
+                }
+                loading={dismissingOrgId === item.organizationId}
+                onClick={() => onNotInterested?.(item)}
+              >
+                Not interested
+              </Button>
+            ) : null}
           </div>
         </div>
       ))}
@@ -196,10 +218,12 @@ export function RecommendationsPanel({
   const qc = useQueryClient();
   const [profileOrgId, setProfileOrgId] = useState<string | null>(null);
   const [interestOrgId, setInterestOrgId] = useState<string | null>(null);
+  const [dismissingOrgId, setDismissingOrgId] = useState<string | null>(null);
   const [scheduleFor, setScheduleFor] = useState<Recommendation | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [interestSent, setInterestSent] = useState<string | null>(null);
+  const [dismissedNote, setDismissedNote] = useState<string | null>(null);
 
   const recs = useQuery({
     queryKey: ['recommendations'],
@@ -247,6 +271,7 @@ export function RecommendationsPanel({
       setScheduleFor(null);
       setScheduleError(null);
       setError(null);
+      setDismissedNote(null);
       setInterestSent(variables.toOrgId);
       await qc.invalidateQueries({ queryKey: ['meeting-requests'] });
       await qc.invalidateQueries({ queryKey: ['recommendations'] });
@@ -259,6 +284,28 @@ export function RecommendationsPanel({
       } else {
         setError(message);
       }
+    },
+  });
+
+  const dismissPeer = useMutation({
+    mutationFn: (toOrgId: string) =>
+      apiFetch(`/recommendations/${toOrgId}/dismiss`, {
+        method: 'POST',
+        token: getAccessToken(),
+        body: '{}',
+      }),
+    onSuccess: async (_data, toOrgId) => {
+      setDismissingOrgId(null);
+      setError(null);
+      setInterestSent(null);
+      setDismissedNote(toOrgId);
+      if (profileOrgId === toOrgId) setProfileOrgId(null);
+      await qc.invalidateQueries({ queryKey: ['recommendations'] });
+      await qc.invalidateQueries({ queryKey: ['recommendations-browse'] });
+    },
+    onError: (err) => {
+      setDismissingOrgId(null);
+      setError((err as Error).message);
     },
   });
 
@@ -310,6 +357,14 @@ export function RecommendationsPanel({
     sendInterest(profileItem);
   };
 
+  const markNotInterested = (item: Recommendation) => {
+    setError(null);
+    setDismissedNote(null);
+    setInterestSent(null);
+    setDismissingOrgId(item.organizationId);
+    dismissPeer.mutate(item.organizationId);
+  };
+
   return (
     <>
       <Card className="min-w-0 overflow-hidden p-4">
@@ -322,8 +377,8 @@ export function RecommendationsPanel({
             {isInvestor ? (
               <>
                 Tap <strong>I&apos;m interested</strong>, pick a meeting day and
-                time, then send the request. The innovator can only accept or
-                decline.
+                time, then send the request. Use <strong>Not interested</strong>{' '}
+                to hide a match permanently.
               </>
             ) : (
               <>
@@ -352,6 +407,11 @@ export function RecommendationsPanel({
               : 'Interest sent. The investor will propose a meeting time under Requests.'}
           </p>
         ) : null}
+        {dismissedNote ? (
+          <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm text-[var(--muted)]">
+            Removed from your recommendations. This match will not appear again.
+          </p>
+        ) : null}
 
         {recs.isLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading recommendations…</p>
@@ -376,7 +436,10 @@ export function RecommendationsPanel({
                   items={featured}
                   fromOrgId={fromOrgId}
                   pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
+                  dismissingOrgId={dismissingOrgId}
+                  showNotInterested={isInvestor}
                   onInterest={sendInterest}
+                  onNotInterested={markNotInterested}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                   featured
                 />
@@ -392,7 +455,10 @@ export function RecommendationsPanel({
                   items={items}
                   fromOrgId={fromOrgId}
                   pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
+                  dismissingOrgId={dismissingOrgId}
+                  showNotInterested={isInvestor}
                   onInterest={sendInterest}
+                  onNotInterested={markNotInterested}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                 />
               </section>

@@ -110,6 +110,15 @@ export class MeetingRequestsController {
     return this.recommendationsService.publicProfile(user, organizationId);
   }
 
+  @Post('recommendations/:organizationId/dismiss')
+  @RequirePermissions(PERMISSIONS.MEETINGS_READ)
+  dismissRecommendation(
+    @CurrentUser() user: AuthUser,
+    @Param('organizationId') organizationId: string,
+  ) {
+    return this.recommendationsService.dismissPeer(user, organizationId);
+  }
+
   @Post('meeting-requests')
   @RequirePermissions(PERMISSIONS.MEETINGS_READ)
   create(

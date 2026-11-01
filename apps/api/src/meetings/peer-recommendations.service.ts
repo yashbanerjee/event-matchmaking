@@ -1249,17 +1249,25 @@ export class PeerRecommendationsService {
   }) {
     const threshold = await this.getRecommendationThreshold();
     const roleLimit = await this.getRecommendationLimit(input.perspective);
-    const manual = await this.prisma.orgPeerRecommendation.findMany({
-      where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
-      select: { toOrgId: true },
-    });
+    const [manual, dismissals] = await Promise.all([
+      this.prisma.orgPeerRecommendation.findMany({
+        where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
+        select: { toOrgId: true },
+      }),
+      this.prisma.orgPeerRecommendationDismissal.findMany({
+        where: { fromOrgId: input.fromOrgId },
+        select: { toOrgId: true },
+      }),
+    ]);
     const manualToIds = new Set(manual.map((row) => row.toOrgId));
+    const dismissedToIds = new Set(dismissals.map((row) => row.toOrgId));
     const computedSlots = Math.max(0, roleLimit - manualToIds.size);
 
     const rankedComputed = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
       .filter((row) => {
         if (manualToIds.has(row.toOrgId)) return false;
+        if (dismissedToIds.has(row.toOrgId)) return false;
         if (row.pair.totalScore < threshold) return false;
         return meetsTagCategoryThresholds(
           row.pair.scoreBreakdown,
