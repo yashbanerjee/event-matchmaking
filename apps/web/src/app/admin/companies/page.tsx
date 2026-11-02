@@ -27,12 +27,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import {
   formatDayMeetingRatio,
-  formatTableWindow,
   type MeetingStats,
   type TableAssignment,
 } from '@/lib/org-directory';
 import { formatEventDate } from '@/lib/event-schedule';
-import { formatNearDate } from '@/lib/utils';
 
 type OrgList = {
   items: Array<{
@@ -512,8 +510,6 @@ export default function CompaniesPage() {
                   org.company?.approvalStatus ??
                   org.status;
                 const stats = org.meetingStats;
-                const table = org.tableAssignment;
-                const near = formatNearDate(org.createdAt);
                 return (
                   <div
                     key={org.id}
@@ -558,32 +554,8 @@ export default function CompaniesPage() {
                           <Badge variant={statusTone(status)}>
                             {formatVendorStatus(status)}
                           </Badge>
-                          <span
-                            title={near.title}
-                            className="text-xs text-[#626F86]"
-                          >
-                            Created {near.label}
-                          </span>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="mt-3 rounded-xl bg-white/70 px-3 py-2.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#626F86]">
-                        Table allotted
-                      </p>
-                      {table ? (
-                        <div className="mt-1">
-                          <p className="font-medium text-[#172B4D]">
-                            {table.placeName}
-                          </p>
-                          <p className="text-xs text-[#626F86]">
-                            {formatTableWindow(table)}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="mt-1 text-sm text-[#626F86]">Unassigned</p>
-                      )}
                     </div>
 
                     {eventDates.length > 0 ? (
@@ -623,8 +595,6 @@ export default function CompaniesPage() {
                   <TR>
                     <TH>Name</TH>
                     <TH>Status</TH>
-                    <TH>Created</TH>
-                    <TH>Table allotted</TH>
                     {eventDates.map((date) => (
                       <TH key={date} className="whitespace-nowrap text-center">
                         <span className="block">
@@ -645,7 +615,6 @@ export default function CompaniesPage() {
                       org.company?.approvalStatus ??
                       org.status;
                     const stats = org.meetingStats;
-                    const table = org.tableAssignment;
                     return (
                       <TR key={org.id}>
                         <TD className="whitespace-normal">
@@ -680,31 +649,6 @@ export default function CompaniesPage() {
                           <Badge variant={statusTone(status)}>
                             {formatVendorStatus(status)}
                           </Badge>
-                        </TD>
-                        <TD className="whitespace-nowrap text-sm">
-                          {(() => {
-                            const near = formatNearDate(org.createdAt);
-                            return (
-                              <span
-                                title={near.title}
-                                className="text-[#172B4D]"
-                              >
-                                {near.label}
-                              </span>
-                            );
-                          })()}
-                        </TD>
-                        <TD className="whitespace-normal">
-                          {table ? (
-                            <div>
-                              <p className="font-medium">{table.placeName}</p>
-                              <p className="text-xs text-[#626F86]">
-                                {formatTableWindow(table)}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="text-[#626F86]">Unassigned</span>
-                          )}
                         </TD>
                         {eventDates.map((date) => (
                           <TD

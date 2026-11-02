@@ -28,7 +28,6 @@ import {
   type MeetingStats,
 } from '@/lib/org-directory';
 import { formatEventDate } from '@/lib/event-schedule';
-import { formatNearDate } from '@/lib/utils';
 
 type OrgList = {
   items: Array<{
@@ -395,7 +394,6 @@ export default function VendorsPage() {
                   org.vendor?.approvalStatus ??
                   org.status;
                 const stats = org.meetingStats;
-                const near = formatNearDate(org.createdAt);
                 return (
                   <div
                     key={org.id}
@@ -450,12 +448,6 @@ export default function VendorsPage() {
                           <Badge variant={statusTone(status)}>
                             {formatVendorStatus(status)}
                           </Badge>
-                          <span
-                            title={near.title}
-                            className="text-xs text-[#626F86]"
-                          >
-                            Created {near.label}
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -497,7 +489,6 @@ export default function VendorsPage() {
                   <TR>
                     <TH>Name</TH>
                     <TH>Status</TH>
-                    <TH>Created</TH>
                     {eventDates.map((date) => (
                       <TH key={date} className="whitespace-nowrap text-center">
                         <span className="block">
@@ -558,19 +549,6 @@ export default function VendorsPage() {
                           <Badge variant={statusTone(status)}>
                             {formatVendorStatus(status)}
                           </Badge>
-                        </TD>
-                        <TD className="whitespace-nowrap text-sm">
-                          {(() => {
-                            const near = formatNearDate(org.createdAt);
-                            return (
-                              <span
-                                title={near.title}
-                                className="text-[#172B4D]"
-                              >
-                                {near.label}
-                              </span>
-                            );
-                          })()}
                         </TD>
                         {eventDates.map((date) => (
                           <TD
