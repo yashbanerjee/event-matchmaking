@@ -29,6 +29,7 @@ import { MatchReasonDisplay } from '@/components/match-reason-display';
 type OverviewItem = {
   organizationId: string;
   name: string;
+  email?: string | null;
   type: 'COMPANY' | 'VENDOR';
   industry: string | null;
   featured: boolean;
@@ -68,7 +69,12 @@ type OrgDetailResponse = {
 
 type CandidatesResponse = {
   counterpartLabel: 'investors' | 'innovators';
-  items: Array<{ id: string; name: string; industry: string | null }>;
+  items: Array<{
+    id: string;
+    name: string;
+    industry: string | null;
+    email?: string | null;
+  }>;
 };
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -302,8 +308,8 @@ function AdminRecommendationsPageInner() {
               value={q}
               placeholder={
                 roleTab === 'COMPANY'
-                  ? 'Search investors'
-                  : 'Search innovators'
+                  ? 'Search investors by name or email'
+                  : 'Search innovators by name or email'
               }
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {
@@ -328,8 +334,12 @@ function AdminRecommendationsPageInner() {
           <p className="text-sm text-[var(--muted)]">Loading…</p>
         ) : items.length === 0 ? (
           <EmptyState
-            title="No recommendations yet"
-            description="Approve an investor or innovator, then recompute or add manually."
+            title={search.trim() ? 'No matches' : 'No recommendations yet'}
+            description={
+              search.trim()
+                ? `Nothing matched “${search.trim()}”. Search by organization name or email.`
+                : 'Approve an investor or innovator, then recompute or add manually.'
+            }
           />
         ) : (
           <ul className="divide-y divide-[#DFE1E6] rounded-lg border border-[#DFE1E6] bg-white">
@@ -357,6 +367,11 @@ function AdminRecommendationsPageInner() {
                       <h3 className="min-w-0 text-sm font-semibold text-[#172B4D]">
                         {org.name}
                       </h3>
+                      {org.email ? (
+                        <span className="truncate text-xs text-[var(--muted)]">
+                          {org.email}
+                        </span>
+                      ) : null}
                       <Badge variant="secondary" className="normal-case">
                         {org.type === 'COMPANY' ? 'Investor' : 'Innovator'}
                       </Badge>
@@ -458,7 +473,7 @@ function AdminRecommendationsPageInner() {
               <Input
                 className="min-w-[160px] flex-1"
                 value={candidateQ}
-                placeholder={`Search ${counterpartWord}…`}
+                placeholder={`Search ${counterpartWord} by name or email`}
                 onChange={(e) => setCandidateQ(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') setCandidateSearch(candidateQ);
@@ -477,6 +492,7 @@ function AdminRecommendationsPageInner() {
                 {(candidates.data?.items ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                    {c.email ? ` · ${c.email}` : ''}
                     {c.industry ? ` · ${c.industry}` : ''}
                   </option>
                 ))}

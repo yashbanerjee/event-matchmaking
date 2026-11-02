@@ -37,6 +37,99 @@ import { AuditService } from '../audit/audit.service';
 const DEFAULT_PEER_RECOMPUTE_LLM_CANDIDATES = 12;
 const DEFAULT_PEER_RECOMPUTE_CONCURRENCY = 5;
 
+/** How sync treats existing COMPUTED recommendations. */
+type PeerRecPruneMode = 'sticky' | 'reevaluate';
+
+/**
+ * sticky — keep existing matches on refresh/view (only drop dismissed / gone peers);
+ *          fill empty slots with new high-scoring pairs.
+ * reevaluate — also drop matches that no longer meet threshold/tag floors
+ *              (profile edits, threshold settings changes, explicit Recompute).
+ */
+function pruneModeForReason(reason: string): PeerRecPruneMode {
+  if (reason.startsWith('settings.')) return 'reevaluate';
+  if (
+    reason.startsWith('profile.') ||
+    reason === 'eligibility' ||
+    reason === 'company.create' ||
+    reason === 'company.admin_fill' ||
+    reason === 'vendor.approve' ||
+    reason === 'manual.recompute'
+  ) {
+    return 'reevaluate';
+  }
+  return 'sticky';
+}
+
+function preferReevaluateReason(
+  current: string | undefined,
+  incoming: string,
+): string {
+  if (!current) return incoming;
+  if (pruneModeForReason(incoming) === 'reevaluate') return incoming;
+  if (pruneModeForReason(current) === 'reevaluate') return current;
+  return incoming;
+}
+
+/** Name, display name, member login, invite address, or stored contact email. */
+function organizationNameOrEmailFilter(
+  q: string,
+): Prisma.OrganizationWhereInput {
+  return {
+    OR: [
+      { name: { contains: q, mode: 'insensitive' } },
+      {
+        vendor: {
+          displayName: { contains: q, mode: 'insensitive' },
+        },
+      },
+      {
+        invitations: {
+          some: {
+            email: { contains: q, mode: 'insensitive' },
+          },
+        },
+      },
+      {
+        members: {
+          some: {
+            user: {
+              email: { contains: q, mode: 'insensitive' },
+            },
+          },
+        },
+      },
+      {
+        customAttrs: {
+          path: ['contactEmail'],
+          string_contains: q,
+        },
+      },
+    ],
+  };
+}
+
+function contactEmailOf(org: {
+  customAttrs?: unknown;
+  members?: Array<{ user: { email: string } }>;
+  invitations?: Array<{ email: string }>;
+}): string | null {
+  const attrs =
+    org.customAttrs &&
+    typeof org.customAttrs === 'object' &&
+    !Array.isArray(org.customAttrs)
+      ? (org.customAttrs as Record<string, unknown>)
+      : {};
+  const attrEmail =
+    typeof attrs.contactEmail === 'string' ? attrs.contactEmail.trim() : '';
+  return (
+    org.members?.[0]?.user.email?.trim() ||
+    org.invitations?.[0]?.email?.trim() ||
+    attrEmail ||
+    null
+  );
+}
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
@@ -84,6 +177,8 @@ export class PeerRecommendationsService {
   private readonly logger = new Logger(PeerRecommendationsService.name);
   private readonly inflight = new Set<string>();
   private readonly rerun = new Set<string>();
+  /** Preserves prune intent when a second recompute is queued mid-flight. */
+  private readonly rerunReasons = new Map<string, string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -106,10 +201,14 @@ export class PeerRecommendationsService {
   scheduleRecompute(organizationId: string, reason = 'eligibility') {
     if (this.inflight.has(organizationId)) {
       this.rerun.add(organizationId);
+      this.rerunReasons.set(
+        organizationId,
+        preferReevaluateReason(this.rerunReasons.get(organizationId), reason),
+      );
       return;
     }
     this.inflight.add(organizationId);
-    void this.recomputeForOrganization(organizationId)
+    void this.recomputeForOrganization(organizationId, reason)
       .then((result) => {
         this.logger.log(
           `Peer recommendations for ${organizationId} (${reason}): upserted ${result.upserted}`,
@@ -124,7 +223,10 @@ export class PeerRecommendationsService {
         this.inflight.delete(organizationId);
         if (this.rerun.has(organizationId)) {
           this.rerun.delete(organizationId);
-          this.scheduleRecompute(organizationId, 'queued-rerun');
+          const nextReason =
+            this.rerunReasons.get(organizationId) ?? 'queued-rerun';
+          this.rerunReasons.delete(organizationId);
+          this.scheduleRecompute(organizationId, nextReason);
         }
       });
   }
@@ -298,9 +400,7 @@ export class PeerRecommendationsService {
           organizationId: { notIn: excludeIds },
           organization: {
             status: { not: 'ARCHIVED' },
-            ...(q
-              ? { name: { contains: q, mode: 'insensitive' as const } }
-              : {}),
+            ...(q ? organizationNameOrEmailFilter(q) : {}),
           },
         },
         include: {
@@ -311,6 +411,17 @@ export class PeerRecommendationsService {
               type: true,
               industry: true,
               region: true,
+              customAttrs: true,
+              members: {
+                take: 1,
+                orderBy: [{ isPrimary: 'desc' }, { joinedAt: 'asc' }],
+                select: { user: { select: { email: true } } },
+              },
+              invitations: {
+                take: 1,
+                orderBy: { createdAt: 'desc' },
+                select: { email: true },
+              },
             },
           },
         },
@@ -321,7 +432,14 @@ export class PeerRecommendationsService {
         organization: org,
         counterpartType: 'VENDOR' as const,
         counterpartLabel: 'innovators' as const,
-        items: vendors.map((v) => v.organization),
+        items: vendors.map((v) => ({
+          id: v.organization.id,
+          name: v.organization.name,
+          type: v.organization.type,
+          industry: v.organization.industry,
+          region: v.organization.region,
+          email: contactEmailOf(v.organization),
+        })),
       };
     }
 
@@ -333,9 +451,7 @@ export class PeerRecommendationsService {
         organizationId: { notIn: excludeIds },
         organization: {
           status: { not: 'ARCHIVED' },
-          ...(q
-            ? { name: { contains: q, mode: 'insensitive' as const } }
-            : {}),
+          ...(q ? organizationNameOrEmailFilter(q) : {}),
         },
       },
       include: {
@@ -346,6 +462,17 @@ export class PeerRecommendationsService {
             type: true,
             industry: true,
             region: true,
+            customAttrs: true,
+            members: {
+              take: 1,
+              orderBy: [{ isPrimary: 'desc' }, { joinedAt: 'asc' }],
+              select: { user: { select: { email: true } } },
+            },
+            invitations: {
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+              select: { email: true },
+            },
           },
         },
       },
@@ -356,7 +483,14 @@ export class PeerRecommendationsService {
       organization: org,
       counterpartType: 'COMPANY' as const,
       counterpartLabel: 'investors' as const,
-      items: companies.map((c) => c.organization),
+      items: companies.map((c) => ({
+        id: c.organization.id,
+        name: c.organization.name,
+        type: c.organization.type,
+        industry: c.organization.industry,
+        region: c.organization.region,
+        email: contactEmailOf(c.organization),
+      })),
     };
   }
 
@@ -523,17 +657,10 @@ export class PeerRecommendationsService {
     const tagCategoryThresholds = resolveTagCategoryThresholds(
       await this.config.getRaw('ops.tagCategoryThresholds'),
     );
+    const q = input.q?.trim().replace(/\s+/g, ' ') ?? '';
     const where: Prisma.OrganizationWhereInput = {
       status: { not: 'ARCHIVED' },
       type: input.type ? input.type : { in: ['COMPANY', 'VENDOR'] },
-      ...(input.q?.trim()
-        ? {
-            name: {
-              contains: input.q.trim(),
-              mode: 'insensitive' as const,
-            },
-          }
-        : {}),
       AND: [
         {
           OR: [
@@ -541,6 +668,7 @@ export class PeerRecommendationsService {
             { vendor: { matchingEligible: true } },
           ],
         },
+        ...(q ? [organizationNameOrEmailFilter(q)] : []),
       ],
     };
 
@@ -556,8 +684,19 @@ export class PeerRecommendationsService {
           name: true,
           type: true,
           industry: true,
+          customAttrs: true,
           company: { select: { matchingEligible: true, featured: true } },
           vendor: { select: { matchingEligible: true, featured: true } },
+          members: {
+            take: 1,
+            orderBy: [{ isPrimary: 'desc' }, { joinedAt: 'asc' }],
+            select: { user: { select: { email: true } } },
+          },
+          invitations: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            select: { email: true },
+          },
           peerRecommendationsFrom: {
             orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
             // Fetch extra so threshold/tag floors can drop low scores and
@@ -590,6 +729,7 @@ export class PeerRecommendationsService {
         return {
           organizationId: org.id,
           name: org.name,
+          email: contactEmailOf(org),
           type: org.type,
           industry: org.industry,
           featured: Boolean(org.company?.featured || org.vendor?.featured),
@@ -616,7 +756,11 @@ export class PeerRecommendationsService {
     };
   }
 
-  /** Same visibility rules as Manage / participant Recommendations. */
+  /**
+   * Persisted recommendations stay visible until pruned (threshold/settings,
+   * profile edit, or manual remove). Threshold/tag floors gate *adding* new
+   * COMPUTED rows, not hiding ones already on the list.
+   */
   private filterVisibleRecommendations<
     T extends {
       source: string;
@@ -625,29 +769,20 @@ export class PeerRecommendationsService {
     },
   >(
     rows: T[],
-    threshold: number,
-    tagCategoryThresholds: TagCategoryThresholds,
+    _threshold: number,
+    _tagCategoryThresholds: TagCategoryThresholds,
   ): T[] {
-    return rows
-      .filter((row) => {
-        if (row.source === 'MANUAL') return true;
-        if (row.totalScore < threshold) return false;
-        const breakdown =
-          row.scoreBreakdown &&
-          typeof row.scoreBreakdown === 'object' &&
-          !Array.isArray(row.scoreBreakdown)
-            ? (row.scoreBreakdown as Record<string, unknown>)
-            : {};
-        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
-          .ok;
-      })
-      .sort((a, b) => {
-        if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
-        return b.totalScore - a.totalScore;
-      });
+    return [...rows].sort((a, b) => {
+      if (a.source !== b.source) return a.source === 'MANUAL' ? -1 : 1;
+      return b.totalScore - a.totalScore;
+    });
   }
 
-  async recomputeForOrganization(organizationId: string) {
+  async recomputeForOrganization(
+    organizationId: string,
+    reason = 'manual.recompute',
+  ) {
+    const pruneMode = pruneModeForReason(reason);
     const started = Date.now();
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
@@ -799,6 +934,7 @@ export class PeerRecommendationsService {
         perspective: 'COMPANY',
         scored,
         tagCategoryThresholds,
+        pruneMode,
       });
     }
 
@@ -861,6 +997,7 @@ export class PeerRecommendationsService {
         perspective: 'VENDOR',
         scored,
         tagCategoryThresholds,
+        pruneMode,
       });
     }
 
@@ -1273,6 +1410,7 @@ export class PeerRecommendationsService {
     fromOrgId: string;
     perspective: 'COMPANY' | 'VENDOR';
     tagCategoryThresholds: TagCategoryThresholds;
+    pruneMode: PeerRecPruneMode;
     scored: Array<{
       toOrgId: string;
       fromProfileVersion: number;
@@ -1290,7 +1428,7 @@ export class PeerRecommendationsService {
   }) {
     const threshold = await this.getRecommendationThreshold();
     const roleLimit = await this.getRecommendationLimit(input.perspective);
-    const [manual, dismissals] = await Promise.all([
+    const [manual, dismissals, existingComputed] = await Promise.all([
       this.prisma.orgPeerRecommendation.findMany({
         where: { fromOrgId: input.fromOrgId, source: 'MANUAL' },
         select: { toOrgId: true },
@@ -1299,37 +1437,80 @@ export class PeerRecommendationsService {
         where: { fromOrgId: input.fromOrgId },
         select: { toOrgId: true },
       }),
+      this.prisma.orgPeerRecommendation.findMany({
+        where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },
+        select: { toOrgId: true },
+      }),
     ]);
     const manualToIds = new Set(manual.map((row) => row.toOrgId));
     const dismissedToIds = new Set(dismissals.map((row) => row.toOrgId));
-    const computedSlots = Math.max(0, roleLimit - manualToIds.size);
+    const existingToIds = new Set(existingComputed.map((row) => row.toOrgId));
+    const scoredByTo = new Map(input.scored.map((row) => [row.toOrgId, row]));
 
-    const rankedComputed = [...input.scored]
+    const passesGates = (row: (typeof input.scored)[number]) => {
+      if (row.pair.totalScore < threshold) return false;
+      return meetsTagCategoryThresholds(
+        row.pair.scoreBreakdown,
+        input.tagCategoryThresholds,
+      ).ok;
+    };
+
+    const keepToIds = new Set<string>([...manualToIds]);
+    const now = new Date();
+    let upserted = 0;
+
+    // 1) Refresh sticky existing COMPUTED rows. Only drop them when the peer
+    //    disappeared, was dismissed, or (reevaluate) no longer meets the bar.
+    for (const toOrgId of existingToIds) {
+      if (dismissedToIds.has(toOrgId) || manualToIds.has(toOrgId)) {
+        continue;
+      }
+      const fresh = scoredByTo.get(toOrgId);
+      if (!fresh) {
+        continue;
+      }
+      const passes = passesGates(fresh);
+      if (!passes && input.pruneMode === 'reevaluate') {
+        continue;
+      }
+      await this.upsertComputedIfNotManual({
+        fromOrgId: input.fromOrgId,
+        toOrgId,
+        perspective: input.perspective,
+        fromProfileVersion: fresh.fromProfileVersion,
+        toProfileVersion: fresh.toProfileVersion,
+        dataBase: {
+          source: 'COMPUTED',
+          ruleScore: fresh.pair.ruleScore,
+          aiScore: fresh.pair.aiScore,
+          totalScore: fresh.pair.totalScore,
+          reasons: fresh.pair.reasons,
+          aiDescription: fresh.pair.aiDescription,
+          scoreBreakdown: fresh.pair.scoreBreakdown as Prisma.InputJsonValue,
+          computedAt: now,
+        },
+      });
+      keepToIds.add(toOrgId);
+      upserted += 1;
+    }
+
+    // 2) Fill free slots with new high-scoring matches (diversity among newcomers only).
+    const freeSlots = Math.max(0, roleLimit - keepToIds.size);
+    const newcomers = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
       .filter((row) => {
+        if (keepToIds.has(row.toOrgId)) return false;
         if (manualToIds.has(row.toOrgId)) return false;
         if (dismissedToIds.has(row.toOrgId)) return false;
-        if (row.pair.totalScore < threshold) return false;
-        return meetsTagCategoryThresholds(
-          row.pair.scoreBreakdown,
-          input.tagCategoryThresholds,
-        ).ok;
+        return passesGates(row);
       });
-    const topComputed = selectDiverseTop(
-      rankedComputed,
-      computedSlots,
+    const topNew = selectDiverseTop(
+      newcomers,
+      freeSlots,
       (row) => row.matchedChallengeTags?.[0] ?? row.toOrgId,
       2,
     );
-    const keepToIds = new Set([
-      ...manualToIds,
-      ...topComputed.map((row) => row.toOrgId),
-    ]);
-
-    // Upsert first, then prune — never delete-before-write (that emptied the
-    // feed while recomputes were in flight and made recommendations flicker).
-    const now = new Date();
-    for (const row of topComputed) {
+    for (const row of topNew) {
       await this.upsertComputedIfNotManual({
         fromOrgId: input.fromOrgId,
         toOrgId: row.toOrgId,
@@ -1347,8 +1528,13 @@ export class PeerRecommendationsService {
           computedAt: now,
         },
       });
+      keepToIds.add(row.toOrgId);
+      upserted += 1;
     }
 
+    // 3) Prune COMPUTED rows that are no longer kept (gone peers, dismissals,
+    //    or reevaluate failures). Sticky refresh never drops a still-scored peer
+    //    just because diversity preferred someone else.
     if (keepToIds.size === 0) {
       await this.prisma.orgPeerRecommendation.deleteMany({
         where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },
@@ -1364,7 +1550,7 @@ export class PeerRecommendationsService {
     }
 
     await this.enforceMaxPerOrg(input.fromOrgId, input.perspective);
-    return topComputed.length;
+    return upserted;
   }
 
   private async upsertBothDirections(input: {

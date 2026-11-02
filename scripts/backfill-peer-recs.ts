@@ -152,54 +152,78 @@ async function syncFrom(
   tagCategoryThresholds: ReturnType<typeof resolveTagCategoryThresholds>,
   roleLimit: number,
 ) {
-  const manual = await prisma.orgPeerRecommendation.findMany({
-    where: { fromOrgId, source: 'MANUAL' },
-    select: { toOrgId: true },
-  });
-  const manualToIds = new Set(manual.map((row) => row.toOrgId));
-  const slots = Math.max(0, roleLimit - manualToIds.size);
-
-  const ranked = [...scored]
-    .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
-    .filter((row) => {
-      if (manualToIds.has(row.toOrgId)) return false;
-      if (row.pair.totalScore < threshold) return false;
-      return meetsTagCategoryThresholds(
-        row.pair.scoreBreakdown,
-        tagCategoryThresholds,
-      ).ok;
-    });
-
-  const top = selectDiverseTop(
-    ranked,
-    slots,
-    (row) => row.matchedChallengeTags[0] ?? row.toOrgId,
-    2,
-  );
-  const keep = new Set([...manualToIds, ...top.map((row) => row.toOrgId)]);
-
-  if (keep.size === 0) {
-    await prisma.orgPeerRecommendation.deleteMany({
+  const [manual, existingComputed] = await Promise.all([
+    prisma.orgPeerRecommendation.findMany({
+      where: { fromOrgId, source: 'MANUAL' },
+      select: { toOrgId: true },
+    }),
+    prisma.orgPeerRecommendation.findMany({
       where: { fromOrgId, source: 'COMPUTED' },
-    });
-  } else {
-    await prisma.orgPeerRecommendation.deleteMany({
-      where: {
+      select: { toOrgId: true },
+    }),
+  ]);
+  const manualToIds = new Set(manual.map((row) => row.toOrgId));
+  const existingToIds = new Set(existingComputed.map((row) => row.toOrgId));
+  const scoredByTo = new Map(scored.map((row) => [row.toOrgId, row]));
+  const keep = new Set<string>([...manualToIds]);
+  const now = new Date();
+
+  const passes = (row: (typeof scored)[number]) =>
+    row.pair.totalScore >= threshold &&
+    meetsTagCategoryThresholds(row.pair.scoreBreakdown, tagCategoryThresholds)
+      .ok;
+
+  // Keep/update existing matches that still pass (sticky backfill).
+  for (const toOrgId of existingToIds) {
+    if (manualToIds.has(toOrgId)) continue;
+    const fresh = scoredByTo.get(toOrgId);
+    if (!fresh || !passes(fresh)) continue;
+    keep.add(toOrgId);
+    await prisma.orgPeerRecommendation.upsert({
+      where: { fromOrgId_toOrgId: { fromOrgId, toOrgId } },
+      create: {
         fromOrgId,
+        toOrgId,
+        perspective,
         source: 'COMPUTED',
-        toOrgId: { notIn: [...keep] },
+        fromProfileVersion: fresh.fromProfileVersion,
+        toProfileVersion: fresh.toProfileVersion,
+        ruleScore: fresh.pair.ruleScore,
+        aiScore: null,
+        totalScore: fresh.pair.totalScore,
+        reasons: fresh.pair.reasons,
+        aiDescription: null,
+        scoreBreakdown: fresh.pair.scoreBreakdown,
+        computedAt: now,
+      },
+      update: {
+        perspective,
+        source: 'COMPUTED',
+        fromProfileVersion: fresh.fromProfileVersion,
+        toProfileVersion: fresh.toProfileVersion,
+        ruleScore: fresh.pair.ruleScore,
+        aiScore: null,
+        totalScore: fresh.pair.totalScore,
+        reasons: fresh.pair.reasons,
+        aiDescription: null,
+        scoreBreakdown: fresh.pair.scoreBreakdown,
+        computedAt: now,
       },
     });
   }
 
-  const now = new Date();
+  const freeSlots = Math.max(0, roleLimit - keep.size);
+  const newcomers = [...scored]
+    .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
+    .filter((row) => !keep.has(row.toOrgId) && !manualToIds.has(row.toOrgId) && passes(row));
+  const top = selectDiverseTop(
+    newcomers,
+    freeSlots,
+    (row) => row.matchedChallengeTags[0] ?? row.toOrgId,
+    2,
+  );
   for (const row of top) {
-    const existing = await prisma.orgPeerRecommendation.findUnique({
-      where: {
-        fromOrgId_toOrgId: { fromOrgId, toOrgId: row.toOrgId },
-      },
-    });
-    if (existing?.source === 'MANUAL') continue;
+    keep.add(row.toOrgId);
     await prisma.orgPeerRecommendation.upsert({
       where: {
         fromOrgId_toOrgId: { fromOrgId, toOrgId: row.toOrgId },
@@ -231,6 +255,20 @@ async function syncFrom(
         aiDescription: null,
         scoreBreakdown: row.pair.scoreBreakdown,
         computedAt: now,
+      },
+    });
+  }
+
+  if (keep.size === 0) {
+    await prisma.orgPeerRecommendation.deleteMany({
+      where: { fromOrgId, source: 'COMPUTED' },
+    });
+  } else {
+    await prisma.orgPeerRecommendation.deleteMany({
+      where: {
+        fromOrgId,
+        source: 'COMPUTED',
+        toOrgId: { notIn: [...keep] },
       },
     });
   }
