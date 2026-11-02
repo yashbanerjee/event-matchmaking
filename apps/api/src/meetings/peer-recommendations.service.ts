@@ -170,8 +170,13 @@ export class PeerRecommendationsService {
    * has been computed for the current profile yet.
    */
   async ensureComputed(organizationId: string) {
+    const existingCount = await this.prisma.orgPeerRecommendation.count({
+      where: { fromOrgId: organizationId },
+    });
+    // If a recompute is running but we already have rows, keep serving them.
+    // Reporting computing:true here made the UI poll and flicker empty mid-sync.
     if (this.inflight.has(organizationId)) {
-      return { computing: true as const };
+      return { computing: existingCount === 0 };
     }
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
@@ -185,7 +190,7 @@ export class PeerRecommendationsService {
       return { computing: false as const };
     }
     this.scheduleRecompute(organizationId, 'recommendations.view');
-    return { computing: true as const };
+    return { computing: existingCount === 0 };
   }
 
   async listForOrganization(organizationId: string, limit?: number) {
@@ -890,14 +895,21 @@ export class PeerRecommendationsService {
   private async markComputed(organizationId: string) {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { customAttrs: true },
+      select: {
+        customAttrs: true,
+        company: { select: { profileVersion: true } },
+        vendor: { select: { profileVersion: true } },
+      },
     });
+    const profileVersion =
+      org?.company?.profileVersion ?? org?.vendor?.profileVersion ?? 0;
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
         customAttrs: {
           ...this.attrsRecord(org?.customAttrs),
           peerRecsComputedAt: new Date().toISOString(),
+          peerRecsProfileVersion: profileVersion,
         },
       },
     });
@@ -913,7 +925,16 @@ export class PeerRecommendationsService {
       },
     });
     if (!org) return false;
-    const raw = this.attrsRecord(org.customAttrs).peerRecsComputedAt;
+    const attrs = this.attrsRecord(org.customAttrs);
+    const currentVersion =
+      org.company?.profileVersion ?? org.vendor?.profileVersion ?? 0;
+    const stampedVersion = Number(attrs.peerRecsProfileVersion);
+    // Prefer profileVersion — ignores unrelated updatedAt bumps that used to
+    // retrigger recompute and wipe/rebuild the feed.
+    if (Number.isFinite(stampedVersion) && stampedVersion === currentVersion) {
+      return true;
+    }
+    const raw = attrs.peerRecsComputedAt;
     if (typeof raw !== 'string' || !raw) return false;
     const computedAt = new Date(raw).getTime();
     if (!Number.isFinite(computedAt)) return false;
@@ -921,7 +942,7 @@ export class PeerRecommendationsService {
       org.company?.updatedAt.getTime() ?? 0,
       org.vendor?.updatedAt.getTime() ?? 0,
     );
-    // Allow a few seconds of slack so the compute stamp can land after profile write.
+    // Legacy stamp fallback (pre profileVersion marker).
     return computedAt + 2000 >= profileUpdated;
   }
 
@@ -1285,20 +1306,8 @@ export class PeerRecommendationsService {
       ...topComputed.map((row) => row.toOrgId),
     ]);
 
-    if (keepToIds.size === 0) {
-      await this.prisma.orgPeerRecommendation.deleteMany({
-        where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },
-      });
-    } else {
-      await this.prisma.orgPeerRecommendation.deleteMany({
-        where: {
-          fromOrgId: input.fromOrgId,
-          source: 'COMPUTED',
-          toOrgId: { notIn: [...keepToIds] },
-        },
-      });
-    }
-
+    // Upsert first, then prune — never delete-before-write (that emptied the
+    // feed while recomputes were in flight and made recommendations flicker).
     const now = new Date();
     for (const row of topComputed) {
       await this.upsertComputedIfNotManual({
@@ -1316,6 +1325,20 @@ export class PeerRecommendationsService {
           aiDescription: row.pair.aiDescription,
           scoreBreakdown: row.pair.scoreBreakdown as Prisma.InputJsonValue,
           computedAt: now,
+        },
+      });
+    }
+
+    if (keepToIds.size === 0) {
+      await this.prisma.orgPeerRecommendation.deleteMany({
+        where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },
+      });
+    } else {
+      await this.prisma.orgPeerRecommendation.deleteMany({
+        where: {
+          fromOrgId: input.fromOrgId,
+          source: 'COMPUTED',
+          toOrgId: { notIn: [...keepToIds] },
         },
       });
     }
