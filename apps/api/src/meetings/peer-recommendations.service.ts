@@ -1359,17 +1359,26 @@ export class PeerRecommendationsService {
     const max = await this.getRecommendationLimit(
       orgType === 'VENDOR' ? 'VENDOR' : 'COMPANY',
     );
-    const rows = await this.prisma.orgPeerRecommendation.findMany({
-      where: { fromOrgId },
-      select: { id: true, source: true, totalScore: true },
-    });
-    rows.sort((a, b) => {
+    const [rows, dismissals] = await Promise.all([
+      this.prisma.orgPeerRecommendation.findMany({
+        where: { fromOrgId },
+        select: { id: true, toOrgId: true, source: true, totalScore: true },
+      }),
+      this.prisma.orgPeerRecommendationDismissal.findMany({
+        where: { fromOrgId },
+        select: { toOrgId: true },
+      }),
+    ]);
+    const dismissedToIds = new Set(dismissals.map((row) => row.toOrgId));
+    // Dismissed peers do not count toward the active role ceiling.
+    const active = rows.filter((row) => !dismissedToIds.has(row.toOrgId));
+    active.sort((a, b) => {
       if (a.source !== b.source) {
         return a.source === 'MANUAL' ? -1 : 1;
       }
       return b.totalScore - a.totalScore;
     });
-    const excess = rows.slice(max);
+    const excess = active.slice(max);
     if (!excess.length) return;
     await this.prisma.orgPeerRecommendation.deleteMany({
       where: { id: { in: excess.map((row) => row.id) } },
@@ -1455,14 +1464,21 @@ export class PeerRecommendationsService {
       ).ok;
     };
 
-    const keepToIds = new Set<string>([...manualToIds]);
+    // Active/manual slots for the role ceiling. Dismissed peers stay stored for
+    // the portal "Not interested" section but do not consume active slots.
+    const activeKeepToIds = new Set<string>([...manualToIds]);
+    const dismissedKeepToIds = new Set<string>();
     const now = new Date();
     let upserted = 0;
 
-    // 1) Refresh sticky existing COMPUTED rows. Only drop them when the peer
-    //    disappeared, was dismissed, or (reevaluate) no longer meets the bar.
+    // 1) Refresh sticky existing COMPUTED rows. Dismissed rows are preserved
+    //    (not refreshed into active slots). Reevaluate may drop failing actives.
     for (const toOrgId of existingToIds) {
-      if (dismissedToIds.has(toOrgId) || manualToIds.has(toOrgId)) {
+      if (manualToIds.has(toOrgId)) {
+        continue;
+      }
+      if (dismissedToIds.has(toOrgId)) {
+        dismissedKeepToIds.add(toOrgId);
         continue;
       }
       const fresh = scoredByTo.get(toOrgId);
@@ -1490,18 +1506,19 @@ export class PeerRecommendationsService {
           computedAt: now,
         },
       });
-      keepToIds.add(toOrgId);
+      activeKeepToIds.add(toOrgId);
       upserted += 1;
     }
 
     // 2) Fill free slots with new high-scoring matches (diversity among newcomers only).
-    const freeSlots = Math.max(0, roleLimit - keepToIds.size);
+    const freeSlots = Math.max(0, roleLimit - activeKeepToIds.size);
     const newcomers = [...input.scored]
       .sort((a, b) => b.pair.totalScore - a.pair.totalScore)
       .filter((row) => {
-        if (keepToIds.has(row.toOrgId)) return false;
+        if (activeKeepToIds.has(row.toOrgId)) return false;
         if (manualToIds.has(row.toOrgId)) return false;
         if (dismissedToIds.has(row.toOrgId)) return false;
+        if (dismissedKeepToIds.has(row.toOrgId)) return false;
         return passesGates(row);
       });
     const topNew = selectDiverseTop(
@@ -1528,13 +1545,18 @@ export class PeerRecommendationsService {
           computedAt: now,
         },
       });
-      keepToIds.add(row.toOrgId);
+      activeKeepToIds.add(row.toOrgId);
       upserted += 1;
     }
 
-    // 3) Prune COMPUTED rows that are no longer kept (gone peers, dismissals,
-    //    or reevaluate failures). Sticky refresh never drops a still-scored peer
-    //    just because diversity preferred someone else.
+    const keepToIds = new Set<string>([
+      ...activeKeepToIds,
+      ...dismissedKeepToIds,
+    ]);
+
+    // 3) Prune COMPUTED rows that are no longer kept (gone peers or reevaluate
+    //    failures). Sticky refresh never drops a still-scored peer just because
+    //    diversity preferred someone else. Dismissed peers stay for the feed.
     if (keepToIds.size === 0) {
       await this.prisma.orgPeerRecommendation.deleteMany({
         where: { fromOrgId: input.fromOrgId, source: 'COMPUTED' },

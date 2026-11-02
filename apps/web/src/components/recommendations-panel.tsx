@@ -13,6 +13,7 @@ import { MeetingSchedulePicker } from '@/components/meeting-schedule-picker';
 import { RecommendationProfileModal } from '@/components/recommendation-profile-modal';
 
 type MatchSource = 'ai' | 'tags' | 'admin';
+type EngagementStatus = 'active' | 'engaged' | 'dismissed';
 
 type Recommendation = {
   organizationId: string;
@@ -27,17 +28,8 @@ type Recommendation = {
   aiDescription?: string | null;
   featured?: boolean;
   matchSource?: MatchSource;
+  engagementStatus?: EngagementStatus;
 };
-
-function isQualifiedMatch(
-  item: Recommendation,
-  scoreThreshold: number | null,
-): boolean {
-  if (item.matchSource === 'admin') return true;
-  if (!Number.isFinite(item.score)) return false;
-  if (scoreThreshold == null) return item.score > 0;
-  return item.score >= scoreThreshold;
-}
 
 function sourceLabel(item: Recommendation): { text: string; title: string } {
   if (item.matchSource === 'admin') {
@@ -68,6 +60,8 @@ function SuggestionGrid({
   pendingOrgId,
   dismissingOrgId,
   showNotInterested,
+  showInterestActions,
+  statusBadge,
   onInterest,
   onNotInterested,
   onViewProfile,
@@ -78,18 +72,21 @@ function SuggestionGrid({
   pendingOrgId?: string | null;
   dismissingOrgId?: string | null;
   showNotInterested?: boolean;
+  showInterestActions?: boolean;
+  statusBadge?: { text: string; title: string };
   onInterest: (item: Recommendation) => void;
   onNotInterested?: (item: Recommendation) => void;
   onViewProfile: (item: Recommendation) => void;
   featured?: boolean;
 }) {
+  const canAct = showInterestActions !== false;
   return (
     <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item, index) => (
         <div
           key={item.organizationId}
           className={`animate-rise min-w-0 overflow-hidden rounded-xl border p-3 ${
-            featured
+            featured || item.featured
               ? 'border-[var(--accent)]/35 bg-[linear-gradient(180deg,#e7fcf8_0%,#ffffff_70%)]'
               : 'border-[var(--border)] bg-white'
           }`}
@@ -110,7 +107,7 @@ function SuggestionGrid({
                 </p>
                 <Badge
                   variant={
-                    item.matchSource === 'ai' || featured
+                    item.matchSource === 'ai' || featured || item.featured
                       ? 'accent'
                       : 'secondary'
                   }
@@ -119,6 +116,15 @@ function SuggestionGrid({
                 >
                   {sourceLabel(item).text}
                 </Badge>
+                {statusBadge ? (
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0"
+                    title={statusBadge.title}
+                  >
+                    {statusBadge.text}
+                  </Badge>
+                ) : null}
               </div>
               <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
                 {item.industry || item.type}
@@ -176,20 +182,22 @@ function SuggestionGrid({
             >
               View profile
             </Button>
-            <Button
-              size="sm"
-              disabled={
-                !fromOrgId ||
-                Boolean(pendingOrgId) ||
-                Boolean(dismissingOrgId) ||
-                pendingOrgId === item.organizationId
-              }
-              loading={pendingOrgId === item.organizationId}
-              onClick={() => onInterest(item)}
-            >
-              I&apos;m interested
-            </Button>
-            {showNotInterested ? (
+            {canAct ? (
+              <Button
+                size="sm"
+                disabled={
+                  !fromOrgId ||
+                  Boolean(pendingOrgId) ||
+                  Boolean(dismissingOrgId) ||
+                  pendingOrgId === item.organizationId
+                }
+                loading={pendingOrgId === item.organizationId}
+                onClick={() => onInterest(item)}
+              >
+                I&apos;m interested
+              </Button>
+            ) : null}
+            {canAct && showNotInterested ? (
               <Button
                 size="sm"
                 variant="ghost"
@@ -327,26 +335,22 @@ export function RecommendationsPanel({
       : perspective === 'VENDOR'
         ? 'COMPANY'
         : null;
-  const scoreThreshold =
-    typeof recs.data?.scoreThreshold === 'number'
-      ? recs.data.scoreThreshold
-      : null;
-  const featured = (recs.data?.featured ?? []).filter(
-    (item) =>
-      isQualifiedMatch(item, scoreThreshold) &&
-      (!allowedPeerType || item.type === allowedPeerType),
-  );
-  const items = (recs.data?.items ?? []).filter(
-    (item) =>
-      isQualifiedMatch(item, scoreThreshold) &&
-      (!allowedPeerType || item.type === allowedPeerType),
+  const byPeerType = (item: Recommendation) =>
+    !allowedPeerType || item.type === allowedPeerType;
+  const featured = (recs.data?.featured ?? []).filter(byPeerType);
+  const items = (recs.data?.items ?? []).filter(byPeerType);
+  const allItems = [...featured, ...items];
+  const statusOf = (item: Recommendation): EngagementStatus =>
+    item.engagementStatus ?? 'active';
+  const activeItems = allItems.filter((item) => statusOf(item) === 'active');
+  const engagedItems = allItems.filter((item) => statusOf(item) === 'engaged');
+  const dismissedItems = allItems.filter(
+    (item) => statusOf(item) === 'dismissed',
   );
   const computing = Boolean(recs.data?.computing);
-  const empty = featured.length === 0 && items.length === 0;
+  const empty = allItems.length === 0;
   const profileItem = profileOrgId
-    ? (featured.find((r) => r.organizationId === profileOrgId) ??
-      items.find((r) => r.organizationId === profileOrgId) ??
-      null)
+    ? (allItems.find((r) => r.organizationId === profileOrgId) ?? null)
     : null;
 
   const sendInterest = (item: Recommendation) => {
@@ -408,7 +412,7 @@ export function RecommendationsPanel({
         ) : null}
         {dismissedNote ? (
           <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--card-elevated)] px-3 py-2 text-sm text-[var(--muted)]">
-            Removed from your recommendations. This match will not appear again.
+            Moved to Not interested. You can still review the match below.
           </p>
         ) : null}
 
@@ -426,13 +430,13 @@ export function RecommendationsPanel({
           />
         ) : (
           <div className="space-y-4">
-            {featured.length > 0 ? (
+            {activeItems.length > 0 ? (
               <section className="min-w-0 space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-                  Admin suggestions
+                  Active recommendations
                 </h3>
                 <SuggestionGrid
-                  items={featured}
+                  items={activeItems}
                   fromOrgId={fromOrgId}
                   pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
                   dismissingOrgId={dismissingOrgId}
@@ -440,24 +444,47 @@ export function RecommendationsPanel({
                   onInterest={sendInterest}
                   onNotInterested={markNotInterested}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
-                  featured
                 />
               </section>
             ) : null}
 
-            {items.length > 0 ? (
+            {engagedItems.length > 0 ? (
               <section className="min-w-0 space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
-                  Matched to your preferences
+                  Meeting or request in progress
                 </h3>
                 <SuggestionGrid
-                  items={items}
+                  items={engagedItems}
                   fromOrgId={fromOrgId}
                   pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
                   dismissingOrgId={dismissingOrgId}
-                  showNotInterested={isInvestor}
+                  showInterestActions={false}
+                  statusBadge={{
+                    text: 'In progress',
+                    title: 'A meeting request or meeting is already open',
+                  }}
                   onInterest={sendInterest}
-                  onNotInterested={markNotInterested}
+                  onViewProfile={(item) => setProfileOrgId(item.organizationId)}
+                />
+              </section>
+            ) : null}
+
+            {dismissedItems.length > 0 ? (
+              <section className="min-w-0 space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
+                  Not interested
+                </h3>
+                <SuggestionGrid
+                  items={dismissedItems}
+                  fromOrgId={fromOrgId}
+                  pendingOrgId={interestOrgId ?? scheduleFor?.organizationId}
+                  dismissingOrgId={dismissingOrgId}
+                  showInterestActions={false}
+                  statusBadge={{
+                    text: 'Not interested',
+                    title: 'You marked this match as not interested',
+                  }}
+                  onInterest={sendInterest}
                   onViewProfile={(item) => setProfileOrgId(item.organizationId)}
                 />
               </section>

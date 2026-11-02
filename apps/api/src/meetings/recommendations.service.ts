@@ -6,10 +6,8 @@ import {
 } from '@nestjs/common';
 import {
   collectPublicProfileFields,
-  meetsTagCategoryThresholds,
   PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
   formSchemaDefinition,
-  resolveTagCategoryThresholds,
   type FormSchemaDefinition,
   type PublicProfileField,
 } from '@em/shared';
@@ -20,6 +18,9 @@ import { PeerRecommendationsService } from './peer-recommendations.service';
 import type { AuthUser } from '../common/decorators';
 
 type MatchSource = 'ai' | 'tags' | 'admin';
+
+/** Portal feed ordering: open matches → already in pipeline → dismissed. */
+type EngagementStatus = 'active' | 'engaged' | 'dismissed';
 
 type RecommendationItem = {
   organizationId: string;
@@ -37,6 +38,7 @@ type RecommendationItem = {
   logoUrl: string | null;
   featured: boolean;
   matchSource: MatchSource;
+  engagementStatus: EngagementStatus;
 };
 
 @Injectable()
@@ -91,7 +93,6 @@ export class RecommendationsService {
       this.listDismissedPeerIds(perspectiveOrg.id),
       this.listEngagedPeerIds(perspectiveOrg.id),
     ]);
-    const excludeOrgIds = [...orgIds, ...dismissedIds, ...engagedIds];
 
     const [stored, scoreThreshold] = await Promise.all([
       this.fromStored({
@@ -100,13 +101,16 @@ export class RecommendationsService {
         peerType,
         max,
         tagLabels,
-        excludeOrgIds,
+        // Never hide self; engaged + dismissed stay visible in later sections.
+        excludeOrgIds: orgIds,
+        dismissedIds: new Set(dismissedIds),
+        engagedIds: new Set(engagedIds),
       }),
       this.getRecommendationThreshold(),
     ]);
 
     // Directory browse (Innovators / Investors) is separate. Recommendations
-    // only include admin pins and computed pairs at or above the score threshold.
+    // show sticky stored peers: active first, then meeting/request, then not interested.
     return {
       items: stored?.items ?? [],
       featured: stored?.featured ?? [],
@@ -169,10 +173,8 @@ export class RecommendationsService {
       update: {},
     });
 
-    // Drop the stored row so a free recommendation slot opens for someone else.
-    await this.prisma.orgPeerRecommendation.deleteMany({
-      where: { fromOrgId: perspectiveOrg.id, toOrgId },
-    });
+    // Keep the stored peer row so the match stays visible under "Not interested"
+    // and a free slot can still open for a new active recommendation on recompute.
 
     return { ok: true, fromOrgId: perspectiveOrg.id, toOrgId };
   }
@@ -596,21 +598,26 @@ export class RecommendationsService {
     return parsed.success ? parsed.data : null;
   }
 
-  /** Featured first, then scored matches — hard cap of `max` total. */
-  private splitRecommendations(
-    scored: RecommendationItem[],
-    max: number,
-    threshold: number,
-  ) {
-    const qualified = scored.filter(
-      (item) =>
-        item.matchSource === 'admin' ||
-        (Number.isFinite(item.score) && item.score >= threshold),
-    );
-    const featured = qualified.filter((item) => item.featured).slice(0, max);
+  private engagementRank(status: EngagementStatus): number {
+    if (status === 'active') return 0;
+    if (status === 'engaged') return 1;
+    return 2;
+  }
+
+  /** Featured first, then active → engaged → dismissed (score within each). */
+  private splitRecommendations(scored: RecommendationItem[], max: number) {
+    const ordered = [...scored].sort((a, b) => {
+      const byStatus =
+        this.engagementRank(a.engagementStatus) -
+        this.engagementRank(b.engagementStatus);
+      if (byStatus !== 0) return byStatus;
+      return b.score - a.score;
+    });
+    const featured = ordered.filter((item) => item.featured).slice(0, max);
+    const featuredIds = new Set(featured.map((item) => item.organizationId));
     const remaining = Math.max(0, max - featured.length);
-    const items = qualified
-      .filter((item) => !item.featured)
+    const items = ordered
+      .filter((item) => !featuredIds.has(item.organizationId))
       .slice(0, remaining);
     return { items, featured };
   }
@@ -628,6 +635,8 @@ export class RecommendationsService {
     max: number;
     tagLabels: Record<string, string>;
     excludeOrgIds: string[];
+    dismissedIds: Set<string>;
+    engagedIds: Set<string>;
   }): Promise<{
     items: RecommendationItem[];
     featured: RecommendationItem[];
@@ -649,7 +658,7 @@ export class RecommendationsService {
         },
       },
       orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
-      // Fetch extra so score and tag floors can drop rows and still fill `max`.
+      // Fetch extra so engagement sections and featured pins can fill `max`.
       take: Math.min(
         PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
         Math.max(input.max * 3, 30),
@@ -657,24 +666,10 @@ export class RecommendationsService {
     });
     if (!rows.length) return null;
 
-    const threshold = await this.getRecommendationThreshold();
-    const tagCategoryThresholds = resolveTagCategoryThresholds(
-      await this.config.getRaw('ops.tagCategoryThresholds'),
-    );
+    // Sticky: keep every stored peer (including below-threshold / dismissed /
+    // engaged). Threshold only gates *adding* new COMPUTED rows on recompute.
     const scored: RecommendationItem[] = rows
-      .filter((row) => {
-        if (row.toOrg.type !== input.peerType) return false;
-        if (row.source === 'MANUAL') return true;
-        if (row.totalScore < threshold) return false;
-        const breakdown =
-          row.scoreBreakdown &&
-          typeof row.scoreBreakdown === 'object' &&
-          !Array.isArray(row.scoreBreakdown)
-            ? (row.scoreBreakdown as Record<string, unknown>)
-            : {};
-        return meetsTagCategoryThresholds(breakdown, tagCategoryThresholds)
-          .ok;
-      })
+      .filter((row) => row.toOrg.type === input.peerType)
       .map((row) => {
         const peer = row.toOrg;
         const featured = Boolean(
@@ -686,6 +681,13 @@ export class RecommendationsService {
             : row.aiDescription
               ? [row.aiDescription]
               : [];
+        const engagementStatus: EngagementStatus = input.dismissedIds.has(
+          peer.id,
+        )
+          ? 'dismissed'
+          : input.engagedIds.has(peer.id)
+            ? 'engaged'
+            : 'active';
         return {
           organizationId: peer.id,
           name: peer.name,
@@ -720,11 +722,12 @@ export class RecommendationsService {
               : row.aiScore != null
                 ? ('ai' as const)
                 : ('tags' as const),
+          engagementStatus,
         };
       });
 
     if (!scored.length) return null;
-    return this.splitRecommendations(scored, input.max, threshold);
+    return this.splitRecommendations(scored, input.max);
   }
 
   private labelOf(
