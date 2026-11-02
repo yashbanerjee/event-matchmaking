@@ -31,6 +31,8 @@ export interface PairMatchScoreInput {
   systemPrompt?: string;
   /** Filled user message (Admin → matchmaking user template). */
   userMessage?: string;
+  /** Deterministic tag preference summary injected into the user prompt. */
+  preferenceFit?: string;
   temperature?: number;
 }
 

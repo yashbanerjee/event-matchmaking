@@ -12,6 +12,7 @@ import {
   type ProfileFeatures,
 } from '@em/domain';
 import {
+  blendPreferenceAwareScore,
   clampRecommendationLimit,
   DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT,
   DEFAULT_INVESTOR_RECOMMENDATION_LIMIT,
@@ -28,6 +29,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FiltersService } from '../filters/filters.service';
 import { AiService } from '../integrations/ai/ai.service';
 import { EffectiveConfigService } from '../settings/effective-config.service';
+import { formatPreferenceFitForPrompt } from '../integrations/ai/matchmaking-prompt';
 import { buildMatchmakingPairCards } from '../integrations/ai/profile-narrative';
 import type { AuthUser } from '../common/decorators';
 import { AuditService } from '../audit/audit.service';
@@ -698,7 +700,7 @@ export class PeerRecommendationsService {
           0,
           Math.min(
             1,
-            await this.config.getNumber('ai.matchmakingBlendWeight', 0.3),
+            await this.config.getNumber('ai.matchmakingBlendWeight', 0.25),
           ),
         )
       : 0;
@@ -1123,6 +1125,16 @@ export class PeerRecommendationsService {
           right,
           systemPrompt: input.systemPrompt || undefined,
           temperature: input.temperature,
+          preferenceFit: formatPreferenceFitForPrompt({
+            challenge: score.breakdown.challenge,
+            solution: score.breakdown.solution,
+            geography: score.breakdown.geography,
+            commercial: score.breakdown.commercial,
+            stage: score.breakdown.stage,
+            ticket: score.breakdown.ticket,
+            ruleScore: score.totalScore,
+            matchedChallengeTags: score.matchedChallengeTags,
+          }),
         });
         if (pair) {
           llm01 = pair.score;
@@ -1170,11 +1182,19 @@ export class PeerRecommendationsService {
 
     const totalScore =
       aiScore != null && input.blend > 0
-        ? Math.round(
-            (score.totalScore * (1 - input.blend) + aiScore * input.blend) *
-              100,
-          ) / 100
+        ? blendPreferenceAwareScore({
+            ruleScore: score.totalScore,
+            aiScore,
+            blend: input.blend,
+            challenge: score.breakdown.challenge,
+            geography: score.breakdown.geography,
+            stage: score.breakdown.stage,
+          })
         : score.totalScore;
+
+    if (aiScore != null && input.blend > 0) {
+      breakdown.preferenceAwareTotal = totalScore;
+    }
 
     return {
       ruleScore: score.totalScore,

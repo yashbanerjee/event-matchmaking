@@ -1,15 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   calculateMatchScore,
   evaluateEligibility,
 } from '@em/domain';
 import {
+  TAG_CATEGORY_KEYS,
+  blendPreferenceAwareScore,
   defaultMatchingWeights,
   matchingWeightsSchema,
   meetsTagCategoryThresholds,
@@ -28,8 +32,10 @@ import { EmailService } from '../integrations/email/email.service';
 import { EnvService } from '../config/env.service';
 import { FiltersService } from '../filters/filters.service';
 import { AiService } from '../integrations/ai/ai.service';
+import { formatPreferenceFitForPrompt } from '../integrations/ai/matchmaking-prompt';
 import { buildMatchmakingPairCards } from '../integrations/ai/profile-narrative';
 import { companyToProfileFeatures, vendorToProfileFeatures } from '@em/domain';
+import { PeerRecommendationsService } from '../meetings/peer-recommendations.service';
 import { PlacesService } from '../places/places.service';
 import type { AuthUser } from '../common/decorators';
 import { generateSecureToken } from '../common/crypto.util';
@@ -75,6 +81,8 @@ export class MatchmakingService {
     private readonly filters: FiltersService,
     private readonly ai: AiService,
     private readonly places: PlacesService,
+    @Inject(forwardRef(() => PeerRecommendationsService))
+    private readonly peerRecs: PeerRecommendationsService,
   ) {}
 
   async ensureDefaultRule() {
@@ -123,6 +131,12 @@ export class MatchmakingService {
       where: { ruleId: rule.id },
       orderBy: { version: 'desc' },
     });
+    const previous = resolveMatchingWeights(
+      latest?.weights ?? defaultMatchingWeights,
+    );
+    const unchanged = TAG_CATEGORY_KEYS.every(
+      (key) => Number(previous[key] ?? 0) === Number(parsed[key] ?? 0),
+    );
     const version = (latest?.version ?? 0) + 1;
     const created = await this.prisma.matchingRuleVersion.create({
       data: {
@@ -141,6 +155,20 @@ export class MatchmakingService {
       outcome: 'SUCCESS',
       after: parsed,
     });
+    if (!unchanged) {
+      try {
+        const result = await this.peerRecs.scheduleRecomputeAllEligible(
+          'matching.weights.update',
+        );
+        this.logger.log(
+          `Queued peer recompute for ${result.queued} orgs after matching weights update`,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to queue peer recompute after weights update: ${(err as Error).message}`,
+        );
+      }
+    }
     return created;
   }
 
@@ -335,10 +363,10 @@ export class MatchmakingService {
             0,
             Math.min(
               1,
-              await this.config.getNumber('ai.matchmakingBlendWeight', 0.3),
+              await this.config.getNumber('ai.matchmakingBlendWeight', 0.25),
             ),
           )
-        : 0.3;
+        : 0.25;
       const aiSystemPrompt = useAi
         ? await this.config.getString('ai.matchmakingPrompt', '')
         : '';
@@ -433,6 +461,16 @@ export class MatchmakingService {
                 right,
                 systemPrompt: aiSystemPrompt || undefined,
                 temperature: aiTemperature,
+                preferenceFit: formatPreferenceFitForPrompt({
+                  challenge: score.breakdown.challenge,
+                  solution: score.breakdown.solution,
+                  geography: score.breakdown.geography,
+                  commercial: score.breakdown.commercial,
+                  stage: score.breakdown.stage,
+                  ticket: score.breakdown.ticket,
+                  ruleScore: score.totalScore,
+                  matchedChallengeTags: score.matchedChallengeTags,
+                }),
               });
               if (pair) {
                 llm01 = pair.score;
@@ -466,10 +504,15 @@ export class MatchmakingService {
             }
             breakdown.aiBlendWeight = blend;
 
-            totalScore =
-              Math.round(
-                (score.totalScore * (1 - blend) + aiScore * blend) * 100,
-              ) / 100;
+            totalScore = blendPreferenceAwareScore({
+              ruleScore: score.totalScore,
+              aiScore,
+              blend,
+              challenge: score.breakdown.challenge,
+              geography: score.breakdown.geography,
+              stage: score.breakdown.stage,
+            });
+            breakdown.preferenceAwareTotal = totalScore;
             if (llmRationale?.trim()) {
               const bullets =
                 llmReasons?.length && llmReasons.length > 0

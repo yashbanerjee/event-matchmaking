@@ -216,7 +216,7 @@ export class EffectiveConfigService {
       return 75;
     }
     if (field.key === 'ai.matchmakingBlendWeight') {
-      return 0.3;
+      return 0.25;
     }
     if (field.key === 'ai.pairScoringMethod') {
       return 'structured_json';

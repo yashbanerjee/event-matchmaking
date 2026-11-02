@@ -331,7 +331,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'AI_MATCHMAKING_BLEND_WEIGHT',
     label: 'AI blend weight',
     description:
-      'How much AI contributes to the final score (0–1). Default 0.3 (70% tags + 30% AI). Keep ~0.25–0.35 so tags still dominate hard fit.',
+      'How much AI can contribute among preference-aligned pairs (0–1). Default 0.25. Weak challenge/geo/stage fit automatically reduces AI influence so narrative similarity cannot override stated preferences.',
     group: 'ai',
     type: 'number',
   },

@@ -82,20 +82,20 @@ const TAG_CATEGORY_LABELS: Record<TagCategoryKey, string> = {
 };
 
 const DEFAULT_WEIGHTS: Record<TagCategoryKey, string> = {
-  challenge: '0.3',
+  challenge: '0.35',
   solution: '0.2',
-  geography: '0.15',
-  commercial: '0.15',
+  geography: '0.18',
+  commercial: '0.12',
   stage: '0.1',
-  ticket: '0.1',
+  ticket: '0.05',
 };
 
 const DEFAULT_TAG_THRESHOLDS: Record<TagCategoryKey, string> = {
-  challenge: '25',
+  challenge: '40',
   solution: '0',
-  geography: '20',
+  geography: '25',
   commercial: '0',
-  stage: '15',
+  stage: '20',
   ticket: '0',
 };
 
@@ -113,7 +113,7 @@ const DEFAULTS: FineTuneDraft = {
   'ops.recommendationScoreThreshold': '75',
   'ops.investorRecommendationLimit': '100',
   'ops.innovatorRecommendationLimit': '100',
-  'ai.matchmakingBlendWeight': '0.3',
+  'ai.matchmakingBlendWeight': '0.25',
   'ai.pairScoringMethod': 'structured_json',
   'ai.includeOnboardingInProfile': 'true',
   'ai.javTemperature': '0.2',
@@ -375,6 +375,14 @@ export function AiFineTunePanel({ disabled = false }: Props) {
         );
       }
 
+      // Persist weights before threshold/settings so the auto recompute
+      // started by the settings save already uses the new weights.
+      await apiFetch('/matchmaking/rules/default/weights', {
+        method: 'PUT',
+        token: getAccessToken(),
+        body: JSON.stringify(parsedWeights),
+      });
+
       await apiFetch('/settings/integrations', {
         method: 'PUT',
         token: getAccessToken(),
@@ -440,20 +448,18 @@ export function AiFineTunePanel({ disabled = false }: Props) {
           ],
         }),
       });
-
-      await apiFetch('/matchmaking/rules/default/weights', {
-        method: 'PUT',
-        token: getAccessToken(),
-        body: JSON.stringify(parsedWeights),
-      });
     },
     onSuccess: () => {
       setDirty(false);
-      setSaveNote('AI fine-tune settings saved. Re-run scoring to apply.');
+      setSaveNote(
+        'Saved. Recomputing recommendations for all investors and innovators with the new threshold.',
+      );
       void qc.invalidateQueries({ queryKey: ['settings-ai-matchmaking'] });
       void qc.invalidateQueries({ queryKey: ['settings'] });
       void qc.invalidateQueries({ queryKey: ['integrations-health-ai'] });
       void qc.invalidateQueries({ queryKey: ['matchmaking-default-rule'] });
+      void qc.invalidateQueries({ queryKey: ['recommendations'] });
+      void qc.invalidateQueries({ queryKey: ['admin-peer-recommendations'] });
     },
     onError: (err: Error) => {
       setSaveError(err.message || 'Failed to save AI fine-tune settings');

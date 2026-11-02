@@ -10,12 +10,12 @@ export type RoleCode = (typeof ROLES)[keyof typeof ROLES];
 
 /** Investor–innovator complementarity weights (sum to 1). */
 export const DEFAULT_MATCHING_WEIGHTS = {
-  challenge: 0.3,
+  challenge: 0.35,
   solution: 0.2,
-  geography: 0.15,
-  commercial: 0.15,
+  geography: 0.18,
+  commercial: 0.12,
   stage: 0.1,
-  ticket: 0.1,
+  ticket: 0.05,
 } as const;
 
 export const DEFAULT_SCHEDULE_CONFIG = {

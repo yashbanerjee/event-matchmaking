@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { defaultMatchingWeights } from '@em/shared';
 import { Prisma } from '@prisma/client';
 import { EnvService } from '../../config/env.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -105,7 +106,7 @@ export class AiService implements OnModuleInit {
     await ensure('ai.javBaseUrl', 'https://openrouter.ai/api/v1');
     await ensure('ai.javChatModel', DEFAULT_MATCHMAKING_CHAT_MODEL);
     await ensure('ai.matchmakingMode', 'llm');
-    await ensure('ai.matchmakingBlendWeight', 0.3);
+    await ensure('ai.matchmakingBlendWeight', 0.25);
     await ensure('ops.recommendationScoreThreshold', 75);
     await ensure('ai.pairScoringMethod', 'structured_json');
     await ensure('ai.includeOnboardingInProfile', true);
@@ -115,7 +116,7 @@ export class AiService implements OnModuleInit {
       DEFAULT_MATCHMAKING_USER_TEMPLATE,
     );
 
-    const solidDefaultsVersion = 3;
+    const solidDefaultsVersion = 4;
     const versionKey = 'ops.aiSolidDefaultsVersion';
     const versionRow = await this.prisma.systemSetting.findUnique({
       where: { key: versionKey },
@@ -123,7 +124,8 @@ export class AiService implements OnModuleInit {
     const currentVersion = Number(readCurrent(versionRow?.value) ?? 0);
     if (!Number.isFinite(currentVersion) || currentVersion < solidDefaultsVersion) {
       await writeSetting('ops.recommendationScoreThreshold', 75);
-      await writeSetting('ai.matchmakingBlendWeight', 0.3);
+      // Keep AI as a tie-breaker among preference-aligned pairs.
+      await writeSetting('ai.matchmakingBlendWeight', 0.25);
       await writeSetting('ai.pairScoringMethod', 'structured_json');
       await writeSetting('ai.includeOnboardingInProfile', true);
       await writeSetting('ai.matchmakingMode', 'llm');
@@ -133,16 +135,17 @@ export class AiService implements OnModuleInit {
         DEFAULT_MATCHMAKING_USER_TEMPLATE,
       );
       await writeSetting('ops.tagCategoryThresholds', {
-        challenge: 25,
+        challenge: 40,
         solution: 0,
-        geography: 20,
+        geography: 25,
         commercial: 0,
-        stage: 15,
+        stage: 20,
         ticket: 0,
       });
       // Uncap Discover for older mobile clients that still send limit=10/12.
       await writeSetting('ops.investorRecommendationLimit', 100);
       await writeSetting('ops.innovatorRecommendationLimit', 100);
+      await this.publishPreferenceFirstMatchingWeights();
       await writeSetting(versionKey, solidDefaultsVersion);
       this.logger.log(
         `Applied solid AI recommendation defaults (v${solidDefaultsVersion})`,
@@ -161,6 +164,27 @@ export class AiService implements OnModuleInit {
 
     this.config.invalidate();
     this.logger.log('Qwen AI integrated as primary matchmaking provider');
+  }
+
+  /** Push preference-first tag weights into the published DEFAULT matching rule. */
+  private async publishPreferenceFirstMatchingWeights() {
+    const rule = await this.prisma.matchingRule.findUnique({
+      where: { code: 'DEFAULT' },
+    });
+    if (!rule) return;
+    const latest = await this.prisma.matchingRuleVersion.findFirst({
+      where: { ruleId: rule.id },
+      orderBy: { version: 'desc' },
+    });
+    await this.prisma.matchingRuleVersion.create({
+      data: {
+        ruleId: rule.id,
+        version: (latest?.version ?? 0) + 1,
+        weights: defaultMatchingWeights,
+        minScore: latest?.minScore ?? 40,
+        publishedAt: new Date(),
+      },
+    });
   }
 
   async isEnabled() {
@@ -290,6 +314,7 @@ export class AiService implements OnModuleInit {
     const userMessage = applyMatchmakingUserTemplate(userTemplate, {
       investorProfile: input.left,
       innovatorProfile: input.right,
+      preferenceFit: input.preferenceFit,
     });
     return {
       ...input,

@@ -1,8 +1,15 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { AuthUser } from '../common/decorators';
+import { PeerRecommendationsService } from '../meetings/peer-recommendations.service';
 import { EffectiveConfigService } from './effective-config.service';
 import {
   INTEGRATION_SETTING_FIELDS,
@@ -10,12 +17,42 @@ import {
   maskSecret,
 } from './integration-settings.catalog';
 
+/** Saving these should rebuild peer recommendations for every eligible org. */
+const PEER_RECOMPUTE_SETTING_KEYS = new Set([
+  'ops.recommendationScoreThreshold',
+  'ops.tagCategoryThresholds',
+  'ops.investorRecommendationLimit',
+  'ops.innovatorRecommendationLimit',
+  'ai.matchmakingBlendWeight',
+  'ai.matchmakingMode',
+  'ai.pairScoringMethod',
+  'ai.enabled',
+  'ai.includeOnboardingInProfile',
+]);
+
+function settingValueFingerprint(value: unknown): string {
+  if (value === undefined) return '__undefined__';
+  if (value === null) return '__null__';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 @Injectable()
 export class SettingsService {
+  private readonly logger = new Logger(SettingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly effective: EffectiveConfigService,
+    @Inject(forwardRef(() => PeerRecommendationsService))
+    private readonly peerRecs: PeerRecommendationsService,
   ) {}
 
   async list() {
@@ -94,7 +131,12 @@ export class SettingsService {
     return result;
   }
 
-  async upsertSetting(actor: AuthUser, key: string, value: unknown) {
+  async upsertSetting(
+    actor: AuthUser,
+    key: string,
+    value: unknown,
+    options?: { skipPeerRecompute?: boolean },
+  ) {
     const field = INTEGRATION_SETTING_FIELDS.find((f) => f.key === key);
     if (field) {
       this.validateField(field.type, value, field.options);
@@ -107,6 +149,10 @@ export class SettingsService {
       });
       return existing;
     }
+
+    const previous = await this.effective.getRaw(key);
+    const changed =
+      settingValueFingerprint(previous) !== settingValueFingerprint(value);
 
     const setting = await this.prisma.systemSetting.upsert({
       where: { key },
@@ -150,6 +196,14 @@ export class SettingsService {
         value: SECRET_SETTING_KEYS.has(key) ? '[redacted]' : value,
       },
     });
+
+    if (
+      changed &&
+      !options?.skipPeerRecompute &&
+      PEER_RECOMPUTE_SETTING_KEYS.has(key)
+    ) {
+      await this.queuePeerRecomputeAfterSettings([key]);
+    }
 
     return {
       ...setting,
@@ -222,11 +276,47 @@ export class SettingsService {
     }
     values = [...byKey.entries()].map(([key, value]) => ({ key, value }));
 
+    const changedPeerKeys: string[] = [];
+    for (const item of values) {
+      if (!PEER_RECOMPUTE_SETTING_KEYS.has(item.key)) continue;
+      const previous = await this.effective.getRaw(item.key);
+      if (
+        settingValueFingerprint(previous) !==
+        settingValueFingerprint(item.value)
+      ) {
+        changedPeerKeys.push(item.key);
+      }
+    }
+
     const results = [];
     for (const item of values) {
-      results.push(await this.upsertSetting(actor, item.key, item.value));
+      results.push(
+        await this.upsertSetting(actor, item.key, item.value, {
+          skipPeerRecompute: true,
+        }),
+      );
     }
+
+    if (changedPeerKeys.length > 0) {
+      await this.queuePeerRecomputeAfterSettings(changedPeerKeys);
+    }
+
     return { updated: results.length, items: results };
+  }
+
+  private async queuePeerRecomputeAfterSettings(changedKeys: string[]) {
+    try {
+      const result = await this.peerRecs.scheduleRecomputeAllEligible(
+        `settings.${changedKeys.sort().join('+')}`,
+      );
+      this.logger.log(
+        `Queued peer recompute for ${result.queued} orgs after settings change (${changedKeys.join(', ')})`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to queue peer recompute after settings change: ${(err as Error).message}`,
+      );
+    }
   }
 
   async setFlag(actor: AuthUser, key: string, enabled: boolean) {

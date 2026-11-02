@@ -77,13 +77,50 @@ export type TagCategoryThresholds = z.infer<typeof tagCategoryThresholdsSchema>;
 
 /** Soft tag floors so hard requirements are not left to AI alone. */
 export const defaultTagCategoryThresholds: TagCategoryThresholds = {
-  challenge: 25,
+  challenge: 40,
   solution: 0,
-  geography: 20,
+  geography: 25,
   commercial: 0,
-  stage: 15,
+  stage: 20,
   ticket: 0,
 };
+
+/**
+ * Blend rule (preference/tag) score with AI narrative score so vague profile
+ * similarity cannot rescue weak challenge / geography / stage fit.
+ */
+export function blendPreferenceAwareScore(input: {
+  ruleScore: number;
+  aiScore: number;
+  blend: number;
+  challenge: number;
+  geography: number;
+  stage: number;
+}): number {
+  const blend = Math.max(0, Math.min(1, Number(input.blend) || 0));
+  const ruleScore = Number(input.ruleScore) || 0;
+  const aiScore = Number(input.aiScore) || 0;
+  if (blend <= 0) return Math.round(ruleScore * 100) / 100;
+
+  const preferenceCore =
+    (Number(input.challenge) || 0) * 0.5 +
+    (Number(input.geography) || 0) * 0.3 +
+    (Number(input.stage) || 0) * 0.2;
+  // Full AI weight only when stated preferences already look solid.
+  const gate = Math.max(0, Math.min(1, preferenceCore / 65));
+  const effectiveBlend = blend * gate;
+  if (effectiveBlend <= 0) return Math.round(ruleScore * 100) / 100;
+
+  const maxLift =
+    preferenceCore >= 50 ? 20 : preferenceCore >= 35 ? 10 : 5;
+  const cappedAi = Math.min(aiScore, ruleScore + maxLift);
+
+  return (
+    Math.round(
+      (ruleScore * (1 - effectiveBlend) + cappedAi * effectiveBlend) * 100,
+    ) / 100
+  );
+}
 
 export function resolveTagCategoryThresholds(
   raw: unknown,
