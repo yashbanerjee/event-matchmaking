@@ -416,6 +416,7 @@ class MatchmakingRepository {
       parse: (d) => d as Map<String, dynamic>,
     );
     final perspective = data['perspective'] as String?;
+    final scoreThreshold = (data['scoreThreshold'] as num?)?.toDouble();
     // Investor → innovators; innovator → investors (same as the matching engine)
     final allowedPeerType = perspective == 'COMPANY'
         ? 'VENDOR'
@@ -435,7 +436,13 @@ class MatchmakingRepository {
               e.type == null ||
               e.type == allowedPeerType,
         )
-        .where((e) => e.matchSource == 'admin' || (e.score ?? 0) > 0)
+        .where(
+          (e) =>
+              e.matchSource == 'admin' ||
+              (scoreThreshold == null
+                  ? (e.score ?? 0) > 0
+                  : (e.score ?? 0) >= scoreThreshold),
+        )
         .toList();
     return RecommendationsResult(
       items: parsed,

@@ -93,33 +93,26 @@ export class RecommendationsService {
     ]);
     const excludeOrgIds = [...orgIds, ...dismissedIds, ...engagedIds];
 
-    const stored = await this.fromStored({
-      fromOrgId: perspectiveOrg.id,
-      perspective,
-      peerType,
-      max,
-      tagLabels,
-      excludeOrgIds,
-    });
+    const [stored, scoreThreshold] = await Promise.all([
+      this.fromStored({
+        fromOrgId: perspectiveOrg.id,
+        perspective,
+        peerType,
+        max,
+        tagLabels,
+        excludeOrgIds,
+      }),
+      this.getRecommendationThreshold(),
+    ]);
 
-    const directory = await this.directoryRecommendationItems({
-      perspective,
-      peerType,
-      tagLabels,
-      excludeOrgIds,
-      max,
-    });
-
-    const merged = this.mergeRecommendationLists(
-      stored ?? { items: [], featured: [] },
-      directory,
-      max,
-    );
-
+    // Directory browse (Innovators / Investors) is separate. Recommendations
+    // only include admin pins and computed pairs at or above the score threshold.
     return {
-      ...merged,
+      items: stored?.items ?? [],
+      featured: stored?.featured ?? [],
       perspective,
       recommendationLimit: roleLimit,
+      scoreThreshold,
       computing,
     };
   }
@@ -604,11 +597,15 @@ export class RecommendationsService {
   }
 
   /** Featured first, then scored matches — hard cap of `max` total. */
-  private splitRecommendations(scored: RecommendationItem[], max: number) {
+  private splitRecommendations(
+    scored: RecommendationItem[],
+    max: number,
+    threshold: number,
+  ) {
     const qualified = scored.filter(
       (item) =>
         item.matchSource === 'admin' ||
-        (Number.isFinite(item.score) && item.score > 0),
+        (Number.isFinite(item.score) && item.score >= threshold),
     );
     const featured = qualified.filter((item) => item.featured).slice(0, max);
     const remaining = Math.max(0, max - featured.length);
@@ -616,126 +613,6 @@ export class RecommendationsService {
       .filter((item) => !item.featured)
       .slice(0, remaining);
     return { items, featured };
-  }
-
-  /** Fill remaining slots with every eligible counterpart so older apps see all. */
-  private async directoryRecommendationItems(input: {
-    perspective: 'COMPANY' | 'VENDOR';
-    peerType: 'COMPANY' | 'VENDOR';
-    tagLabels: Record<string, string>;
-    excludeOrgIds: string[];
-    max: number;
-  }): Promise<RecommendationItem[]> {
-    if (input.perspective === 'COMPANY') {
-      const vendors = await this.prisma.vendor.findMany({
-        where: {
-          matchingEligible: true,
-          approvalStatus: 'VERIFIED',
-          verificationStatus: 'VERIFIED',
-          onboardingComplete: true,
-          organizationId: { notIn: input.excludeOrgIds },
-          organization: { status: { not: 'ARCHIVED' } },
-        },
-        include: {
-          organization: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              industry: true,
-              customAttrs: true,
-            },
-          },
-        },
-        orderBy: [{ featured: 'desc' }, { organization: { name: 'asc' } }],
-        take: input.max,
-      });
-      return vendors.map((vendor) => ({
-        organizationId: vendor.organizationId,
-        name: vendor.organization.name,
-        type: 'VENDOR' as const,
-        industry: this.labelOf(vendor.organization.industry, input.tagLabels),
-        categories: this.labelsOf(vendor.categories ?? [], input.tagLabels),
-        capabilities: this.labelsOf(vendor.capabilities ?? [], input.tagLabels),
-        // score > 0 so older mobile clients keep the row (they filter score==0 out)
-        score: vendor.featured ? 100 : 1,
-        reasons: vendor.featured
-          ? ['Featured innovator']
-          : ['Available innovator'],
-        explanation: vendor.featured
-          ? 'Featured innovator'
-          : 'Available innovator',
-        aiScore: null,
-        aiDescription: null,
-        logoUrl: this.logoOf(vendor.organization.customAttrs),
-        featured: Boolean(vendor.featured),
-        matchSource: vendor.featured ? ('admin' as const) : ('tags' as const),
-      }));
-    }
-
-    const companies = await this.prisma.company.findMany({
-      where: {
-        matchingEligible: true,
-        approvalStatus: 'VERIFIED',
-        organizationId: { notIn: input.excludeOrgIds },
-        organization: { status: { not: 'ARCHIVED' } },
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            industry: true,
-            customAttrs: true,
-          },
-        },
-      },
-      orderBy: [{ featured: 'desc' }, { organization: { name: 'asc' } }],
-      take: input.max,
-    });
-    return companies.map((company) => ({
-      organizationId: company.organizationId,
-      name: company.organization.name,
-      type: 'COMPANY' as const,
-      industry: this.labelOf(company.organization.industry, input.tagLabels),
-      categories: this.labelsOf(
-        company.preferredCategories ?? [],
-        input.tagLabels,
-      ),
-      capabilities: this.labelsOf(
-        company.requiredCapabilities ?? [],
-        input.tagLabels,
-      ),
-      score: company.featured ? 100 : 1,
-      reasons: company.featured
-        ? ['Featured investor']
-        : ['Available investor'],
-      explanation: company.featured
-        ? 'Featured investor'
-        : 'Available investor',
-      aiScore: null,
-      aiDescription: null,
-      logoUrl: this.logoOf(company.organization.customAttrs),
-      featured: Boolean(company.featured),
-      matchSource: company.featured ? ('admin' as const) : ('tags' as const),
-    }));
-  }
-
-  private mergeRecommendationLists(
-    stored: { items: RecommendationItem[]; featured: RecommendationItem[] },
-    directory: RecommendationItem[],
-    max: number,
-  ) {
-    const seen = new Set<string>();
-    const ranked: RecommendationItem[] = [];
-    for (const item of [...stored.featured, ...stored.items, ...directory]) {
-      if (seen.has(item.organizationId)) continue;
-      seen.add(item.organizationId);
-      ranked.push(item);
-      if (ranked.length >= max) break;
-    }
-    return this.splitRecommendations(ranked, max);
   }
 
   private logoOf(customAttrs: unknown): string | null {
@@ -772,7 +649,11 @@ export class RecommendationsService {
         },
       },
       orderBy: [{ totalScore: 'desc' }, { computedAt: 'desc' }],
-      take: Math.max(input.max, 30),
+      // Fetch extra so score and tag floors can drop rows and still fill `max`.
+      take: Math.min(
+        PEER_RECOMMENDATIONS_ABSOLUTE_MAX,
+        Math.max(input.max * 3, 30),
+      ),
     });
     if (!rows.length) return null;
 
@@ -843,7 +724,7 @@ export class RecommendationsService {
       });
 
     if (!scored.length) return null;
-    return this.splitRecommendations(scored, input.max);
+    return this.splitRecommendations(scored, input.max, threshold);
   }
 
   private labelOf(

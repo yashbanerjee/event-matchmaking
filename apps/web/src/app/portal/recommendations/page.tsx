@@ -49,12 +49,12 @@ export default function PortalRecommendationsPage() {
         <PageHeader
           eyebrow="Investor"
           title="Recommendations"
-          description="Browse every suggested innovator — admin picks and matches based on your preferences."
+          description="Admin picks and innovators that meet the match score threshold."
         />
         <RecommendationsPanel
           fromOrgId={me.data?.organizationIds?.[0]}
           title="All recommendations"
-          description="Admin suggestions plus innovators matched to your categories and capabilities."
+          description="Admin picks and innovators at or above the match score threshold."
         />
       </div>
     </PortalShell>

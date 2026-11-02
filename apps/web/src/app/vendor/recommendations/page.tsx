@@ -20,12 +20,12 @@ export default function VendorRecommendationsPage() {
       <PageHeader
         eyebrow="Innovator"
         title="Recommendations"
-        description="Browse every suggested investor — admin picks and matches based on your preferences."
+        description="Admin picks and investors that meet the match score threshold."
       />
       <RecommendationsPanel
         fromOrgId={me.data?.organizationIds?.[0]}
         title="All recommendations"
-        description="Admin suggestions plus investors matched to your categories and capabilities."
+        description="Admin picks and investors at or above the match score threshold."
       />
     </div>
   );

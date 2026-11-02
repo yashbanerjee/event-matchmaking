@@ -146,6 +146,7 @@ export function VendorShell({
           matchSource?: string;
         }>;
         perspective: 'COMPANY' | 'VENDOR' | null;
+        scoreThreshold?: number;
       }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
         token: getAccessToken(),
       }),
@@ -165,6 +166,7 @@ export function VendorShell({
         : perspective === 'VENDOR'
           ? 'COMPANY'
           : null;
+    const threshold = recommendations.data?.scoreThreshold;
     const qualify = (item: {
       organizationId: string;
       type: 'COMPANY' | 'VENDOR';
@@ -173,7 +175,9 @@ export function VendorShell({
     }) => {
       if (allowed && item.type !== allowed) return false;
       if (item.matchSource === 'admin') return true;
-      return Number.isFinite(item.score) && item.score > 0;
+      if (!Number.isFinite(item.score)) return false;
+      if (typeof threshold === 'number') return item.score >= threshold;
+      return item.score > 0;
     };
     const ids = new Set<string>();
     for (const item of [

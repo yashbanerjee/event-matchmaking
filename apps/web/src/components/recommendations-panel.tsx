@@ -29,9 +29,14 @@ type Recommendation = {
   matchSource?: MatchSource;
 };
 
-function isQualifiedMatch(item: Recommendation): boolean {
+function isQualifiedMatch(
+  item: Recommendation,
+  scoreThreshold: number | null,
+): boolean {
   if (item.matchSource === 'admin') return true;
-  return Number.isFinite(item.score) && item.score > 0;
+  if (!Number.isFinite(item.score)) return false;
+  if (scoreThreshold == null) return item.score > 0;
+  return item.score >= scoreThreshold;
 }
 
 function sourceLabel(item: Recommendation): { text: string; title: string } {
@@ -237,6 +242,7 @@ export function RecommendationsPanel({
         featured: Recommendation[];
         perspective: 'COMPANY' | 'VENDOR' | null;
         computing?: boolean;
+        scoreThreshold?: number;
       }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
         token: getAccessToken(),
       }),
@@ -321,14 +327,18 @@ export function RecommendationsPanel({
       : perspective === 'VENDOR'
         ? 'COMPANY'
         : null;
+  const scoreThreshold =
+    typeof recs.data?.scoreThreshold === 'number'
+      ? recs.data.scoreThreshold
+      : null;
   const featured = (recs.data?.featured ?? []).filter(
     (item) =>
-      isQualifiedMatch(item) &&
+      isQualifiedMatch(item, scoreThreshold) &&
       (!allowedPeerType || item.type === allowedPeerType),
   );
   const items = (recs.data?.items ?? []).filter(
     (item) =>
-      isQualifiedMatch(item) &&
+      isQualifiedMatch(item, scoreThreshold) &&
       (!allowedPeerType || item.type === allowedPeerType),
   );
   const computing = Boolean(recs.data?.computing);
