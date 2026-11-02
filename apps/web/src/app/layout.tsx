@@ -4,7 +4,6 @@ import { Figtree, Syne } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { PwaRegister } from '@/components/pwa-register';
-import { DemoFooter } from '@/components/demo-footer';
 import { brandLabel, BRAND } from '@/lib/brand';
 
 const sans = Figtree({
@@ -20,7 +19,7 @@ const display = Syne({
 });
 
 const APP_NAME = brandLabel;
-const APP_DESCRIPTION = `${BRAND.tagline}. Event matchmaking demo for Ethara — discover, match, connect, and meet.`;
+const APP_DESCRIPTION = `${BRAND.tagline}. Event matchmaking for Ethara — discover, match, connect, and meet.`;
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
@@ -70,7 +69,6 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${sans.variable} ${display.variable}`} style={fontVars}>
         <Providers>
-          <DemoFooter />
           {children}
           <PwaRegister />
         </Providers>

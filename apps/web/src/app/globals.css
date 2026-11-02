@@ -29,8 +29,7 @@
   --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
   --page-pad-x: 1rem;
   --page-pad-top: 1rem;
-  --demo-footer-height: 2.25rem;
-  --page-pad-bottom: calc(2.75rem + env(safe-area-inset-bottom, 0px));
+  --page-pad-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 640px) {
@@ -82,8 +81,7 @@
   :root {
     --page-pad-x: 2rem;
     --page-pad-top: 2rem;
-    --demo-footer-height: 2.5rem;
-    --page-pad-bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+    --page-pad-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -109,13 +107,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-@media (min-width: 1024px) {
-  body {
-    padding-bottom: calc(
-      var(--demo-footer-height) + env(safe-area-inset-bottom, 0px)
-    );
-  }
-}
 
 a {
   color: inherit;

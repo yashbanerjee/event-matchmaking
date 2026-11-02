@@ -2,15 +2,13 @@
  * Extra UN Water roster — 10 investors + 80 innovators.
  * Combined with the handcrafted 10 / 20 in water-demo-profiles.ts.
  */
-import type { WaterDemoInnovator, WaterDemoInvestor } from './water-demo-types';
-
-const EMAIL_DOMAIN = 'unwater.ethara.demo';
+import { emailForOrg, type WaterDemoInnovator, type WaterDemoInvestor } from './water-demo-types';
 
 export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-REDSEA',
     name: 'Red Sea Water Security Fund',
-    email: `noura.alqahtani@${EMAIL_DOMAIN}`,
+    email: emailForOrg('noura.alqahtani', 'https://www.redseawater.sa'),
     firstName: 'Noura',
     lastName: 'Al Qahtani',
     title: 'Investment Director',
@@ -35,7 +33,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-AMAZONAS',
     name: 'Amazonas Blue Economy Partners',
-    email: `camila.ferreira@${EMAIL_DOMAIN}`,
+    email: emailForOrg('camila.ferreira', 'https://www.amazonasblue.fund'),
     firstName: 'Camila',
     lastName: 'Ferreira',
     title: 'Managing Partner',
@@ -60,7 +58,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-NORDIC',
     name: 'Nordic Climate Water AB',
-    email: `erik.lindqvist@${EMAIL_DOMAIN}`,
+    email: emailForOrg('erik.lindqvist', 'https://www.nordicclimatewater.se'),
     firstName: 'Erik',
     lastName: 'Lindqvist',
     title: 'Partner',
@@ -84,7 +82,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-LAGOS',
     name: 'Lagos Municipal WASH Trust',
-    email: `tunde.adebayo@${EMAIL_DOMAIN}`,
+    email: emailForOrg('tunde.adebayo', 'https://www.lagoswashtrust.ng'),
     firstName: 'Tunde',
     lastName: 'Adebayo',
     title: 'Executive Trustee',
@@ -108,7 +106,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-INDUS',
     name: 'Indus Basin Infrastructure Capital',
-    email: `ananya.mehta@${EMAIL_DOMAIN}`,
+    email: emailForOrg('ananya.mehta', 'https://www.indusbasin.capital'),
     firstName: 'Ananya',
     lastName: 'Mehta',
     title: 'Principal',
@@ -132,7 +130,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-SIERRA',
     name: 'Sierra Water Resilience Angels',
-    email: `maya.chen@${EMAIL_DOMAIN}`,
+    email: emailForOrg('maya.chen', 'https://www.sierrawaterangels.com'),
     firstName: 'Maya',
     lastName: 'Chen',
     title: 'Lead Angel',
@@ -156,7 +154,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-MARINA',
     name: 'Marina Bay Water Ventures',
-    email: `wei.lim@${EMAIL_DOMAIN}`,
+    email: emailForOrg('wei.lim', 'https://www.marinabaywatervc.sg'),
     firstName: 'Wei',
     lastName: 'Lim',
     title: 'Director',
@@ -180,7 +178,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-ATLAS',
     name: 'Atlas Maghreb Irrigation Fund',
-    email: `yasmine.benali@${EMAIL_DOMAIN}`,
+    email: emailForOrg('yasmine.benali', 'https://www.atlasirrigation.ma'),
     firstName: 'Yasmine',
     lastName: 'Benali',
     title: 'Head of Portfolio',
@@ -204,7 +202,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-THAMES',
     name: 'Thames Adaptation Partners',
-    email: `oliver.hayes@${EMAIL_DOMAIN}`,
+    email: emailForOrg('oliver.hayes', 'https://www.thamesadaptation.uk'),
     firstName: 'Oliver',
     lastName: 'Hayes',
     title: 'Investment Manager',
@@ -228,7 +226,7 @@ export const EXTRA_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-HORN',
     name: 'Horn of Africa Water Facility',
-    email: `hana.tesfaye@${EMAIL_DOMAIN}`,
+    email: emailForOrg('hana.tesfaye', 'https://www.hornwaterfacility.org'),
     firstName: 'Hana',
     lastName: 'Tesfaye',
     title: 'Program Director',
@@ -502,7 +500,7 @@ const EXTRA_INNOVATOR_SEEDS: ExtraInnovatorSeed[] = [
     commercialTags: ['equity', 'pilot-partnership', 'debt'],
     about:
       'Street-level flood cells that talk to municipal pumps and early-warning SMS.',
-    focusEvents: 'Live in Gdansk and Gdynia; Abu Dhabi stormwater demo requested.',
+    focusEvents: 'Live in Gdansk and Gdynia; Abu Dhabi stormwater pilot scheduled.',
     partnershipGoal: 'MENA municipal pilot funded by adaptation finance.',
     ticketSize: '1m-5m',
     stage: 'early-revenue',
@@ -917,7 +915,7 @@ const EXTRA_INNOVATOR_SEEDS: ExtraInnovatorSeed[] = [
     commercialTags: ['equity', 'technical-assistance', 'pilot-partnership'],
     about:
       'Borehole telemetry and illegal-abstraction alerts for stressed urban aquifers.',
-    focusEvents: 'Used by City of Cape Town; MENA city demo requested.',
+    focusEvents: 'Used by City of Cape Town; MENA city pilot requested.',
     partnershipGoal: 'Municipal or basin-authority sponsor in the Gulf.',
     ticketSize: '250k-1m',
     stage: 'early-revenue',
@@ -1032,7 +1030,7 @@ const EXTRA_INNOVATOR_SEEDS: ExtraInnovatorSeed[] = [
     commercialTags: ['equity', 'pilot-partnership', 'debt'],
     about:
       'Inflatable quay barriers tied into municipal flood-warning APIs.',
-    focusEvents: 'Six Dutch municipalities; Abu Dhabi stormwater authority demo.',
+    focusEvents: 'Six Dutch municipalities; Abu Dhabi stormwater authority pilot.',
     partnershipGoal: 'MENA municipal adaptation-finance pilot.',
     ticketSize: '1m-5m',
     stage: 'early-revenue',
@@ -2047,7 +2045,7 @@ const EXTRA_INNOVATOR_SEEDS: ExtraInnovatorSeed[] = [
     about:
       'Advisory and modular trains that help cities copy Windhoek-style direct reuse.',
     focusEvents: 'Knowledge transfer with two SADC utilities; MENA city RFP support.',
-    partnershipGoal: 'Utility JV for a first MENA direct-reuse demo.',
+    partnershipGoal: 'Utility JV for a first MENA direct-reuse plant.',
     ticketSize: '5m-25m',
     stage: 'growth',
     impactMetrics: 'Host city reuse already supplies ~25% of Windhoek demand.',
@@ -2123,13 +2121,8 @@ const EXTRA_INNOVATOR_SEEDS: ExtraInnovatorSeed[] = [
   },
 ];
 
-function emailFor(firstName: string, lastName: string) {
-  const local = `${firstName}.${lastName}`
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z.]+/g, '');
-  return `${local}@${EMAIL_DOMAIN}`;
+function emailFor(firstName: string, lastName: string, host: string) {
+  return emailForOrg(`${firstName}.${lastName}`, `https://www.${host}`);
 }
 
 export const EXTRA_INNOVATORS: WaterDemoInnovator[] =
@@ -2137,7 +2130,7 @@ export const EXTRA_INNOVATORS: WaterDemoInnovator[] =
     code: seed.code,
     name: seed.name,
     displayName: seed.displayName,
-    email: emailFor(seed.firstName, seed.lastName),
+    email: emailFor(seed.firstName, seed.lastName, seed.host),
     firstName: seed.firstName,
     lastName: seed.lastName,
     title: seed.title,

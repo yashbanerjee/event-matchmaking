@@ -7,7 +7,6 @@ import { Menu, X } from 'lucide-react';
 import { clearTokens } from '@/lib/auth-store';
 import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
-import { DemoNotice } from './demo-footer';
 import { Button } from './ui/button';
 
 const NAV_GROUPS = [
@@ -157,9 +156,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="border-t border-[var(--border)] px-4 py-1.5">
-          <DemoNotice />
-        </div>
       </header>
 
       {navOpen ? (
@@ -201,7 +197,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <SidebarNav pathname={pathname} onNavigate={() => setNavOpen(false)} />
 
         <div className="sidebar-footer mt-auto space-y-2 border-t border-white/10 pt-4">
-          <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Link href="/vendor" onClick={() => setNavOpen(false)}>
             <Button
               variant="ghost"

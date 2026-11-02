@@ -9,7 +9,6 @@ import { clearTokens, getAccessToken } from '@/lib/auth-store';
 import { apiFetch } from '@/lib/api';
 import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
-import { DemoNotice } from './demo-footer';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { WorkspaceBottomNav } from './workspace-bottom-nav';
@@ -248,9 +247,6 @@ export function VendorShell({
             <span className="text-xs font-semibold">Out</span>
           </Button>
         </div>
-        <div className="border-t border-[var(--border)] px-4 py-1.5">
-          <DemoNotice />
-        </div>
       </header>
 
       <aside
@@ -282,7 +278,6 @@ export function VendorShell({
         />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">
-          <DemoNotice tone="dark" className="px-1 lg:hidden" />
           <Button
             variant="outline"
             className="w-full border-white/20 bg-transparent text-[var(--sidebar-fg)] hover:bg-white/10"

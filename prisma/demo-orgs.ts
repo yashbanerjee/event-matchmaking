@@ -1,4 +1,4 @@
-/** Demo company + vendor catalogs for local/staging seed data. */
+/** Company + vendor catalogs for local/staging seed data. */
 
 export type DemoCompany = {
   code: string;
@@ -361,7 +361,7 @@ function slugify(value: string) {
     .slice(0, 18);
 }
 
-/** Public logo URL (initials avatar) suitable for demos. */
+/** Public logo URL (initials avatar). */
 export function logoUrlFor(name: string) {
   const label = encodeURIComponent(name.replace(/\s+/g, ' ').trim());
   return `https://ui-avatars.com/api/?name=${label}&background=0F766E&color=fff&bold=true&format=png&size=128`;
@@ -378,8 +378,8 @@ export function demoCompanies(): DemoCompany[] {
     return {
       ...company,
       code,
-      website: `https://www.${domain}.example`,
-      email: `procurement@${domain}.example`,
+      website: `https://www.${domain}.com`,
+      email: `procurement@${domain}.com`,
     };
   });
 }
@@ -417,8 +417,8 @@ export function demoVendors(count = 200): DemoVendor[] {
       industry,
       country: geo.country,
       region: geo.region,
-      website: `https://www.${domain}.example`,
-      email: `sales@${domain}.example`,
+      website: `https://www.${domain}.com`,
+      email: `sales@${domain}.com`,
       categories: [...new Set(categories)],
       capabilities: [...new Set(capabilities)],
       services: [...new Set(services)],

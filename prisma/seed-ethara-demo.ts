@@ -1,5 +1,5 @@
 /**
- * Sample organizations for a 3-day UN Water matchmaking event
+ * Organizations for a 3-day UN Water matchmaking event
  * (filters, forms, investors, innovators, meetings).
  */
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -10,10 +10,10 @@ import {
   WATER_DEMO_INVESTORS,
 } from './water-demo-profiles';
 
-/** Shared password for the six sample accounts. */
+/** Shared password for seeded event accounts. */
 const SAMPLE_PASSWORD = 'EtharaEvents26!';
 
-/** Previous sample codes/emails to remove when refreshing data. */
+/** Previous codes/emails to remove when refreshing data. */
 const LEGACY_SAMPLE_CODES = [
   'ETH_CLI_01',
   'ETH_CLI_02',
@@ -62,7 +62,7 @@ const GUESTS = WATER_DEMO_INNOVATORS;
 
 export async function seedEtharaDemo(prisma: PrismaClient) {
   console.log(
-    'Seeding UN Water matchmaking sample data (filters, places, investors, innovators)…',
+    'Seeding UN Water matchmaking data (filters, places, investors, innovators)…',
   );
 
   const companyRole = await prisma.role.findUniqueOrThrow({
@@ -1199,9 +1199,9 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
   }
 
   console.log(`
-UN Water demo roster seeded (${CLIENTS.length} investors, ${GUESTS.length} innovators)
+UN Water roster seeded (${CLIENTS.length} investors, ${GUESTS.length} innovators)
 
-Password for all demo users: ${SAMPLE_PASSWORD}
+Password for seeded users: ${SAMPLE_PASSWORD}
 
 Venue: ${ARENA_LOCATION} — ${TABLE_COUNT} tables (CCA_T01…CCA_T${String(TABLE_COUNT).padStart(2, '0')}), one per investor.
 Event dates (admin settings): ${eventDates.join(', ')} (09:00–17:00 Asia/Dubai)

@@ -1,22 +1,25 @@
 /**
- * UN Water event demo roster — 20 investors, 100 innovators.
- * Emails use @unwater.ethara.demo; password EtharaEvents26! (see seed-ethara-demo).
+ * UN Water event roster — 20 investors, 100 innovators.
+ * Emails use each organisation's website domain; password EtharaEvents26! (see seed-ethara-demo).
  */
 import {
   EXTRA_INNOVATORS,
   EXTRA_INVESTORS,
 } from './water-demo-extra';
-import type { WaterDemoInnovator, WaterDemoInvestor } from './water-demo-types';
+import {
+  emailForOrg,
+  type WaterDemoInnovator,
+  type WaterDemoInvestor,
+} from './water-demo-types';
 
 export type { WaterDemoInnovator, WaterDemoInvestor } from './water-demo-types';
-
-const EMAIL_DOMAIN = 'unwater.ethara.demo';
+export { emailForOrg } from './water-demo-types';
 
 const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-NILE',
     name: 'Nile Basin Climate Facility',
-    email: `layla.almansoori@${EMAIL_DOMAIN}`,
+    email: emailForOrg('layla.almansoori', 'https://www.nilebasinclimate.org'),
     firstName: 'Layla',
     lastName: 'Al Mansoori',
     title: 'Managing Director',
@@ -41,7 +44,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-AQUA',
     name: 'AquaHorizon Growth Partners',
-    email: `omar.haddad@${EMAIL_DOMAIN}`,
+    email: emailForOrg('omar.haddad', 'https://www.aquahorizon.vc'),
     firstName: 'Omar',
     lastName: 'Haddad',
     title: 'Partner',
@@ -65,7 +68,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-SAHARA',
     name: 'Sahara Impact Trust',
-    email: `sara.khalil@${EMAIL_DOMAIN}`,
+    email: emailForOrg('sara.khalil', 'https://www.saharaimpacttrust.org'),
     firstName: 'Sara',
     lastName: 'Khalil',
     title: 'Head of Water Portfolio',
@@ -89,7 +92,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-GULF',
     name: 'Gulf Utilities Ventures',
-    email: `khalid.rahman@${EMAIL_DOMAIN}`,
+    email: emailForOrg('khalid.rahman', 'https://www.gulfutilitiesventures.com'),
     firstName: 'Khalid',
     lastName: 'Rahman',
     title: 'Director, Strategic Investments',
@@ -113,7 +116,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-EUWA',
     name: 'European Water Adaptation Fund',
-    email: `helena.voss@${EMAIL_DOMAIN}`,
+    email: emailForOrg('helena.voss', 'https://www.euwateradapt.fund'),
     firstName: 'Helena',
     lastName: 'Voss',
     title: 'Investment Manager',
@@ -137,7 +140,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-WASH',
     name: 'Global WASH Catalyst',
-    email: `amara.diallo@${EMAIL_DOMAIN}`,
+    email: emailForOrg('amara.diallo', 'https://www.globalwashcatalyst.org'),
     firstName: 'Amara',
     lastName: 'Diallo',
     title: 'Program Director',
@@ -161,7 +164,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-GROUND',
     name: 'Groundwater Stewardship LP',
-    email: `james.okonkwo@${EMAIL_DOMAIN}`,
+    email: emailForOrg('james.okonkwo', 'https://www.groundwaterstewardship.com'),
     firstName: 'James',
     lastName: 'Okonkwo',
     title: 'Principal',
@@ -185,7 +188,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-REUSE',
     name: 'Circular Industrial Water Co.',
-    email: `priya.sharma@${EMAIL_DOMAIN}`,
+    email: emailForOrg('priya.sharma', 'https://www.circularindustrialwater.in'),
     firstName: 'Priya',
     lastName: 'Sharma',
     title: 'VP Corporate Development',
@@ -209,7 +212,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-BLUE',
     name: 'Blue Pacific Development Bank',
-    email: `mei.lin@${EMAIL_DOMAIN}`,
+    email: emailForOrg('mei.lin', 'https://www.bluepacificdevbank.org'),
     firstName: 'Mei',
     lastName: 'Lin',
     title: 'Senior Water Specialist',
@@ -233,7 +236,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
   {
     code: 'INV-PILOT',
     name: 'Desert Pilot Syndicate',
-    email: `yousef.alharbi@${EMAIL_DOMAIN}`,
+    email: emailForOrg('yousef.alharbi', 'https://www.desertpilotsyndicate.ae'),
     firstName: 'Yousef',
     lastName: 'Al Harbi',
     title: 'Lead Angel',
@@ -261,7 +264,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-AQUALIS',
     name: 'Aqualis Leak Intelligence',
     displayName: 'Aqualis Leak Intelligence',
-    email: `noah.richter@${EMAIL_DOMAIN}`,
+    email: emailForOrg('noah.richter', 'https://www.aqualis-leak.io'),
     firstName: 'Noah',
     lastName: 'Richter',
     title: 'CEO',
@@ -287,7 +290,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-SAHEL',
     name: 'SahelReuse Technologies',
     displayName: 'SahelReuse',
-    email: `fatima.noor@${EMAIL_DOMAIN}`,
+    email: emailForOrg('fatima.noor', 'https://www.sahelreuse.org'),
     firstName: 'Fatima',
     lastName: 'Noor',
     title: 'Founder',
@@ -313,7 +316,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-OASIS',
     name: 'Oasis Modular Desal',
     displayName: 'Oasis Modular Desal',
-    email: `jordan.blake@${EMAIL_DOMAIN}`,
+    email: emailForOrg('jordan.blake', 'https://www.oasismodular.com'),
     firstName: 'Jordan',
     lastName: 'Blake',
     title: 'COO',
@@ -339,7 +342,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-HYDRO',
     name: 'HydroSense Analytics',
     displayName: 'HydroSense',
-    email: `elena.petrova@${EMAIL_DOMAIN}`,
+    email: emailForOrg('elena.petrova', 'https://www.hydrosense.eu'),
     firstName: 'Elena',
     lastName: 'Petrova',
     title: 'Chief Product Officer',
@@ -365,7 +368,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-WASH',
     name: 'CleanBlock Sanitation',
     displayName: 'CleanBlock',
-    email: `david.mbeki@${EMAIL_DOMAIN}`,
+    email: emailForOrg('david.mbeki', 'https://www.cleanblockwash.org'),
     firstName: 'David',
     lastName: 'Mbeki',
     title: 'Managing Director',
@@ -391,7 +394,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-NATURE',
     name: 'Verdant Catchment Works',
     displayName: 'Verdant Catchment',
-    email: `isabella.rojas@${EMAIL_DOMAIN}`,
+    email: emailForOrg('isabella.rojas', 'https://www.verdantcatchment.co'),
     firstName: 'Isabella',
     lastName: 'Rojas',
     title: 'Founder',
@@ -417,7 +420,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-BRINE',
     name: 'BrineZero Materials',
     displayName: 'BrineZero',
-    email: `ahmed.farouk@${EMAIL_DOMAIN}`,
+    email: emailForOrg('ahmed.farouk', 'https://www.brinezero.tech'),
     firstName: 'Ahmed',
     lastName: 'Farouk',
     title: 'CTO',
@@ -443,7 +446,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-AGRI',
     name: 'DripGrid Irrigation',
     displayName: 'DripGrid',
-    email: `maria.santos@${EMAIL_DOMAIN}`,
+    email: emailForOrg('maria.santos', 'https://www.dripgrid.ag'),
     firstName: 'Maria',
     lastName: 'Santos',
     title: 'CEO',
@@ -469,7 +472,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-SLUDGE',
     name: 'FecalFlow Logistics',
     displayName: 'FecalFlow',
-    email: `grace.wanjiru@${EMAIL_DOMAIN}`,
+    email: emailForOrg('grace.wanjiru', 'https://www.fecalflow.ke'),
     firstName: 'Grace',
     lastName: 'Wanjiru',
     title: 'Operations Lead',
@@ -495,7 +498,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-INDUS',
     name: 'PureLoop Industrial',
     displayName: 'PureLoop',
-    email: `chen.wei@${EMAIL_DOMAIN}`,
+    email: emailForOrg('chen.wei', 'https://www.pureloop-industrial.com'),
     firstName: 'Chen',
     lastName: 'Wei',
     title: 'General Manager',
@@ -521,7 +524,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-FLOOD',
     name: 'RapidBarrier Systems',
     displayName: 'RapidBarrier',
-    email: `lucas.berg@${EMAIL_DOMAIN}`,
+    email: emailForOrg('lucas.berg', 'https://www.rapidbarrier.nl'),
     firstName: 'Lucas',
     lastName: 'Berg',
     title: 'Head of Sales',
@@ -547,7 +550,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-METER',
     name: 'AquaMeter Global',
     displayName: 'AquaMeter',
-    email: `nadia.hassan@${EMAIL_DOMAIN}`,
+    email: emailForOrg('nadia.hassan', 'https://www.aquameter.ae'),
     firstName: 'Nadia',
     lastName: 'Hassan',
     title: 'Founder',
@@ -573,7 +576,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-TRANS',
     name: 'BasinLink Cooperative',
     displayName: 'BasinLink',
-    email: `roberto.mendez@${EMAIL_DOMAIN}`,
+    email: emailForOrg('roberto.mendez', 'https://www.basinlink.org'),
     firstName: 'Roberto',
     lastName: 'Mendez',
     title: 'Executive Secretary',
@@ -599,7 +602,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-QUAL',
     name: 'RiverWatch Labs',
     displayName: 'RiverWatch',
-    email: `sofia.andersson@${EMAIL_DOMAIN}`,
+    email: emailForOrg('sofia.andersson', 'https://www.riverwatch.se'),
     firstName: 'Sofia',
     lastName: 'Andersson',
     title: 'Science Director',
@@ -625,7 +628,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-SOLAR',
     name: 'SunDesal Cooperative',
     displayName: 'SunDesal',
-    email: `hassan.alqassimi@${EMAIL_DOMAIN}`,
+    email: emailForOrg('hassan.alqassimi', 'https://www.sundesal.ae'),
     firstName: 'Hassan',
     lastName: 'Al Qassimi',
     title: 'Project Director',
@@ -651,7 +654,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-POLICY',
     name: 'TariffWise Advisory',
     displayName: 'TariffWise',
-    email: `emily.chang@${EMAIL_DOMAIN}`,
+    email: emailForOrg('emily.chang', 'https://www.tariffwise.io'),
     firstName: 'Emily',
     lastName: 'Chang',
     title: 'Partner',
@@ -677,7 +680,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-RECHARGE',
     name: 'AquiferRecharge Initiative',
     displayName: 'AquiferRecharge',
-    email: `vikram.patel@${EMAIL_DOMAIN}`,
+    email: emailForOrg('vikram.patel', 'https://www.aquiferrecharge.in'),
     firstName: 'Vikram',
     lastName: 'Patel',
     title: 'Program Lead',
@@ -703,7 +706,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-PORT',
     name: 'PortWater Efficiency',
     displayName: 'PortWater',
-    email: `kenji.tanaka@${EMAIL_DOMAIN}`,
+    email: emailForOrg('kenji.tanaka', 'https://www.portwater.jp'),
     firstName: 'Kenji',
     lastName: 'Tanaka',
     title: 'VP Engineering',
@@ -729,7 +732,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-YOUTH',
     name: 'YouthWASH Collective',
     displayName: 'YouthWASH',
-    email: `aisha.mohammed@${EMAIL_DOMAIN}`,
+    email: emailForOrg('aisha.mohammed', 'https://www.youthwash.org'),
     firstName: 'Aisha',
     lastName: 'Mohammed',
     title: 'Co-chair',
@@ -755,7 +758,7 @@ const HANDCRAFTED_INNOVATORS: WaterDemoInnovator[] = [
     code: 'INN-CARBON',
     name: 'BlueCarbon Wetlands',
     displayName: 'BlueCarbon Wetlands',
-    email: `thomas.nguyen@${EMAIL_DOMAIN}`,
+    email: emailForOrg('thomas.nguyen', 'https://www.bluecarbonwetlands.vn'),
     firstName: 'Thomas',
     lastName: 'Nguyen',
     title: 'Managing Partner',

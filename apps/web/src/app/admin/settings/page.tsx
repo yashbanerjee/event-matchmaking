@@ -540,7 +540,7 @@ export default function SettingsPage() {
                 notifyEmails: e.target.value,
               }))
             }
-            placeholder="admin@example.com, ops@example.com"
+            placeholder="admin@ethara.com, ops@ethara.com"
           />
           <p className="mt-1 text-xs text-[var(--muted)]">
             Comma-separated. Leave blank to notify all active admin users.
@@ -715,7 +715,7 @@ export default function SettingsPage() {
                     type="email"
                     value={testTo}
                     onChange={(e) => setTestTo(e.target.value)}
-                    placeholder="name@example.com"
+                    placeholder="name@ethara.com"
                     autoComplete="off"
                   />
                 </div>

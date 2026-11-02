@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Ethara Event Matchmaking',
     short_name: 'Ethara',
     description:
-      'Making moments that matter — Ethara event matchmaking demo for investors and innovators.',
+      'Making moments that matter — Ethara event matchmaking for investors and innovators.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
