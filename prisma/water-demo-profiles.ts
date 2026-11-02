@@ -35,7 +35,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
       'At UN Water 2026 we are sourcing operators with 24-month deployment track records and clear m³ and household connection metrics.',
     partnershipGoal:
       'Identify 3–5 innovators ready for blended finance structures with utility offtake or municipal service contracts.',
-    ticketSize: '2m-15m',
+    ticketSize: '5m-25m',
     investmentStages: ['pilot', 'early-revenue', 'growth', 'infrastructure'],
   },
   {
@@ -59,7 +59,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Looking for GCC utility pilots with measurable NRW reduction within 12 months and a path to multi-utility SaaS or hardware roll-out.',
     partnershipGoal: 'Meet founders with live utility references and recurring revenue or signed pilot LOIs.',
-    ticketSize: '500k-5m',
+    ticketSize: '1m-5m',
     investmentStages: ['early-revenue', 'growth'],
   },
   {
@@ -83,7 +83,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Seeking innovators who can report hectares restored, farmer income uplift, and sustainable abstraction volumes.',
     partnershipGoal: 'Co-design 2–3 multi-year programs with NGOs or social enterprises and clear M&E frameworks.',
-    ticketSize: '250k-3m',
+    ticketSize: '250k-1m',
     investmentStages: ['pilot', 'early-revenue'],
   },
   {
@@ -107,7 +107,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Priority: technologies that reduce energy intensity of desalination or enable industrial reuse within existing industrial cities.',
     partnershipGoal: 'Pilot within our operating companies with option for strategic investment or long-term offtake.',
-    ticketSize: '1m-10m',
+    ticketSize: '1m-5m',
     investmentStages: ['pilot', 'early-revenue', 'growth'],
   },
   {
@@ -131,7 +131,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Interested in digital twin and forecasting tools validated with municipal clients and EU climate adaptation grants.',
     partnershipGoal: 'Find scale-ready solutions for municipal adaptation plans and transboundary basin cooperation.',
-    ticketSize: '750k-8m',
+    ticketSize: '1m-5m',
     investmentStages: ['early-revenue', 'growth', 'infrastructure'],
   },
   {
@@ -145,7 +145,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     country: 'SN',
     region: 'Dakar',
     website: 'https://www.globalwashcatalyst.org',
-    preferredCategories: ['sanitation-hygiene', 'drinking-water', 'community-wash'],
+    preferredCategories: ['sanitation-hygiene', 'drinking-water', 'water-quality'],
     requiredCapabilities: ['community-wash', 'treatment-tech', 'policy-capacity'],
     regions: ['west-africa', 'sahel', 'global'],
     commercialTags: ['grant', 'concessional', 'technical-assistance'],
@@ -155,7 +155,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'We fund models that reach unserved peri-urban wards with verifiable SDG 6.1/6.2 progress within 18 months.',
     partnershipGoal: 'Meet implementers with government MOUs or utility partnerships and transparent unit economics.',
-    ticketSize: '100k-2m',
+    ticketSize: '250k-1m',
     investmentStages: ['pilot', 'early-revenue'],
   },
   {
@@ -179,7 +179,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Looking for sensor networks and analytics platforms already deployed with basin authorities or large agribusiness.',
     partnershipGoal: 'Structure project finance or growth equity with measurable groundwater level and extraction KPIs.',
-    ticketSize: '3m-25m',
+    ticketSize: '5m-25m',
     investmentStages: ['growth', 'infrastructure'],
   },
   {
@@ -203,7 +203,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Need modular treatment and reuse skids with <24 month payback at 3+ reference plants.',
     partnershipGoal: 'Commercial pilots at our India and GCC manufacturing sites with scaling via EPC partners.',
-    ticketSize: '500k-5m',
+    ticketSize: '1m-5m',
     investmentStages: ['pilot', 'early-revenue', 'growth'],
   },
   {
@@ -227,7 +227,7 @@ const HANDCRAFTED_INVESTORS: WaterDemoInvestor[] = [
     focusEvents:
       'Sourcing bankable project pipelines with government co-financing and environmental and social safeguards in place.',
     partnershipGoal: 'Connect with technology providers and developers who can integrate into MDB-financed water security programs.',
-    ticketSize: '5m-50m',
+    ticketSize: '25m-plus',
     investmentStages: ['infrastructure', 'growth'],
   },
   {

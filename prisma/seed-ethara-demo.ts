@@ -478,7 +478,11 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         organizationId: org.id,
         preferredCategories: investor.preferredCategories,
         requiredCapabilities: investor.requiredCapabilities,
-        commercialPrefs: { tags: investor.commercialTags },
+        commercialPrefs: {
+          tags: investor.commercialTags,
+          investmentStages: investor.investmentStages,
+          ticketSize: normalizeTicket(investor.ticketSize),
+        },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         matchingEligible: true,
@@ -487,6 +491,8 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           about: investor.about,
           focusEvents: investor.focusEvents,
           regions: investor.regions,
+          ticketSize: normalizeTicket(investor.ticketSize),
+          investmentStages: investor.investmentStages,
           responses: {
             industry: investor.industry,
             organization_summary: investor.about,
@@ -496,7 +502,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
             regions: investor.regions,
             commercialTags: investor.commercialTags,
             partnership_goal: investor.partnershipGoal,
-            ticket_size: investor.ticketSize,
+            ticket_size: normalizeTicket(investor.ticketSize),
             investment_stages: investor.investmentStages,
           },
         },
@@ -504,7 +510,11 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       update: {
         preferredCategories: investor.preferredCategories,
         requiredCapabilities: investor.requiredCapabilities,
-        commercialPrefs: { tags: investor.commercialTags },
+        commercialPrefs: {
+          tags: investor.commercialTags,
+          investmentStages: investor.investmentStages,
+          ticketSize: normalizeTicket(investor.ticketSize),
+        },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         matchingEligible: true,
@@ -514,6 +524,8 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
           about: investor.about,
           focusEvents: investor.focusEvents,
           regions: investor.regions,
+          ticketSize: normalizeTicket(investor.ticketSize),
+          investmentStages: investor.investmentStages,
           responses: {
             industry: investor.industry,
             organization_summary: investor.about,
@@ -523,7 +535,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
             regions: investor.regions,
             commercialTags: investor.commercialTags,
             partnership_goal: investor.partnershipGoal,
-            ticket_size: investor.ticketSize,
+            ticket_size: normalizeTicket(investor.ticketSize),
             investment_stages: investor.investmentStages,
           },
         },
@@ -564,15 +576,15 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       visit_purpose: 'to_find_innovators',
       organization_summary: investor.about,
       focus_events: investor.focusEvents,
-      categories: firstOf(investor.preferredCategories, 'digital-water'),
-      capabilities: firstOf(investor.requiredCapabilities, 'data-ai'),
-      regions: firstOf(investor.regions, 'mena'),
-      commercial_tags: firstOf(investor.commercialTags, 'equity'),
+      categories: investor.preferredCategories,
+      capabilities: investor.requiredCapabilities,
+      regions: investor.regions,
+      commercial_tags: investor.commercialTags,
       commercialTags: investor.commercialTags,
       contact_phone: phoneFor(investor.country, investorOrgs.length),
       partnership_goal: investor.partnershipGoal,
       ticket_size: normalizeTicket(investor.ticketSize),
-      investment_stages: firstOf(investor.investmentStages, 'early-revenue'),
+      investment_stages: investor.investmentStages,
     };
 
     await prisma.formSubmission.create({
@@ -681,7 +693,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         capabilities: innovator.capabilities,
         services: innovator.capabilities,
         operatingRegions: innovator.operatingRegions,
-        commercialPrefs: { tags: innovator.commercialTags },
+        commercialPrefs: {
+          tags: innovator.commercialTags,
+          investmentStages: Array.isArray(innovator.stage)
+            ? innovator.stage
+            : [innovator.stage],
+          ticketSize: normalizeTicket(innovator.ticketSize),
+        },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         onboardingComplete: true,
@@ -690,6 +708,10 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         normalizedProfile: {
           about: innovator.about,
           focusEvents: innovator.focusEvents,
+          ticketSize: normalizeTicket(innovator.ticketSize),
+          investmentStages: Array.isArray(innovator.stage)
+            ? innovator.stage
+            : [innovator.stage],
           responses: {
             industry: innovator.industry,
             organization_summary: innovator.about,
@@ -699,7 +721,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
             regions: innovator.operatingRegions,
             commercialTags: innovator.commercialTags,
             partnership_goal: innovator.partnershipGoal,
-            ticket_size: innovator.ticketSize,
+            ticket_size: normalizeTicket(innovator.ticketSize),
             investment_stages: innovator.stage,
             impact_metrics: innovator.impactMetrics,
           },
@@ -711,7 +733,13 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         capabilities: innovator.capabilities,
         services: innovator.capabilities,
         operatingRegions: innovator.operatingRegions,
-        commercialPrefs: { tags: innovator.commercialTags },
+        commercialPrefs: {
+          tags: innovator.commercialTags,
+          investmentStages: Array.isArray(innovator.stage)
+            ? innovator.stage
+            : [innovator.stage],
+          ticketSize: normalizeTicket(innovator.ticketSize),
+        },
         verificationStatus: 'VERIFIED',
         approvalStatus: 'VERIFIED',
         onboardingComplete: true,
@@ -721,6 +749,10 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
         normalizedProfile: {
           about: innovator.about,
           focusEvents: innovator.focusEvents,
+          ticketSize: normalizeTicket(innovator.ticketSize),
+          investmentStages: Array.isArray(innovator.stage)
+            ? innovator.stage
+            : [innovator.stage],
           responses: {
             industry: innovator.industry,
             organization_summary: innovator.about,
@@ -730,7 +762,7 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
             regions: innovator.operatingRegions,
             commercialTags: innovator.commercialTags,
             partnership_goal: innovator.partnershipGoal,
-            ticket_size: innovator.ticketSize,
+            ticket_size: normalizeTicket(innovator.ticketSize),
             investment_stages: innovator.stage,
             impact_metrics: innovator.impactMetrics,
           },
@@ -772,10 +804,10 @@ export async function seedEtharaDemo(prisma: PrismaClient) {
       visit_purpose: 'to_meet_investors',
       organization_summary: innovator.about,
       focus_events: innovator.focusEvents,
-      categories: firstOf(innovator.categories, 'digital-water'),
-      capabilities: firstOf(innovator.capabilities, 'data-ai'),
-      regions: firstOf(innovator.operatingRegions, 'global'),
-      commercial_tags: firstOf(innovator.commercialTags, 'equity'),
+      categories: innovator.categories,
+      capabilities: innovator.capabilities,
+      regions: innovator.operatingRegions,
+      commercial_tags: innovator.commercialTags,
       commercialTags: innovator.commercialTags,
       ticket_size: normalizeTicket(innovator.ticketSize),
       investment_stages: innovator.stage,
