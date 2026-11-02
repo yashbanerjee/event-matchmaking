@@ -35,6 +35,8 @@ type OverviewItem = {
   featured: boolean;
   recommendationCount: number;
   recommendationLimit?: number;
+  /** Eligible counterpart pool (investors for innovators, innovators for investors). */
+  counterpartPoolSize?: number;
   topRecommendations: Array<{
     toOrg: { id: string; name: string; type: string };
     source?: 'COMPUTED' | 'MANUAL';
@@ -51,6 +53,8 @@ type OverviewResponse = {
   total: number;
   investorRecommendationLimit?: number;
   innovatorRecommendationLimit?: number;
+  totalEligibleInvestors?: number;
+  totalEligibleInnovators?: number;
 };
 
 type OrgDetailResponse = {
@@ -351,6 +355,11 @@ function AdminRecommendationsPageInner() {
                     DEFAULT_INVESTOR_RECOMMENDATION_LIMIT)
                   : (overview.data?.innovatorRecommendationLimit ??
                     DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT));
+              const counterpartPool =
+                org.counterpartPoolSize ??
+                (org.type === 'VENDOR'
+                  ? (overview.data?.totalEligibleInvestors ?? 0)
+                  : (overview.data?.totalEligibleInnovators ?? 0));
               const matchCount = Math.min(org.recommendationCount, roleLimit);
               const top = org.topRecommendations.slice(0, roleLimit);
               const isRecomputing =
@@ -375,9 +384,16 @@ function AdminRecommendationsPageInner() {
                       <Badge variant="secondary" className="normal-case">
                         {org.type === 'COMPANY' ? 'Investor' : 'Innovator'}
                       </Badge>
-                      <span className="text-xs tabular-nums text-[var(--muted)]">
-                        {matchCount}/{roleLimit} match
-                        {roleLimit === 1 ? '' : 'es'}
+                      <span
+                        className="text-xs tabular-nums text-[var(--muted)]"
+                        title={
+                          org.type === 'VENDOR'
+                            ? 'Recommended investors / total investors'
+                            : 'Recommended innovators / total innovators'
+                        }
+                      >
+                        {matchCount}/{counterpartPool} match
+                        {matchCount === 1 ? '' : 'es'}
                       </span>
                       {org.recommendationCount > roleLimit ? (
                         <span className="text-[10px] font-medium text-amber-700">

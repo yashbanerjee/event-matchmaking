@@ -712,15 +712,27 @@ export class PeerRecommendationsService {
       }),
     ]);
 
-    const [investorLimit, innovatorLimit] = await Promise.all([
-      this.getRecommendationLimit('COMPANY'),
-      this.getRecommendationLimit('VENDOR'),
-    ]);
+    // Same org totals as Admin Investors / Innovators directories (non-archived).
+    const [investorLimit, innovatorLimit, totalInvestors, totalInnovators] =
+      await Promise.all([
+        this.getRecommendationLimit('COMPANY'),
+        this.getRecommendationLimit('VENDOR'),
+        this.prisma.organization.count({
+          where: { type: 'COMPANY', status: { not: 'ARCHIVED' } },
+        }),
+        this.prisma.organization.count({
+          where: { type: 'VENDOR', status: { not: 'ARCHIVED' } },
+        }),
+      ]);
 
     return {
       items: orgs.map((org) => {
         const roleLimit =
           org.type === 'VENDOR' ? innovatorLimit : investorLimit;
+        // Denominator for the overview chip: eligible counterpart pool
+        // (innovators → investors, investors → innovators), not the role limit.
+        const counterpartPoolSize =
+          org.type === 'VENDOR' ? totalInvestors : totalInnovators;
         const visible = this.filterVisibleRecommendations(
           org.peerRecommendationsFrom,
           threshold,
@@ -735,6 +747,7 @@ export class PeerRecommendationsService {
           featured: Boolean(org.company?.featured || org.vendor?.featured),
           recommendationCount: visible.length,
           recommendationLimit: roleLimit,
+          counterpartPoolSize,
           scoreThreshold: threshold,
           topRecommendations: visible.map((row) => ({
             toOrg: row.toOrg,
@@ -750,6 +763,8 @@ export class PeerRecommendationsService {
       scoreThreshold: threshold,
       investorRecommendationLimit: investorLimit,
       innovatorRecommendationLimit: innovatorLimit,
+      totalEligibleInvestors: totalInvestors,
+      totalEligibleInnovators: totalInnovators,
       page,
       pageSize,
       total,
