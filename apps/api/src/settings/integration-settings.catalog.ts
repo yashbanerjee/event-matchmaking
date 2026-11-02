@@ -483,6 +483,15 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     type: 'date',
   },
   {
+    key: 'ops.showInvestorDirectoryToInnovators',
+    envKey: 'SHOW_INVESTOR_DIRECTORY_TO_INNOVATORS',
+    label: 'Show Investors directory to innovators',
+    description:
+      'When off (default), innovators only see Recommendations — not a full Investors browse list. Turn on to let innovators browse every verified investor.',
+    group: 'ops',
+    type: 'boolean',
+  },
+  {
     key: 'ops.semanticSearch',
     envKey: 'FEATURE_SEMANTIC_SEARCH',
     label: 'Semantic search',

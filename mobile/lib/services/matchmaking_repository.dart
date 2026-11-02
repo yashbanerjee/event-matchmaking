@@ -157,12 +157,14 @@ class BrowseResult {
     required this.total,
     required this.counterpartLabel,
     this.perspective,
+    this.directoryEnabled = true,
   });
 
   final List<BrowseItem> items;
   final int total;
   final String counterpartLabel;
   final String? perspective;
+  final bool directoryEnabled;
 }
 
 class BrowseItem {
@@ -406,6 +408,7 @@ class MatchmakingRepository {
       total: (data['total'] as num?)?.toInt() ?? items.length,
       counterpartLabel: data['counterpartLabel'] as String? ?? 'partners',
       perspective: data['perspective'] as String?,
+      directoryEnabled: data['directoryEnabled'] != false,
     );
   }
 

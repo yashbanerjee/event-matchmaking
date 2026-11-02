@@ -48,6 +48,15 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
     final browse = ref.watch(browsePartnersProvider);
     final counterpartLabel =
         browse.valueOrNull?.counterpartLabel ?? 'partners';
+    // Innovator investor directory is admin-gated (default off).
+    final showDirectory = browse.valueOrNull?.directoryEnabled ?? true;
+
+    if (!showDirectory) {
+      return EtharaScaffold(
+        title: 'Discover',
+        body: _MatchesTab(fromOrgId: fromOrgId),
+      );
+    }
 
     return EtharaScaffold(
       title: 'Discover',

@@ -55,18 +55,26 @@ function SidebarNav({
   pendingForms,
   openRequests,
   recommendationCount,
+  showInvestorsDirectory,
 }: {
   pathname: string;
   pendingForms: number;
   openRequests: number;
   recommendationCount: number;
+  showInvestorsDirectory: boolean;
 }) {
   const items =
     pendingForms > 0
       ? NAV_ITEMS.filter(
           (item) => item.href === '/vendor' || item.href === '/vendor/forms',
         )
-      : NAV_ITEMS.filter((item) => item.href !== '/vendor/forms');
+      : NAV_ITEMS.filter((item) => {
+          if (item.href === '/vendor/forms') return false;
+          if (item.href === '/vendor/investors' && !showInvestorsDirectory) {
+            return false;
+          }
+          return true;
+        });
 
   return (
     <nav className="sidebar-nav flex flex-col gap-1 pb-4">
@@ -147,10 +155,14 @@ export function VendorShell({
         }>;
         perspective: 'COMPANY' | 'VENDOR' | null;
         scoreThreshold?: number;
+        counterpartDirectoryEnabled?: boolean;
       }>(`/recommendations?limit=${PEER_RECOMMENDATIONS_ABSOLUTE_MAX}`, {
         token: getAccessToken(),
       }),
   });
+
+  const showInvestorsDirectory =
+    recommendations.data?.counterpartDirectoryEnabled === true;
 
   const openRequests = (requests.data?.items ?? []).filter((r) =>
     ['PENDING', 'INTEREST_ACCEPTED', 'AWAITING_CONFIRMATION'].includes(
@@ -215,11 +227,15 @@ export function VendorShell({
             badge: openRequests,
           },
           { href: '/vendor/meetings', label: 'Meetings', icon: 'meetings' as const },
-          {
-            href: '/vendor/investors',
-            label: 'Investors',
-            icon: 'innovators' as const,
-          },
+          ...(showInvestorsDirectory
+            ? [
+                {
+                  href: '/vendor/investors',
+                  label: 'Investors',
+                  icon: 'innovators' as const,
+                },
+              ]
+            : []),
         ];
 
   return (
@@ -279,6 +295,7 @@ export function VendorShell({
           pendingForms={pendingForms}
           openRequests={openRequests}
           recommendationCount={recommendationCount}
+          showInvestorsDirectory={showInvestorsDirectory}
         />
 
         <div className="sidebar-footer mt-auto space-y-3 border-t border-white/10 pt-4">

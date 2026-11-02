@@ -59,10 +59,27 @@ export class RecommendationsService {
     return Math.max(0, Math.min(100, raw));
   }
 
+  /** Investors always browse innovators; innovators only when admin enables it. */
+  private async counterpartDirectoryEnabled(
+    perspective: 'COMPANY' | 'VENDOR',
+  ): Promise<boolean> {
+    if (perspective === 'COMPANY') return true;
+    return this.config.getBoolean(
+      'ops.showInvestorDirectoryToInnovators',
+      false,
+    );
+  }
+
   async forActor(actor: AuthUser, limit?: number) {
     const orgIds = actor.organizationIds ?? [];
     if (!orgIds.length) {
-      return { items: [], featured: [], perspective: null, computing: false };
+      return {
+        items: [],
+        featured: [],
+        perspective: null,
+        computing: false,
+        counterpartDirectoryEnabled: false,
+      };
     }
 
     const tagLabels = await this.filters.listTagLabelIndex();
@@ -78,7 +95,13 @@ export class RecommendationsService {
     // Hard rule: investors only see innovators; innovators only see investors.
     const perspectiveOrg = companyOrg ?? vendorOrg;
     if (!perspectiveOrg) {
-      return { items: [], featured: [], perspective: null, computing: false };
+      return {
+        items: [],
+        featured: [],
+        perspective: null,
+        computing: false,
+        counterpartDirectoryEnabled: false,
+      };
     }
 
     const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
@@ -89,9 +112,10 @@ export class RecommendationsService {
     void limit;
     const max = Math.min(roleLimit, PEER_RECOMMENDATIONS_ABSOLUTE_MAX);
     const { computing } = await this.peers.ensureComputed(perspectiveOrg.id);
-    const [dismissedIds, engagedIds] = await Promise.all([
+    const [dismissedIds, engagedIds, directoryEnabled] = await Promise.all([
       this.listDismissedPeerIds(perspectiveOrg.id),
       this.listEngagedPeerIds(perspectiveOrg.id),
+      this.counterpartDirectoryEnabled(perspective),
     ]);
 
     const [stored, scoreThreshold] = await Promise.all([
@@ -118,6 +142,7 @@ export class RecommendationsService {
       recommendationLimit: roleLimit,
       scoreThreshold,
       computing,
+      counterpartDirectoryEnabled: directoryEnabled,
     };
   }
 
@@ -274,10 +299,25 @@ export class RecommendationsService {
         pageSize: 0,
         perspective: null as 'COMPANY' | 'VENDOR' | null,
         counterpartLabel: 'partners',
+        directoryEnabled: false,
       };
     }
 
     const perspective = perspectiveOrg.type as 'COMPANY' | 'VENDOR';
+    const directoryEnabled =
+      await this.counterpartDirectoryEnabled(perspective);
+    if (!directoryEnabled) {
+      return {
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 0,
+        perspective,
+        counterpartLabel: 'investors',
+        directoryEnabled: false,
+      };
+    }
+
     // No hard ceiling: investors/innovators can browse the full counterpart list.
     // Optional page/pageSize still work for UI chunking; omit pageSize to return all.
     const page = Math.max(1, input?.page ?? 1);
@@ -388,6 +428,7 @@ export class RecommendationsService {
         pageSize: pageSize ?? total,
         perspective,
         counterpartLabel: 'innovators',
+        directoryEnabled: true,
       };
     }
 
@@ -492,6 +533,7 @@ export class RecommendationsService {
       pageSize: pageSize ?? total,
       perspective,
       counterpartLabel: 'investors',
+      directoryEnabled: true,
     };
   }
 
