@@ -111,8 +111,8 @@ type FineTuneDraft = Record<FineTuneKey, string>;
 
 const DEFAULTS: FineTuneDraft = {
   'ops.recommendationScoreThreshold': '75',
-  'ops.investorRecommendationLimit': '10',
-  'ops.innovatorRecommendationLimit': '5',
+  'ops.investorRecommendationLimit': '100',
+  'ops.innovatorRecommendationLimit': '100',
   'ai.matchmakingBlendWeight': '0.3',
   'ai.pairScoringMethod': 'structured_json',
   'ai.includeOnboardingInProfile': 'true',
@@ -316,14 +316,14 @@ export function AiFineTunePanel({ disabled = false }: Props) {
       if (
         !Number.isFinite(investorLimit) ||
         investorLimit < 1 ||
-        investorLimit > 20
+        investorLimit > 500
       ) {
         throw new Error('Investor match count must be between 1 and 20');
       }
       if (
         !Number.isFinite(innovatorLimit) ||
         innovatorLimit < 1 ||
-        innovatorLimit > 20
+        innovatorLimit > 500
       ) {
         throw new Error('Innovator match count must be between 1 and 20');
       }
@@ -528,12 +528,12 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
             <label className="space-y-1 text-sm">
               <span className="text-[var(--muted)]">
-                Investor match count (1–20)
+                Investor match count (1–500)
               </span>
               <Input
                 type="number"
                 min={1}
-                max={20}
+                max={500}
                 step={1}
                 value={draft['ops.investorRecommendationLimit']}
                 disabled={disabled || save.isPending}
@@ -545,12 +545,12 @@ export function AiFineTunePanel({ disabled = false }: Props) {
 
             <label className="space-y-1 text-sm">
               <span className="text-[var(--muted)]">
-                Innovator match count (1–20)
+                Innovator match count (1–500)
               </span>
               <Input
                 type="number"
                 min={1}
-                max={20}
+                max={500}
                 step={1}
                 value={draft['ops.innovatorRecommendationLimit']}
                 disabled={disabled || save.isPending}

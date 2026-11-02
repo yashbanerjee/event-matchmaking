@@ -118,14 +118,16 @@ export function meetsTagCategoryThresholds(
 /**
  * Absolute ceiling for recommendations per org (admin settings cannot exceed this).
  * Role defaults live in ops.investorRecommendationLimit / ops.innovatorRecommendationLimit.
+ * Kept high so mobile/web can receive the full partner list without a client update
+ * (older apps still send limit=10/12 — the API ignores that cap).
  */
-export const PEER_RECOMMENDATIONS_ABSOLUTE_MAX = 20;
+export const PEER_RECOMMENDATIONS_ABSOLUTE_MAX = 500;
 
 /** @deprecated Prefer role-specific limits from settings; kept as innovator default. */
 export const PEER_RECOMMENDATIONS_MAX_PER_ORG = 5;
 
-export const DEFAULT_INVESTOR_RECOMMENDATION_LIMIT = 10;
-export const DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT = 5;
+export const DEFAULT_INVESTOR_RECOMMENDATION_LIMIT = 100;
+export const DEFAULT_INNOVATOR_RECOMMENDATION_LIMIT = 100;
 
 export function clampRecommendationLimit(
   value: unknown,

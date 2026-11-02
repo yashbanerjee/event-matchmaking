@@ -304,7 +304,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'INVESTOR_RECOMMENDATION_LIMIT',
     label: 'Investor recommendation count',
     description:
-      'How many innovator matches to keep for each investor (1–20). Default 10.',
+      'How many innovator matches to keep for each investor (1–500). Default 100 so the mobile app can show the full list.',
     group: 'ai',
     type: 'number',
   },
@@ -313,7 +313,7 @@ export const INTEGRATION_SETTING_FIELDS: SettingFieldDef[] = [
     envKey: 'INNOVATOR_RECOMMENDATION_LIMIT',
     label: 'Innovator recommendation count',
     description:
-      'How many investor matches to keep for each innovator (1–20). Default 5.',
+      'How many investor matches to keep for each innovator (1–500). Default 100 so the mobile app can show the full list.',
     group: 'ai',
     type: 'number',
   },

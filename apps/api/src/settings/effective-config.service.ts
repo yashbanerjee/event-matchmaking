@@ -207,10 +207,10 @@ export class EffectiveConfigService {
       return DEFAULT_MATCHMAKING_USER_TEMPLATE;
     }
     if (field.key === 'ops.investorRecommendationLimit') {
-      return 10;
+      return 100;
     }
     if (field.key === 'ops.innovatorRecommendationLimit') {
-      return 5;
+      return 100;
     }
     if (field.key === 'ops.recommendationScoreThreshold') {
       return 75;

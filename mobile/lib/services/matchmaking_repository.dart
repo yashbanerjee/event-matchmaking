@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/network/api_investor.dart';
+import '../core/network/api_client.dart';
 
 class PlaceBrief {
   const PlaceBrief({
@@ -149,6 +149,56 @@ class RecommendationsResult {
 
   final List<RecommendationItem> items;
   final bool computing;
+}
+
+class BrowseResult {
+  const BrowseResult({
+    required this.items,
+    required this.total,
+    required this.counterpartLabel,
+    this.perspective,
+  });
+
+  final List<BrowseItem> items;
+  final int total;
+  final String counterpartLabel;
+  final String? perspective;
+}
+
+class BrowseItem {
+  const BrowseItem({
+    required this.organizationId,
+    required this.name,
+    this.industry,
+    this.type,
+    this.featured = false,
+  });
+
+  final String organizationId;
+  final String name;
+  final String? industry;
+  final String? type;
+  final bool featured;
+
+  factory BrowseItem.fromJson(Map<String, dynamic> json) {
+    return BrowseItem(
+      organizationId: json['organizationId'] as String? ??
+          json['id'] as String? ??
+          '',
+      name: json['name'] as String? ?? 'Organization',
+      industry: (json['industryLabel'] ?? json['industry']) as String?,
+      type: json['type'] as String?,
+      featured: json['featured'] == true,
+    );
+  }
+
+  RecommendationItem asRecommendationItem() => RecommendationItem(
+        organizationId: organizationId,
+        name: name,
+        industry: industry,
+        type: type,
+        matchSource: featured ? 'admin' : 'tags',
+      );
 }
 
 class RecommendationItem {
@@ -329,6 +379,7 @@ class MatchmakingRepository {
   Future<List<MeetingItem>> listMeetings() async {
     final data = await _api.get<Map<String, dynamic>>(
       '/meetings',
+      query: {'pageSize': 100},
       parse: (d) => d as Map<String, dynamic>,
     );
     final items = (data['items'] as List? ?? const []);
@@ -337,7 +388,28 @@ class MatchmakingRepository {
         .toList();
   }
 
-  Future<RecommendationsResult> recommendations({int limit = 12}) async {
+  /// Full counterpart directory (not score-capped).
+  Future<BrowseResult> browsePartners({String? q, List<String>? tags}) async {
+    final data = await _api.get<Map<String, dynamic>>(
+      '/recommendations/browse',
+      query: {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (tags != null && tags.isNotEmpty) 'tags': tags.join(','),
+      },
+      parse: (d) => d as Map<String, dynamic>,
+    );
+    final items = (data['items'] as List? ?? const [])
+        .map((e) => BrowseItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return BrowseResult(
+      items: items,
+      total: (data['total'] as num?)?.toInt() ?? items.length,
+      counterpartLabel: data['counterpartLabel'] as String? ?? 'partners',
+      perspective: data['perspective'] as String?,
+    );
+  }
+
+  Future<RecommendationsResult> recommendations({int limit = 20}) async {
     final data = await _api.get<Map<String, dynamic>>(
       '/recommendations',
       query: {'limit': limit},
@@ -487,5 +559,5 @@ class MatchmakingRepository {
 }
 
 final matchmakingRepositoryProvider = Provider<MatchmakingRepository>((ref) {
-  return MatchmakingRepository(ref.watch(apiInvestorProvider));
+  return MatchmakingRepository(ref.watch(apiClientProvider));
 });

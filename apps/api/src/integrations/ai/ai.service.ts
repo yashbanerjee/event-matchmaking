@@ -115,7 +115,7 @@ export class AiService implements OnModuleInit {
       DEFAULT_MATCHMAKING_USER_TEMPLATE,
     );
 
-    const solidDefaultsVersion = 2;
+    const solidDefaultsVersion = 3;
     const versionKey = 'ops.aiSolidDefaultsVersion';
     const versionRow = await this.prisma.systemSetting.findUnique({
       where: { key: versionKey },
@@ -140,6 +140,9 @@ export class AiService implements OnModuleInit {
         stage: 15,
         ticket: 0,
       });
+      // Uncap Discover for older mobile clients that still send limit=10/12.
+      await writeSetting('ops.investorRecommendationLimit', 100);
+      await writeSetting('ops.innovatorRecommendationLimit', 100);
       await writeSetting(versionKey, solidDefaultsVersion);
       this.logger.log(
         `Applied solid AI recommendation defaults (v${solidDefaultsVersion})`,
